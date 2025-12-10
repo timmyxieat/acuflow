@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { Clock, AlertCircle, CheckCircle2, FileText } from 'lucide-react'
+import { Clock, AlertCircle, CheckCircle2, FileText, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus } from 'lucide-react'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
@@ -90,29 +90,59 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
     return waitMinutes
   }
 
-  // Calculate treatment time for in-progress patients
-  const getTreatmentTime = () => {
+  // Calculate treatment info for in-progress patients
+  const getTreatmentInfo = () => {
     if (appointment.status !== AppointmentStatus.IN_PROGRESS) return null
+
+    const now = Date.now()
+
+    // State 3: Needles out - show time until/past end
+    if (appointment.needleRemovalAt) {
+      const msUntilEnd = appointment.scheduledEnd.getTime() - now
+      const isOvertime = msUntilEnd < 0
+      const absMs = Math.abs(msUntilEnd)
+      const minutes = Math.floor(absMs / 60000)
+      const seconds = Math.floor((absMs % 60000) / 1000)
+      return {
+        type: 'needlesOut' as const,
+        icon: AlarmClockCheck,
+        time: `${isOvertime ? '+' : ''}${minutes}:${seconds.toString().padStart(2, '0')}`,
+        isOvertime,
+      }
+    }
+
+    // State 2: Needles in - count up from insertion (would be countdown in real app with target)
     if (appointment.needleInsertionAt) {
-      const minutes = Math.floor((Date.now() - appointment.needleInsertionAt.getTime()) / 60000)
-      return { type: 'needles', minutes }
+      const msElapsed = now - appointment.needleInsertionAt.getTime()
+      const minutes = Math.floor(msElapsed / 60000)
+      const seconds = Math.floor((msElapsed % 60000) / 1000)
+      return {
+        type: 'needling' as const,
+        icon: Syringe,
+        time: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+        isOvertime: false,
+      }
     }
+
+    // State 1: Started, no needles yet
     if (appointment.startedAt) {
-      const minutes = Math.floor((Date.now() - appointment.startedAt.getTime()) / 60000)
-      return { type: 'started', minutes }
+      const minutes = Math.floor((now - appointment.startedAt.getTime()) / 60000)
+      return {
+        type: 'started' as const,
+        icon: MessageCircleMore,
+        time: `${minutes}m`,
+        isOvertime: false,
+      }
     }
+
     return null
   }
 
   const waitTime = getWaitTime()
-  const treatmentTime = getTreatmentTime()
+  const treatmentInfo = getTreatmentInfo()
 
-  // Get sex icon
-  const getSexIcon = () => {
-    if (patient.sex === 'FEMALE') return '♀'
-    if (patient.sex === 'MALE') return '♂'
-    return null
-  }
+  // Get sex icon component
+  const SexIcon = patient.sex === 'FEMALE' ? Venus : patient.sex === 'MALE' ? Mars : null
 
   return (
     <button
@@ -128,7 +158,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
           <div className="truncate text-sm font-medium">{displayName}</div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <span>{age}</span>
-            {getSexIcon() && <span>{getSexIcon()}</span>}
+            {SexIcon && <SexIcon className="h-3 w-3" />}
             {primaryCondition && (
               <>
                 <span>•</span>
@@ -146,8 +176,14 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
               {waitTime}m wait
             </span>
           )}
-          {treatmentTime && (
-            <span className="text-[10px] text-blue-600">{treatmentTime.minutes}m</span>
+          {treatmentInfo && (
+            <span className={cn(
+              'flex items-center gap-0.5 text-[10px]',
+              treatmentInfo.isOvertime ? 'text-red-600' : 'text-blue-600'
+            )}>
+              <treatmentInfo.icon className="h-3 w-3" />
+              {treatmentInfo.time}
+            </span>
           )}
         </div>
       </div>
