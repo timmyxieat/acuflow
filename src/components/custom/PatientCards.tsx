@@ -34,35 +34,25 @@ function StatusSection({
 }: StatusSectionProps) {
   if (appointments.length === 0) return null
 
-  const variantStyles = {
-    inProgress: 'border-blue-200 bg-blue-50/50',
-    checkedIn: 'border-green-200 bg-green-50/50',
-    scheduled: 'border-gray-200 bg-gray-50/50',
-    unsigned: 'border-amber-200 bg-amber-50/50',
-    completed: 'border-slate-200 bg-slate-50/50',
-  }
-
   const headerStyles = {
-    inProgress: 'text-blue-700',
-    checkedIn: 'text-green-700',
-    scheduled: 'text-gray-700',
-    unsigned: 'text-amber-700',
-    completed: 'text-slate-600',
+    inProgress: 'text-blue-600',
+    checkedIn: 'text-green-600',
+    scheduled: 'text-muted-foreground',
+    unsigned: 'text-amber-600',
+    completed: 'text-slate-500',
   }
 
   return (
-    <div className={cn('rounded-lg border p-3', variantStyles[variant])}>
-      {/* Section header */}
-      <div className={cn('mb-3 flex items-center gap-2 text-sm font-medium', headerStyles[variant])}>
+    <div>
+      {/* Section header - simple inline */}
+      <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium', headerStyles[variant])}>
         {icon}
         <span>{title}</span>
-        <span className="ml-auto rounded-full bg-white/80 px-2 py-0.5 text-xs">
-          {appointments.length}
-        </span>
+        <span className="text-muted-foreground">({appointments.length})</span>
       </div>
 
       {/* Cards */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {appointments.map((appointment) => (
           <PatientCard
             key={appointment.id}
@@ -123,77 +113,58 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        'w-full rounded-lg bg-white p-3 text-left shadow-sm transition-all hover:shadow-md',
-        variant === 'inProgress' && 'ring-2 ring-blue-400'
+        'w-full rounded-md border border-border bg-card px-2.5 py-2 text-left transition-colors hover:bg-accent',
+        variant === 'inProgress' && 'border-blue-300 bg-blue-50/50'
       )}
     >
-      {/* Header row */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          {/* Avatar */}
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-medium">
-            {patient.firstName[0]}
-            {patient.lastName[0]}
+      {/* Single row: Avatar + Name + Time + Status indicator */}
+      <div className="flex items-center gap-2">
+        {/* Avatar - smaller */}
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+          {patient.firstName[0]}
+          {patient.lastName[0]}
+        </div>
+
+        {/* Name and condition */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium">{displayName}</span>
+            <span className="flex-shrink-0 text-xs text-muted-foreground">{age}yo</span>
           </div>
-          <div>
-            <div className="font-medium">{displayName}</div>
-            <div className="text-xs text-muted-foreground">
-              {age}yo • {formatTime(appointment.scheduledStart)}
+          {primaryCondition && (
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-xs text-muted-foreground">{primaryCondition.name}</span>
+              <span
+                className={cn(
+                  'flex-shrink-0 rounded px-1 text-[10px]',
+                  getConditionStatusDisplay(primaryCondition.status).bgColor,
+                  getConditionStatusDisplay(primaryCondition.status).textColor
+                )}
+              >
+                {getConditionStatusDisplay(primaryCondition.status).label}
+              </span>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Time indicator */}
-        {waitTime !== null && (
-          <div className={cn('text-xs', waitTime > 10 ? 'text-amber-600' : 'text-muted-foreground')}>
-            {waitTime}m wait
-          </div>
-        )}
-        {treatmentTime && (
-          <div className="text-xs text-blue-600">
-            {treatmentTime.type === 'needles' ? '🪡' : '⏱️'} {treatmentTime.minutes}m
-          </div>
-        )}
+        {/* Right side: time + indicators */}
+        <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
+          <span className="text-xs text-muted-foreground">{formatTime(appointment.scheduledStart)}</span>
+          {waitTime !== null && (
+            <span className={cn('text-[10px]', waitTime > 10 ? 'text-amber-600' : 'text-muted-foreground')}>
+              {waitTime}m wait
+            </span>
+          )}
+          {treatmentTime && (
+            <span className="text-[10px] text-blue-600">
+              {treatmentTime.type === 'needles' ? '🪡' : '⏱️'} {treatmentTime.minutes}m
+            </span>
+          )}
+          {patient.creditBalance > 0 && (
+            <span className="text-[10px] text-emerald-600">{patient.creditBalance} credits</span>
+          )}
+        </div>
       </div>
-
-      {/* Primary condition */}
-      {primaryCondition && (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-sm">{primaryCondition.name}</span>
-          <span
-            className={cn(
-              'rounded-full px-1.5 py-0.5 text-xs',
-              getConditionStatusDisplay(primaryCondition.status).bgColor,
-              getConditionStatusDisplay(primaryCondition.status).textColor
-            )}
-          >
-            {getConditionStatusDisplay(primaryCondition.status).label}
-          </span>
-        </div>
-      )}
-
-      {/* Appointment type badge */}
-      <div className="mt-2 flex items-center gap-2">
-        <div
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: appointment.appointmentType?.color || '#6366f1' }}
-        />
-        <span className="text-xs text-muted-foreground">
-          {appointment.appointmentType?.name}
-        </span>
-        {appointment.appointmentType?.durationMinutes && (
-          <span className="text-xs text-muted-foreground">
-            • {appointment.appointmentType.durationMinutes}min
-          </span>
-        )}
-      </div>
-
-      {/* Package credits indicator */}
-      {patient.creditBalance > 0 && (
-        <div className="mt-2 text-xs text-emerald-600">
-          {patient.creditBalance} package credit{patient.creditBalance !== 1 ? 's' : ''} available
-        </div>
-      )}
     </button>
   )
 }
@@ -209,7 +180,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"

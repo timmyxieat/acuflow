@@ -20,12 +20,97 @@ interface TimelineProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
 }
 
+// Check if two appointments overlap
+function appointmentsOverlap(a: AppointmentWithRelations, b: AppointmentWithRelations): boolean {
+  return a.scheduledStart < b.scheduledEnd && b.scheduledStart < a.scheduledEnd
+}
+
+// Assign columns to overlapping appointments
+function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { column: number; totalColumns: number }> {
+  const result = new Map<string, { column: number; totalColumns: number }>()
+
+  // Sort by start time
+  const sorted = [...appointments].sort((a, b) => a.scheduledStart.getTime() - b.scheduledStart.getTime())
+
+  // Find overlapping groups
+  const groups: AppointmentWithRelations[][] = []
+
+  for (const appt of sorted) {
+    // Find if this appointment overlaps with any existing group
+    let addedToGroup = false
+    for (const group of groups) {
+      if (group.some(existing => appointmentsOverlap(existing, appt))) {
+        group.push(appt)
+        addedToGroup = true
+        break
+      }
+    }
+    if (!addedToGroup) {
+      groups.push([appt])
+    }
+  }
+
+  // Merge overlapping groups
+  const mergedGroups: AppointmentWithRelations[][] = []
+  for (const group of groups) {
+    let merged = false
+    for (const existingGroup of mergedGroups) {
+      if (group.some(a => existingGroup.some(b => appointmentsOverlap(a, b)))) {
+        existingGroup.push(...group)
+        merged = true
+        break
+      }
+    }
+    if (!merged) {
+      mergedGroups.push([...group])
+    }
+  }
+
+  // Assign columns within each group
+  for (const group of mergedGroups) {
+    const columns: AppointmentWithRelations[][] = []
+
+    // Sort group by start time
+    group.sort((a, b) => a.scheduledStart.getTime() - b.scheduledStart.getTime())
+
+    for (const appt of group) {
+      // Find first column where this appointment fits
+      let placed = false
+      for (let col = 0; col < columns.length; col++) {
+        const columnAppts = columns[col]
+        const canFit = !columnAppts.some(existing => appointmentsOverlap(existing, appt))
+        if (canFit) {
+          columns[col].push(appt)
+          placed = true
+          break
+        }
+      }
+      if (!placed) {
+        columns.push([appt])
+      }
+    }
+
+    // Record column assignments
+    const totalColumns = columns.length
+    columns.forEach((columnAppts, colIndex) => {
+      columnAppts.forEach(appt => {
+        result.set(appt.id, { column: colIndex, totalColumns })
+      })
+    })
+  }
+
+  return result
+}
+
 export function Timeline({ onAppointmentClick }: TimelineProps) {
   const appointments = useMemo(() => {
     return getEnrichedAppointments().filter(
       (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.NO_SHOW
     )
   }, [])
+
+  // Calculate column assignments for overlapping appointments
+  const columnAssignments = useMemo(() => assignColumns(appointments), [appointments])
 
   // Generate hour labels
   const hours = useMemo(() => {
@@ -49,9 +134,16 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
     const endOffset = (endHour - START_HOUR) + (endMinutes / 60)
     const duration = endOffset - startOffset
 
+    // Get column info for overlapping appointments
+    const columnInfo = columnAssignments.get(appointment.id) || { column: 0, totalColumns: 1 }
+    const widthPercent = 100 / columnInfo.totalColumns
+    const leftPercent = columnInfo.column * widthPercent
+
     return {
       top: `${startOffset * HOUR_HEIGHT}px`,
       height: `${duration * HOUR_HEIGHT - 4}px`, // -4 for gap
+      left: `calc(${leftPercent}% + 4px)`,
+      width: `calc(${widthPercent}% - 8px)`,
     }
   }
 
@@ -129,7 +221,7 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
                   key={appointment.id}
                   onClick={() => onAppointmentClick?.(appointment)}
                   className={cn(
-                    'absolute left-2 right-2 overflow-hidden rounded-lg border-l-4 bg-card p-3 text-left shadow-sm transition-all hover:shadow-md',
+                    'absolute overflow-hidden rounded-lg border-l-4 bg-card p-2 text-left shadow-sm transition-all hover:shadow-md',
                     isActive && 'ring-2 ring-blue-500 ring-offset-2'
                   )}
                   style={{
