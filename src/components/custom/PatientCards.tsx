@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { Clock, AlertCircle, CheckCircle2, FileText, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus } from 'lucide-react'
+import { Armchair, CalendarClock, PenLine, CircleCheckBig, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus } from 'lucide-react'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
@@ -170,7 +170,12 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
 
         {/* Right side: time + indicators */}
         <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
-          <span className="text-xs text-muted-foreground">{formatTime(appointment.scheduledStart)}</span>
+          {/* Show end time for in-progress, start time for others */}
+          <span className="text-xs text-muted-foreground">
+            {variant === 'inProgress'
+              ? formatTime(appointment.scheduledEnd)
+              : formatTime(appointment.scheduledStart)}
+          </span>
           {waitTime !== null && (
             <span className={cn('text-[10px]', waitTime > 10 ? 'text-amber-600' : 'text-muted-foreground')}>
               {waitTime}m wait
@@ -206,7 +211,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
-          icon={<Clock className="h-4 w-4" />}
+          icon={<Syringe className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.inProgress}
           onAppointmentClick={onAppointmentClick}
           variant="inProgress"
@@ -215,7 +220,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Checked In - Waiting */}
         <StatusSection
           title="Checked In"
-          icon={<CheckCircle2 className="h-4 w-4" />}
+          icon={<Armchair className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.checkedIn}
           onAppointmentClick={onAppointmentClick}
           variant="checkedIn"
@@ -224,7 +229,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Scheduled - Upcoming */}
         <StatusSection
           title="Scheduled"
-          icon={<Clock className="h-4 w-4" />}
+          icon={<CalendarClock className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.scheduled}
           onAppointmentClick={onAppointmentClick}
           variant="scheduled"
@@ -232,8 +237,8 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
 
         {/* Unsigned - Need attention */}
         <StatusSection
-          title="Unsigned Notes"
-          icon={<AlertCircle className="h-4 w-4" />}
+          title="Unsigned"
+          icon={<PenLine className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.unsigned}
           onAppointmentClick={onAppointmentClick}
           variant="unsigned"
@@ -242,7 +247,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Completed - Done for today */}
         <StatusSection
           title="Completed"
-          icon={<FileText className="h-4 w-4" />}
+          icon={<CircleCheckBig className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.completed}
           onAppointmentClick={onAppointmentClick}
           variant="completed"

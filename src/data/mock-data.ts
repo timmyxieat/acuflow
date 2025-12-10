@@ -821,12 +821,36 @@ export const mockAppointments: Appointment[] = [
     updatedAt: new Date(),
   },
 
-  // IN_PROGRESS - Currently treating
+  // IN_PROGRESS - State 1: Started, intake/consultation (no needles yet)
+  {
+    id: 'appt_003a',
+    clinicId: 'clinic_dev_001',
+    practitionerId: 'pract_dev_001',
+    patientId: 'patient_004', // David Kim
+    appointmentTypeId: 'appt_type_001', // Initial consultation
+    scheduledStart: getTodayAt(10, 30),
+    scheduledEnd: getTodayAt(12, 0),
+    status: AppointmentStatus.IN_PROGRESS,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: getTodayAt(10, 25),
+    startedAt: getTodayAt(10, 30),
+    needleInsertionAt: null, // No needles yet - doing intake
+    needleRemovalAt: null,
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+
+  // IN_PROGRESS - State 2: Needling (needles in, patient resting)
   {
     id: 'appt_003',
     clinicId: 'clinic_dev_001',
     practitionerId: 'pract_dev_001',
-    patientId: 'patient_001',
+    patientId: 'patient_001', // Emily Johnson
     appointmentTypeId: 'appt_type_002',
     scheduledStart: getTodayAt(11, 0),
     scheduledEnd: getTodayAt(12, 0),
@@ -836,7 +860,31 @@ export const mockAppointments: Appointment[] = [
     checkedInAt: getTodayAt(10, 55),
     startedAt: getTodayAt(11, 0),
     needleInsertionAt: getTodayAt(11, 10),
-    needleRemovalAt: null,
+    needleRemovalAt: null, // Needles still in
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+
+  // IN_PROGRESS - State 3: Needles out, finishing up
+  {
+    id: 'appt_003b',
+    clinicId: 'clinic_dev_001',
+    practitionerId: 'pract_dev_001',
+    patientId: 'patient_005', // Maria Garcia
+    appointmentTypeId: 'appt_type_003', // Brief follow-up
+    scheduledStart: getTodayAt(11, 30),
+    scheduledEnd: getTodayAt(12, 0),
+    status: AppointmentStatus.IN_PROGRESS,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: getTodayAt(11, 25),
+    startedAt: getTodayAt(11, 30),
+    needleInsertionAt: getTodayAt(11, 35),
+    needleRemovalAt: getTodayAt(11, 50), // Needles out, wrapping up
     completedAt: null,
     treatmentDurationMinutes: null,
     usedEstim: false,
@@ -870,50 +918,6 @@ export const mockAppointments: Appointment[] = [
   },
 
   // SCHEDULED - Upcoming appointments
-  {
-    id: 'appt_005',
-    clinicId: 'clinic_dev_001',
-    practitionerId: 'pract_dev_001',
-    patientId: 'patient_004',
-    appointmentTypeId: 'appt_type_002',
-    scheduledStart: getTodayAt(13, 30),
-    scheduledEnd: getTodayAt(14, 30),
-    status: AppointmentStatus.SCHEDULED,
-    isLate: false,
-    isSigned: false,
-    checkedInAt: null,
-    startedAt: null,
-    needleInsertionAt: null,
-    needleRemovalAt: null,
-    completedAt: null,
-    treatmentDurationMinutes: null,
-    usedEstim: false,
-    cancellationReason: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: 'appt_006',
-    clinicId: 'clinic_dev_001',
-    practitionerId: 'pract_dev_001',
-    patientId: 'patient_005',
-    appointmentTypeId: 'appt_type_003', // Brief follow-up
-    scheduledStart: getTodayAt(14, 30),
-    scheduledEnd: getTodayAt(15, 0),
-    status: AppointmentStatus.SCHEDULED,
-    isLate: false,
-    isSigned: false,
-    checkedInAt: null,
-    startedAt: null,
-    needleInsertionAt: null,
-    needleRemovalAt: null,
-    completedAt: null,
-    treatmentDurationMinutes: null,
-    usedEstim: false,
-    cancellationReason: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
   {
     id: 'appt_007',
     clinicId: 'clinic_dev_001',
