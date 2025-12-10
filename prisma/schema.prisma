@@ -1,0 +1,979 @@
+// Acuflow Database Schema
+// HIPAA-compliant acupuncture EHR SaaS
+// Database: AWS RDS PostgreSQL
+// Prisma 7+
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // URL configured in prisma.config.ts (Prisma 7+)
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum SubscriptionTier {
+  BASIC
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
+enum PractitionerRole {
+  OWNER // Full access, can manage clinic settings
+  ADMIN // Can manage most settings, not billing
+  PRACTITIONER // Clinical access only
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum PointSide {
+  BILATERAL
+  LEFT
+  RIGHT
+  CENTER
+  CONTRALATERAL // Dynamic - opposite side of affected area
+  IPSILATERAL // Dynamic - same side as affected area
+}
+
+enum NeedlingTechnique {
+  TONIFYING
+  REDUCING
+  EVEN
+}
+
+enum DocumentCategory {
+  INSURANCE // Insurance cards, EOBs
+  IDENTIFICATION // Driver's license, ID
+  INTAKE // Signed intake forms
+  CLINICAL // Lab results, imaging, referrals
+  OTHER
+}
+
+enum BiologicalSex {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ConditionStatus {
+  ACTIVE // Currently a problem
+  IMPROVING // Getting better
+  WORSENING // Getting worse
+  STABLE // Managed, not changing
+  RESOLVED // No longer an issue
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+}
+
+// Payment-related enums
+enum PaymentMethod {
+  CARD // Credit/debit card via Stripe
+  HSA // Health Savings Account
+  FSA // Flexible Spending Account
+  CASH // In-person cash
+  CHECK // Paper check
+  INSURANCE_PAYOUT // Reimbursement from insurance
+  PACKAGE_CREDIT // From pre-paid package
+  OTHER // Catch-all
+}
+
+enum PaymentStatus {
+  PENDING // Not yet paid
+  PARTIAL // Some paid, balance remaining
+  PAID // Fully paid
+  REFUNDED // Money returned
+  WRITTEN_OFF // Uncollectable, forgiven
+}
+
+// VAS/measurement source tracking
+enum MeasurementSource {
+  VISIT // Practitioner recorded during visit
+  PATIENT_INTAKE // Patient filled pre-visit form
+  SMS_FOLLOWUP // Patient responded to SMS (premium feature)
+  MANUAL // Manually entered outside visit context
+}
+
+// Medical profile update source tracking
+enum ProfileUpdateSource {
+  INITIAL_INTAKE // First-time patient intake form
+  REEVALUATION_FORM // Pre-visit update form for returning patients
+  VISIT_UPDATE // Practitioner updated during visit
+  PATIENT_PORTAL // Patient updated via their portal
+}
+
+// =============================================================================
+// CLINIC & PRACTITIONERS
+// =============================================================================
+
+model Clinic {
+  id String @id @default(cuid())
+
+  // Practice info
+  name    String
+  phone   String?
+  email   String?
+  website String?
+
+  // Address
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  zip          String?
+
+  // Tax info (for superbills)
+  taxId String? // EIN
+
+  // Booking
+  bookingSlug String @unique // e.g., "wellness-acupuncture"
+
+  // Subscription (clinic pays, not individual practitioners)
+  subscriptionTier     SubscriptionTier   @default(BASIC)
+  subscriptionStatus   SubscriptionStatus @default(TRIALING)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  practitioners     Practitioner[]
+  patients          Patient[]
+  appointmentTypes  AppointmentType[]
+  feeSchedule       FeeScheduleItem[]
+  treatmentPackages TreatmentPackage[]
+  templates         Template[]
+
+  @@index([bookingSlug])
+}
+
+model Practitioner {
+  id       String @id @default(cuid())
+  clinicId String
+
+  // Cognito integration
+  cognitoUserId String? @unique
+
+  // Profile
+  email       String  @unique
+  firstName   String
+  lastName    String
+  credentials String? // L.Ac., DAOM, etc.
+
+  // Provider info (for superbills - each practitioner has own NPI)
+  npiNumber     String? // National Provider Identifier
+  licenseNumber String?
+  licenseState  String?
+
+  // Role within clinic
+  role PractitionerRole @default(PRACTITIONER)
+
+  // For booking URL query param: /book/clinic-slug?practitioner=dr-smith
+  slug String?
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clinic            Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  availability      PractitionerAvailability[]
+  blockedTimes      BlockedTime[]
+  appointments      Appointment[]
+  protocols         PointProtocol[]
+  templates         Template[]
+  treatmentPackages TreatmentPackage[]
+  auditLogs         AuditLog[]
+  patientNotes      PatientNote[]
+  profileChanges    MedicalProfileHistory[]
+
+  @@unique([clinicId, slug])
+  @@index([clinicId])
+  @@index([email])
+}
+
+model PractitionerAvailability {
+  id             String    @id @default(cuid())
+  practitionerId String
+  dayOfWeek      DayOfWeek
+  startTime      String // "09:00" (24-hour format)
+  endTime        String // "17:00"
+  isActive       Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  practitioner Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+
+  @@unique([practitionerId, dayOfWeek, startTime])
+  @@index([practitionerId])
+}
+
+model BlockedTime {
+  id             String   @id @default(cuid())
+  practitionerId String
+  startDateTime  DateTime
+  endDateTime    DateTime
+  reason         String? // "Vacation", "Lunch", etc.
+  isRecurring    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  practitioner Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+
+  @@index([practitionerId])
+  @@index([startDateTime, endDateTime])
+}
+
+model FeeScheduleItem {
+  id       String @id @default(cuid())
+  clinicId String
+
+  cptCode     String // "97810", "97811", etc.
+  description String
+  fee         Decimal @db.Decimal(10, 2)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, cptCode])
+  @@index([clinicId])
+}
+
+// =============================================================================
+// PATIENTS
+// =============================================================================
+
+model Patient {
+  id       String @id @default(cuid())
+  clinicId String
+
+  // Cognito integration (for patient portal)
+  cognitoUserId String? @unique
+
+  // Demographics
+  firstName     String
+  lastName      String
+  preferredName String?
+  dateOfBirth   DateTime
+  sex           BiologicalSex?
+  email         String
+  phone         String
+
+  // Address
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  zip          String?
+
+  // Emergency contact
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
+  // Payment
+  stripeCustomerId String?
+
+  // Insurance (text fields)
+  insuranceCompany     String?
+  insuranceMemberId    String?
+  insuranceGroupNumber String?
+  insurancePhone       String?
+
+  // Credit balance (from packages)
+  creditBalance Int @default(0) // Number of treatment credits
+
+  // Medical Profile (Layer 1) - stored as JSON for flexibility
+  // These are "living" documents updated over time
+  // Structure: { data: {...}, lastUpdated: date, lastUpdatedVisitId: string? }
+  pastMedicalHistory Json? // PMH - conditions, surgeries
+  familyHistory      Json? // FH
+  socialHistory      Json? // SH
+  medications        Json? // { current: [], significantPast: [] }
+  allergies          Json? // Allergies
+  emotionalStatus    Json? // ES
+  tcmReviewOfSystems Json? // 10Qs
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clinic          Clinic                  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  conditions      PatientCondition[]
+  appointments    Appointment[]
+  documents       Document[]
+  patientPackages PatientPackage[]
+  notes           PatientNote[]
+  profileHistory  MedicalProfileHistory[]
+
+  @@unique([clinicId, email])
+  @@index([clinicId])
+  @@index([lastName, firstName])
+}
+
+// CRM-style notes for rapport building
+model PatientNote {
+  id        String  @id @default(cuid())
+  patientId String
+  visitId   String? // Optional link to when note was added
+
+  content   String
+  isPinned  Boolean @default(false) // Show at top always
+  isPrivate Boolean @default(false) // Only author sees it
+
+  createdAt DateTime @default(now())
+  createdBy String? // practitionerId who created it (nullable for when practitioner deleted)
+
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practitioner Practitioner? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([createdBy])
+}
+
+// History of medical profile changes (Layer 1 audit trail)
+model MedicalProfileHistory {
+  id        String  @id @default(cuid())
+  patientId String
+  visitId   String? // NULL if updated outside visit context
+
+  section           String // "medications", "pastMedicalHistory", "allergies", etc.
+  changeType        String // "added", "removed", "modified"
+  changeDescription String // Human-readable: "Added Metformin 500mg"
+
+  previousValue Json? // Snapshot before change
+  newValue      Json // Snapshot after change
+
+  source    ProfileUpdateSource? // Where the update came from
+  changedBy String? // practitionerId (nullable for when practitioner deleted)
+
+  changedAt DateTime @default(now())
+
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practitioner Practitioner? @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([section])
+  @@index([changedAt])
+}
+
+// Layer 2: Patient's ongoing conditions (the "problem list")
+model PatientCondition {
+  id        String @id @default(cuid())
+  patientId String
+
+  name        String // "Low back pain"
+  description String? // More details
+
+  status   ConditionStatus @default(ACTIVE)
+  priority Int? // For ordering/importance
+
+  startedAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  // What metrics to track (e.g., ["pain_score", "frequency"])
+  trackedMetrics Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient      Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  measurements ConditionMeasurement[]
+  visitLinks   VisitChiefComplaint[]
+
+  @@index([patientId])
+  @@index([status])
+}
+
+// Measurements for a condition over time
+model ConditionMeasurement {
+  id          String  @id @default(cuid())
+  conditionId String
+  visitId     String? // Can be recorded outside a visit
+
+  metricName String // "pain_score", "vas"
+  value      String // "8"
+
+  source MeasurementSource @default(VISIT) // Where this measurement came from
+
+  recordedAt DateTime @default(now())
+
+  condition PatientCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  visit     Visit?           @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  @@index([conditionId])
+  @@index([visitId])
+  @@index([recordedAt])
+}
+
+model Document {
+  id        String @id @default(cuid())
+  patientId String
+
+  category DocumentCategory
+  fileName String
+  s3Key    String // S3 object key
+  s3Bucket String // S3 bucket name
+  mimeType String
+  fileSize Int // bytes
+
+  // Metadata
+  description String?
+  uploadedAt  DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([category])
+}
+
+// =============================================================================
+// APPOINTMENTS & VISITS
+// =============================================================================
+
+model AppointmentType {
+  id       String @id @default(cuid())
+  clinicId String
+
+  name            String // "Initial Consultation", "Follow-up"
+  durationMinutes Int // 90, 60, etc.
+  description     String?
+  color           String? // For calendar display
+  isDefault       Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([clinicId])
+}
+
+model Appointment {
+  id                String @id @default(cuid())
+  clinicId          String
+  practitionerId    String
+  patientId         String
+  appointmentTypeId String
+
+  // Scheduling
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+
+  // Status tracking
+  status   AppointmentStatus @default(SCHEDULED)
+  isLate   Boolean           @default(false)
+  isSigned Boolean           @default(false)
+
+  // Timing (for multi-patient management and CPT calculation)
+  checkedInAt       DateTime?
+  startedAt         DateTime? // When treatment began
+  needleInsertionAt DateTime? // When needles were inserted
+  needleRemovalAt   DateTime? // When needles were removed
+  completedAt       DateTime?
+
+  // Treatment tracking
+  treatmentDurationMinutes Int? // Actual treatment time for CPT
+  usedEstim                Boolean @default(false) // For CPT code selection
+
+  // Cancellation tracking (optional)
+  cancellationReason String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  practitioner    Practitioner    @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentType AppointmentType @relation(fields: [appointmentTypeId], references: [id])
+  visit           Visit?
+  payment         Payment?
+
+  @@index([clinicId])
+  @@index([practitionerId])
+  @@index([patientId])
+  @@index([scheduledStart])
+  @@index([status])
+}
+
+model Visit {
+  id            String @id @default(cuid())
+  appointmentId String @unique
+
+  // SOAP Note - stored as structured JSON for flexibility
+  // Subsections are recognized from free-form text (e.g., "Tongue: red" -> tongue subsection)
+  // Structure: { raw: string, recognized: {...}, unstructured: string }
+  subjective Json?
+  objective  Json?
+  assessment Json?
+  plan       Json?
+
+  // Treatment details stored separately for querying
+  treatmentPoints TreatmentPoint[]
+
+  // Layer 3: Chief complaints addressed in this visit
+  chiefComplaints VisitChiefComplaint[]
+
+  // Signature
+  signedAt DateTime?
+  signedBy String? // Practitioner name at time of signing
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  appointment  Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  superbill    Superbill?
+  measurements ConditionMeasurement[]
+
+  @@index([appointmentId])
+}
+
+// Layer 3: Which conditions are addressed in this visit
+model VisitChiefComplaint {
+  id          String @id @default(cuid())
+  visitId     String
+  conditionId String
+
+  isPrimary Boolean @default(false) // Main focus vs secondary
+  notes     String? // Notes specific to this visit
+
+  visit     Visit            @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  condition PatientCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, conditionId])
+  @@index([visitId])
+  @@index([conditionId])
+}
+
+// Points used in a specific treatment
+model TreatmentPoint {
+  id      String @id @default(cuid())
+  visitId String
+  pointId String
+
+  // Side and technique (technique is nullable - null means no manipulation)
+  side      PointSide
+  technique NeedlingTechnique? // null = no manipulation (most common)
+
+  // Ordering for display
+  sequence Int @default(0)
+
+  // Notes for this specific use
+  notes String?
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  point Point @relation(fields: [pointId], references: [id])
+
+  @@index([visitId])
+}
+
+// =============================================================================
+// ACUPUNCTURE POINTS & PROTOCOLS
+// =============================================================================
+
+model Point {
+  id String @id @default(cuid())
+
+  // Identification
+  code     String @unique // "LI4", "ST36", "DU20"
+  meridian String // "LI", "ST", "DU"
+  number   Int // 4, 36, 20
+
+  // Names
+  pinyinName  String // "Hegu"
+  englishName String? // "Joining Valley"
+  chineseName String? // 合谷
+
+  // Location
+  bodyRegion     String? // "Upper Extremity", "Head", etc.
+  location       String? // Description of location
+  cunMeasurement String? // e.g., "2 cun proximal to LI5"
+
+  // For Master Tung points
+  isTungPoint Boolean @default(false)
+  tungCode    String? // Tung's numbering system
+
+  // Default needling
+  defaultSide PointSide @default(BILATERAL)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  protocolPoints  ProtocolPoint[]
+  treatmentPoints TreatmentPoint[]
+
+  @@index([meridian])
+  @@index([code])
+}
+
+model PointProtocol {
+  id             String  @id @default(cuid())
+  clinicId       String
+  practitionerId String? // NULL = clinic-wide, set = practitioner-specific
+
+  name        String // "Four Gates", "Shoulder Pain Protocol"
+  description String?
+
+  // If shared, other practitioners can view/copy
+  isShared Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  practitioner Practitioner?   @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  points       ProtocolPoint[]
+
+  @@index([clinicId])
+  @@index([practitionerId])
+  @@index([name])
+}
+
+model ProtocolPoint {
+  id         String @id @default(cuid())
+  protocolId String
+  pointId    String
+
+  // Defaults for this point in this protocol
+  // Side determines if dynamic (CONTRALATERAL/IPSILATERAL) or fixed
+  side      PointSide          @default(BILATERAL)
+  technique NeedlingTechnique? // null = no manipulation (default)
+
+  // Order within protocol
+  sequence Int @default(0)
+
+  // Notes specific to this protocol usage
+  notes String?
+
+  protocol PointProtocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  point    Point         @relation(fields: [pointId], references: [id])
+
+  @@unique([protocolId, pointId])
+  @@index([protocolId])
+}
+
+// =============================================================================
+// TEMPLATES
+// =============================================================================
+
+model Template {
+  id             String  @id @default(cuid())
+  clinicId       String
+  practitionerId String? // NULL = clinic-wide, set = practitioner-specific
+
+  name    String // "Hemorrhoids Assessment"
+  trigger String // "/hemorrhoids"
+  section String? // "subjective", "objective", etc.
+  content String // Template text with | cursor markers
+
+  // Fields that should be tracked as metrics when used
+  trackedFields Json? // ["pain_score"]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  practitioner Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+
+  @@unique([clinicId, trigger])
+  @@index([clinicId])
+  @@index([practitionerId])
+}
+
+// =============================================================================
+// TREATMENT PACKAGES & PAYMENTS
+// =============================================================================
+
+model TreatmentPackage {
+  id             String  @id @default(cuid())
+  clinicId       String
+  practitionerId String? // NULL = clinic-wide, set = practitioner-specific
+
+  name        String // "10-Treatment Package"
+  description String?
+
+  treatmentCount Int // Number of credits
+  price          Decimal @db.Decimal(10, 2)
+
+  // Optional expiration
+  validityDays Int? // e.g., 365 days from purchase
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  practitioner    Practitioner?    @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  patientPackages PatientPackage[]
+
+  @@index([clinicId])
+  @@index([practitionerId])
+}
+
+model PatientPackage {
+  id                       String  @id @default(cuid())
+  patientId                String
+  treatmentPackageId       String
+  restrictToPractitionerId String? // NULL = any practitioner, set = only this practitioner
+
+  // Credits tracking
+  creditsOriginal  Int // Starting credits
+  creditsRemaining Int // Current balance
+
+  // Payment
+  amountPaid      Decimal @db.Decimal(10, 2)
+  stripePaymentId String?
+
+  // Validity
+  purchasedAt DateTime  @default(now())
+  expiresAt   DateTime?
+
+  patient          Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  treatmentPackage TreatmentPackage @relation(fields: [treatmentPackageId], references: [id])
+
+  @@index([patientId])
+  @@index([expiresAt])
+  @@index([restrictToPractitionerId])
+}
+
+// Payment record (like an invoice) - one per appointment
+model Payment {
+  id            String @id @default(cuid())
+  appointmentId String @unique
+
+  // Total amount due for this visit
+  amountDue Decimal @db.Decimal(10, 2)
+
+  // Payment status
+  status PaymentStatus @default(PENDING)
+
+  // Timestamps
+  createdAt DateTime @default(now()) // When visit/appointment occurred
+  updatedAt DateTime @updatedAt // Last modification
+
+  // Relations
+  appointment  Appointment          @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  transactions PaymentTransaction[]
+
+  @@index([appointmentId])
+  @@index([status])
+}
+
+// Individual payment transactions (can be multiple per payment)
+model PaymentTransaction {
+  id        String @id @default(cuid())
+  paymentId String
+
+  // Payment details
+  method PaymentMethod
+  amount Decimal       @db.Decimal(10, 2) // Negative for refunds
+
+  // For card payments (Stripe)
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  cardLast4             String? // "4242"
+  cardBrand             String? // "visa", "mastercard"
+
+  // For package credits
+  patientPackageId String? // Which package was debited
+  creditsUsed      Int? // Number of credits used
+
+  // For checks
+  checkNumber String?
+
+  // For insurance payouts (premium tier)
+  insuranceClaimId String? // Links to submitted claim
+  insuranceEraId   String? // 835/ERA reference
+  adjustmentCodes  Json? // CARC/RARC codes if partial/denied
+  isAutoPosted     Boolean @default(false) // true if auto-posted from clearinghouse
+
+  // Notes
+  notes String?
+
+  // When this transaction occurred
+  transactedAt DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([method])
+  @@index([transactedAt])
+}
+
+// =============================================================================
+// SUPERBILLS
+// =============================================================================
+
+model Superbill {
+  id      String @id @default(cuid())
+  visitId String @unique
+
+  // Snapshot of provider info at time of generation
+  providerName    String
+  providerNpi     String?
+  providerLicense String?
+
+  // Snapshot of clinic/practice info
+  clinicName    String
+  clinicTaxId   String?
+  clinicAddress Json // Full address object
+
+  // Snapshot of patient info
+  patientName    String
+  patientDob     DateTime
+  patientAddress Json?
+
+  // Insurance info
+  insuranceCompany     String?
+  insuranceMemberId    String?
+  insuranceGroupNumber String?
+
+  // Service details
+  dateOfService  DateTime
+  placeOfService String   @default("11") // Office
+
+  // Diagnosis codes
+  icd10Codes Json // Array of ICD-10 codes
+
+  // Procedure codes with fees
+  procedures Json // Array of { cptCode, description, units, fee, total }
+
+  // Totals
+  totalCharges Decimal @db.Decimal(10, 2)
+  amountPaid   Decimal @default(0) @db.Decimal(10, 2)
+  balanceDue   Decimal @db.Decimal(10, 2)
+
+  // PDF generation
+  pdfS3Key String? // Generated PDF location
+
+  // Clearinghouse submission (premium tier)
+  clearinghouseClaimId String? // For matching ERA back to our records
+  submittedAt          DateTime?
+  submissionId         String? // Clearinghouse reference
+  submissionStatus     String? // pending, accepted, rejected
+
+  // Timestamps
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@index([visitId])
+  @@index([dateOfService])
+  @@index([clearinghouseClaimId])
+}
+
+// =============================================================================
+// HERBAL MEDICINE REFERENCE (Read-only reference data)
+// =============================================================================
+
+model HerbalFormula {
+  id String @id @default(cuid())
+
+  pinyinName  String  @unique // "Si Jun Zi Tang"
+  englishName String? // "Four Gentlemen Decoction"
+  chineseName String? // 四君子汤
+
+  category String? // "Qi Tonifying", etc.
+
+  createdAt DateTime @default(now())
+}
+
+// =============================================================================
+// AUDIT LOGGING (HIPAA Compliance)
+// =============================================================================
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Who
+  clinicId       String?
+  practitionerId String? // Can be null for system actions
+  userId         String? // Cognito user ID (practitioner or patient)
+  userType       String? // "practitioner" or "patient"
+  ipAddress      String?
+  userAgent      String?
+
+  // What
+  action       AuditAction
+  resourceType String // "Patient", "Visit", "Appointment", etc.
+  resourceId   String?
+
+  // Details
+  description    String?
+  previousValues Json? // For updates
+  newValues      Json? // For creates/updates
+
+  // When
+  timestamp DateTime @default(now())
+
+  // Relations
+  practitioner Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId])
+  @@index([practitionerId])
+  @@index([resourceType, resourceId])
+  @@index([timestamp])
+  @@index([action])
+}
