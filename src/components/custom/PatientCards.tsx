@@ -107,6 +107,13 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   const waitTime = getWaitTime()
   const treatmentTime = getTreatmentTime()
 
+  // Get sex icon
+  const getSexIcon = () => {
+    if (patient.sex === 'FEMALE') return '♀'
+    if (patient.sex === 'MALE') return '♂'
+    return null
+  }
+
   return (
     <button
       onClick={onClick}
@@ -116,15 +123,19 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
       )}
     >
       <div className="flex items-center gap-2">
-        {/* Name and condition */}
+        {/* Name and details */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium">{displayName}</span>
-            <span className="flex-shrink-0 text-xs text-muted-foreground">{age}yo</span>
+          <div className="truncate text-sm font-medium">{displayName}</div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span>{age}</span>
+            {getSexIcon() && <span>{getSexIcon()}</span>}
+            {primaryCondition && (
+              <>
+                <span>•</span>
+                <span className="truncate">{primaryCondition.name}</span>
+              </>
+            )}
           </div>
-          {primaryCondition && (
-            <span className="truncate text-xs text-muted-foreground">{primaryCondition.name}</span>
-          )}
         </div>
 
         {/* Right side: time + indicators */}
@@ -137,9 +148,6 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
           )}
           {treatmentTime && (
             <span className="text-[10px] text-blue-600">{treatmentTime.minutes}m</span>
-          )}
-          {patient.creditBalance > 0 && (
-            <span className="text-[10px] text-emerald-600">{patient.creditBalance} credits</span>
           )}
         </div>
       </div>
