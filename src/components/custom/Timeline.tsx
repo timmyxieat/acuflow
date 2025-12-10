@@ -205,7 +205,7 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
                 className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
                 style={{ top: `${currentTimeOffset * HOUR_HEIGHT}px` }}
               >
-                <span className="absolute -left-16 -top-2 text-xs font-medium text-red-500">
+                <span className="absolute -left-16 top-1/2 -translate-y-1/2 text-xs font-medium text-red-500">
                   {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                 </span>
                 <div className="h-3 w-3 -ml-1.5 rounded-full bg-red-500 shadow-sm" />
