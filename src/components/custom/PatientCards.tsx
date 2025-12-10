@@ -7,8 +7,6 @@ import {
   getAppointmentsByStatus,
   getPatientDisplayName,
   calculateAge,
-  getStatusDisplay,
-  getConditionStatusDisplay,
   type AppointmentWithRelations,
   AppointmentStatus,
 } from '@/data/mock-data'
@@ -113,18 +111,11 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        'w-full rounded-md border border-border bg-card px-2.5 py-2 text-left transition-colors hover:bg-accent',
+        'w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
         variant === 'inProgress' && 'border-blue-300 bg-blue-50/50'
       )}
     >
-      {/* Single row: Avatar + Name + Time + Status indicator */}
       <div className="flex items-center gap-2">
-        {/* Avatar - smaller */}
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-          {patient.firstName[0]}
-          {patient.lastName[0]}
-        </div>
-
         {/* Name and condition */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -132,18 +123,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
             <span className="flex-shrink-0 text-xs text-muted-foreground">{age}yo</span>
           </div>
           {primaryCondition && (
-            <div className="flex items-center gap-1.5">
-              <span className="truncate text-xs text-muted-foreground">{primaryCondition.name}</span>
-              <span
-                className={cn(
-                  'flex-shrink-0 rounded px-1 text-[10px]',
-                  getConditionStatusDisplay(primaryCondition.status).bgColor,
-                  getConditionStatusDisplay(primaryCondition.status).textColor
-                )}
-              >
-                {getConditionStatusDisplay(primaryCondition.status).label}
-              </span>
-            </div>
+            <span className="truncate text-xs text-muted-foreground">{primaryCondition.name}</span>
           )}
         </div>
 
@@ -156,9 +136,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
             </span>
           )}
           {treatmentTime && (
-            <span className="text-[10px] text-blue-600">
-              {treatmentTime.type === 'needles' ? '🪡' : '⏱️'} {treatmentTime.minutes}m
-            </span>
+            <span className="text-[10px] text-blue-600">{treatmentTime.minutes}m</span>
           )}
           {patient.creditBalance > 0 && (
             <span className="text-[10px] text-emerald-600">{patient.creditBalance} credits</span>
