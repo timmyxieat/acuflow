@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { getDevNow } from '@/lib/dev-time'
 import { Armchair, CalendarClock, PenLine, CircleCheckBig, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus } from 'lucide-react'
 import {
   getAppointmentsByStatus,
@@ -86,7 +87,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   // Calculate wait time for checked-in patients
   const getWaitTime = () => {
     if (appointment.status !== AppointmentStatus.CHECKED_IN || !appointment.checkedInAt) return null
-    const waitMinutes = Math.floor((Date.now() - appointment.checkedInAt.getTime()) / 60000)
+    const waitMinutes = Math.floor((getDevNow() - appointment.checkedInAt.getTime()) / 60000)
     return waitMinutes
   }
 
@@ -94,7 +95,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   const getTreatmentInfo = () => {
     if (appointment.status !== AppointmentStatus.IN_PROGRESS) return null
 
-    const now = Date.now()
+    const now = getDevNow()
 
     // State 3: Needles out - show time until/past end
     if (appointment.needleRemovalAt) {

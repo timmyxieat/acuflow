@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { getDevDate } from '@/lib/dev-time'
 import {
   getEnrichedAppointments,
   getPatientDisplayName,
@@ -152,8 +153,8 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
     return appointment.appointmentType?.color || '#6366f1'
   }
 
-  // Current time indicator
-  const now = new Date()
+  // Current time indicator (uses dev time in development)
+  const now = getDevDate()
   const currentHour = now.getHours()
   const currentMinutes = now.getMinutes()
   const currentTimeOffset = (currentHour - START_HOUR) + (currentMinutes / 60)
@@ -201,11 +202,11 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
             {/* Current time indicator */}
             {showCurrentTime && (
               <div
-                className="absolute left-0 right-0 z-10 flex items-center"
+                className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
                 style={{ top: `${currentTimeOffset * HOUR_HEIGHT}px` }}
               >
-                <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                <div className="h-0.5 flex-1 bg-red-500" />
+                <div className="h-3 w-3 -ml-1.5 rounded-full bg-red-500 shadow-sm" />
+                <div className="h-[2px] flex-1 bg-red-500 shadow-sm" />
               </div>
             )}
 
