@@ -385,7 +385,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
       })()}
 
       {/* Timeline body */}
-      <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={containerRef} className="relative flex-1 overflow-y-overlay scrollbar scrollbar-w-[8px] scrollbar-thumb-gray-300 scrollbar-track-transparent scrollbar-thumb-rounded-full">
         <div className="relative flex min-h-full">
           {/* Hour labels column */}
           <div className="w-16 flex-shrink-0 relative bg-muted/30 border-r border-border">

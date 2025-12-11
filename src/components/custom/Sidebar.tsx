@@ -23,7 +23,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-52 flex-col border-r border-border bg-sidebar">
       {/* Logo / Brand */}
-      <div className="flex h-16 items-center border-b border-sidebar-border px-6">
+      <div className="flex h-16 items-center border-b border-sidebar-border px-4">
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <span className="text-sm font-bold text-primary-foreground">A</span>
@@ -33,7 +33,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-1 p-4">
+      <nav className="flex flex-1 flex-col gap-1 py-4">
         {navItems.map((item) => {
           const isActive = pathname === item.href
           const Icon = item.icon
@@ -43,7 +43,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                'flex h-11 items-center gap-3 px-4 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                   : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
