@@ -20,6 +20,7 @@ const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  selectedAppointmentId?: string
 }
 
 // Check if two appointments overlap
@@ -104,7 +105,7 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
   return result
 }
 
-export function Timeline({ onAppointmentClick }: TimelineProps) {
+export function Timeline({ onAppointmentClick, selectedAppointmentId }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
 
@@ -145,8 +146,9 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
 
   // End hour label (6 PM)
   const endHourLabel = useMemo(() => {
-    const hour12 = END_HOUR > 12 ? END_HOUR - 12 : END_HOUR === 0 ? 12 : END_HOUR
-    const ampm = END_HOUR >= 12 ? 'PM' : 'AM'
+    const endHour = END_HOUR as number
+    const hour12 = endHour > 12 ? endHour - 12 : endHour === 0 ? 12 : endHour
+    const ampm = endHour >= 12 ? 'PM' : 'AM'
     return `${hour12} ${ampm}`
   }, [])
 
@@ -258,14 +260,16 @@ export function Timeline({ onAppointmentClick }: TimelineProps) {
             {appointments.map((appointment) => {
               const style = getAppointmentStyle(appointment)
               const color = getAppointmentColor(appointment)
-              const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
-              const isActive = appointment.status === AppointmentStatus.IN_PROGRESS
+              const isSelected = appointment.id === selectedAppointmentId
 
               return (
                 <button
                   key={appointment.id}
                   onClick={() => onAppointmentClick?.(appointment)}
-                  className="absolute overflow-hidden rounded-sm px-2 py-1.5 text-left transition-all hover:opacity-80"
+                  className={cn(
+                    'absolute overflow-hidden rounded-sm px-2 py-1.5 text-left flex flex-col justify-start transition-all hover:opacity-80',
+                    isSelected && 'ring-2 ring-primary ring-offset-1'
+                  )}
                   style={{
                     ...style,
                     backgroundColor: `${color}20`,

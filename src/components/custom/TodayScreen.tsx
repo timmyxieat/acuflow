@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
+import { AppointmentPreview } from './AppointmentPreview'
 import type { AppointmentWithRelations } from '@/data/mock-data'
 
 export function TodayScreen() {
@@ -12,20 +13,32 @@ export function TodayScreen() {
 
   const handleAppointmentClick = (appointment: AppointmentWithRelations) => {
     setSelectedAppointment(appointment)
-    // TODO: Navigate to appointment/patient view or open modal
-    console.log('Selected appointment:', appointment.id, appointment.patient?.firstName)
+  }
+
+  const handleClosePreview = () => {
+    setSelectedAppointment(null)
   }
 
   return (
     <div className="flex h-full gap-4 p-4">
       {/* Timeline - Left 2/3 */}
       <div className="w-2/3">
-        <Timeline onAppointmentClick={handleAppointmentClick} />
+        <Timeline
+          onAppointmentClick={handleAppointmentClick}
+          selectedAppointmentId={selectedAppointment?.id}
+        />
       </div>
 
-      {/* Patient Cards - Right 1/3 */}
+      {/* Right 1/3 - Patient Cards or Appointment Preview */}
       <div className="w-1/3">
-        <PatientCards onAppointmentClick={handleAppointmentClick} />
+        {selectedAppointment ? (
+          <AppointmentPreview
+            appointment={selectedAppointment}
+            onClose={handleClosePreview}
+          />
+        ) : (
+          <PatientCards onAppointmentClick={handleAppointmentClick} />
+        )}
       </div>
     </div>
   )
