@@ -148,6 +148,8 @@ body {
 .scrollbar-always::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 4px;
+  border: 1px solid white;
+  background-clip: padding-box;
 }
 
 .scrollbar::-webkit-scrollbar-track,

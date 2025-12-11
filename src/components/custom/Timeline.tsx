@@ -304,7 +304,8 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
         const columnInfo = columnAssignments.get(indicatorAppointment.id)
         const column = columnInfo?.column ?? 0
         const totalColumns = columnInfo?.totalColumns ?? 1
-        const columnWidth = 100 / totalColumns
+        // Calculate center position within appointments area (excluding 64px hour labels)
+        const centerPercent = ((column + 0.5) / totalColumns) * 100
         const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
         // Use selected opacity if selected, otherwise hovered opacity
         const bgColor = isIndicatorSelected
@@ -315,7 +316,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
             onClick={scrollToIndicator}
             className="absolute top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
             style={{
-              left: `calc(64px + ${(column * columnWidth) + (columnWidth / 2)}%)`,
+              left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
               borderLeft: `3px solid ${indicatorStatusColor}`,
             }}
@@ -331,7 +332,8 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
         const columnInfo = columnAssignments.get(indicatorAppointment.id)
         const column = columnInfo?.column ?? 0
         const totalColumns = columnInfo?.totalColumns ?? 1
-        const columnWidth = 100 / totalColumns
+        // Calculate center position within appointments area (excluding 64px hour labels)
+        const centerPercent = ((column + 0.5) / totalColumns) * 100
         const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
         // Use selected opacity if selected, otherwise hovered opacity
         const bgColor = isIndicatorSelected
@@ -342,7 +344,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
             onClick={scrollToIndicator}
             className="absolute bottom-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
             style={{
-              left: `calc(64px + ${(column * columnWidth) + (columnWidth / 2)}%)`,
+              left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
               borderLeft: `3px solid ${indicatorStatusColor}`,
             }}
