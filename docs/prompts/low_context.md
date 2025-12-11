@@ -19,7 +19,7 @@ Then be ready to program. I'll tell you what to work on.
 You're running low on context. Before this session ends:
 
 1. Commit and push all current changes with a descriptive commit message
-2. Update or create a handoff doc at `docs/handoffs/` that includes:
+2. Create a handoff doc at `docs/handoffs/` that includes:
    - What was built/changed this session
    - Key files modified
    - Current state of the feature
