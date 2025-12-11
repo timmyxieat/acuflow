@@ -1,10 +1,10 @@
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { cn } from '@/lib/utils'
 import { getDevDate, formatTime } from '@/lib/dev-time'
 import { getStatusColor } from '@/lib/constants'
 import { ClipboardCheck, RefreshCw, Sparkles, Calendar, Mars, Venus, ChevronUp, ChevronDown } from 'lucide-react'
+import { ScrollableArea, ScrollableAreaRef, ScrollPosition } from './ScrollableArea'
 import {
   getEnrichedAppointments,
   getPatientDisplayName,
@@ -117,14 +117,16 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
 }
 
 export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollableRef = useRef<ScrollableAreaRef>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
+  const [scrollPosition, setScrollPosition] = useState<ScrollPosition>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 })
 
   // Calculate dynamic hour height based on container size
   useEffect(() => {
     const updateHeight = () => {
-      if (containerRef.current) {
-        const availableHeight = containerRef.current.clientHeight
+      if (wrapperRef.current) {
+        const availableHeight = wrapperRef.current.clientHeight
         const calculatedHeight = availableHeight / TOTAL_HOURS
         setHourHeight(Math.max(calculatedHeight, MIN_HOUR_HEIGHT))
       }
@@ -226,31 +228,10 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
   const currentTimeOffset = (currentHour - START_HOUR) + (currentMinutes / 60)
   const showCurrentTime = currentHour >= START_HOUR && currentHour < END_HOUR
 
-  // Track if content is scrollable and scroll position
-  const [canScrollDown, setCanScrollDown] = useState(false)
-  const [canScrollUp, setCanScrollUp] = useState(false)
-  const [scrollPosition, setScrollPosition] = useState({ top: 0, height: 0 })
-
-  useEffect(() => {
-    const checkScroll = () => {
-      if (containerRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = containerRef.current
-        setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10)
-        setCanScrollUp(scrollTop > 10)
-        setScrollPosition({ top: scrollTop, height: clientHeight })
-      }
-    }
-
-    checkScroll()
-    const container = containerRef.current
-    container?.addEventListener('scroll', checkScroll)
-    window.addEventListener('resize', checkScroll)
-
-    return () => {
-      container?.removeEventListener('scroll', checkScroll)
-      window.removeEventListener('resize', checkScroll)
-    }
-  }, [hourHeight])
+  // Handle scroll position updates from ScrollableArea
+  const handleScroll = (position: ScrollPosition) => {
+    setScrollPosition(position)
+  }
 
   // Find the hovered or selected appointment and check if it's off-screen
   const hoveredAppointment = useMemo(() => {
@@ -279,8 +260,8 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
     const endOffset = (endHour - START_HOUR) + (endMinutes / 60)
     const appointmentBottom = TOP_PADDING + endOffset * hourHeight
 
-    const viewportTop = scrollPosition.top
-    const viewportBottom = scrollPosition.top + scrollPosition.height
+    const viewportTop = scrollPosition.scrollTop
+    const viewportBottom = scrollPosition.scrollTop + scrollPosition.clientHeight
 
     // Check if appointment is above viewport
     if (appointmentBottom < viewportTop + 20) {
@@ -303,26 +284,21 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
 
   // Scroll to indicator appointment
   const scrollToIndicator = () => {
-    if (!indicatorAppointment || !containerRef.current) return
+    if (!indicatorAppointment || !scrollableRef.current) return
 
     const startHour = indicatorAppointment.scheduledStart.getHours()
     const startMinutes = indicatorAppointment.scheduledStart.getMinutes()
     const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
     const appointmentTop = TOP_PADDING + startOffset * hourHeight
 
-    containerRef.current.scrollTo({
+    scrollableRef.current.scrollTo({
       top: appointmentTop - 40, // 40px padding from top
       behavior: 'smooth'
     })
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-card relative">
-      {/* Scroll indicator - top fade */}
-      {canScrollUp && (
-        <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-gray-400/15 to-transparent pointer-events-none z-10" />
-      )}
-
+    <div ref={wrapperRef} className="flex h-full flex-col overflow-hidden bg-card relative">
       {/* Mini card indicator when item is above viewport */}
       {indicatorOffScreen === 'above' && indicatorAppointment && indicatorStatusColor && (() => {
         const columnInfo = columnAssignments.get(indicatorAppointment.id)
@@ -349,11 +325,6 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
           </button>
         )
       })()}
-
-      {/* Scroll indicator - bottom fade */}
-      {canScrollDown && (
-        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-400/15 to-transparent pointer-events-none z-10" />
-      )}
 
       {/* Mini card indicator when item is below viewport */}
       {indicatorOffScreen === 'below' && indicatorAppointment && indicatorStatusColor && (() => {
@@ -382,8 +353,8 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
         )
       })()}
 
-      {/* Timeline body */}
-      <div ref={containerRef} className="relative flex-1 scrollbar-always">
+      {/* Timeline body - using ScrollableArea for consistent scrollbar */}
+      <ScrollableArea ref={scrollableRef} onScroll={handleScroll} deps={[hourHeight]}>
         <div className="relative flex min-h-full">
           {/* Hour labels column */}
           <div className="w-16 flex-shrink-0 relative bg-muted/30 border-r border-border">
@@ -514,7 +485,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
             })}
           </div>
         </div>
-      </div>
+      </ScrollableArea>
     </div>
   )
 }
