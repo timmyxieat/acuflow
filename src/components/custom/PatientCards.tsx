@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { getDevNow } from '@/lib/dev-time'
-import { Armchair, CalendarClock, PenLine, CircleCheckBig, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus } from 'lucide-react'
+import { Armchair, CalendarClock, PenLine, CircleCheckBig, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus, Activity } from 'lucide-react'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
@@ -88,7 +88,7 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   const getWaitTime = () => {
     if (appointment.status !== AppointmentStatus.CHECKED_IN || !appointment.checkedInAt) return null
     const waitMinutes = Math.floor((getDevNow() - appointment.checkedInAt.getTime()) / 60000)
-    return waitMinutes
+    return Math.max(0, waitMinutes) // Never show negative wait time
   }
 
   // Calculate treatment info for in-progress patients
@@ -96,42 +96,44 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
     if (appointment.status !== AppointmentStatus.IN_PROGRESS) return null
 
     const now = getDevNow()
+    const NEEDLE_RETENTION_MINUTES = 20 // Standard needle retention time
 
-    // State 3: Needles out - show time until/past end
+    // State 3: Needles out - show time left/over until appointment end
     if (appointment.needleRemovalAt) {
       const msUntilEnd = appointment.scheduledEnd.getTime() - now
       const isOvertime = msUntilEnd < 0
-      const absMs = Math.abs(msUntilEnd)
-      const minutes = Math.floor(absMs / 60000)
-      const seconds = Math.floor((absMs % 60000) / 1000)
+      const minutesLeft = Math.ceil(Math.abs(msUntilEnd) / 60000)
       return {
         type: 'needlesOut' as const,
         icon: AlarmClockCheck,
-        time: `${isOvertime ? '+' : ''}${minutes}:${seconds.toString().padStart(2, '0')}`,
+        time: isOvertime ? `${minutesLeft}m over` : `${minutesLeft}m left`,
         isOvertime,
       }
     }
 
-    // State 2: Needles in - count up from insertion (would be countdown in real app with target)
+    // State 2: Needles in - countdown from target retention time (e.g., 20 min)
     if (appointment.needleInsertionAt) {
       const msElapsed = now - appointment.needleInsertionAt.getTime()
-      const minutes = Math.floor(msElapsed / 60000)
-      const seconds = Math.floor((msElapsed % 60000) / 1000)
+      const targetMs = NEEDLE_RETENTION_MINUTES * 60000
+      const msRemaining = targetMs - msElapsed
+      const isOvertime = msRemaining < 0
+      const minutesLeft = Math.ceil(Math.abs(msRemaining) / 60000)
       return {
         type: 'needling' as const,
         icon: Syringe,
-        time: `${minutes}:${seconds.toString().padStart(2, '0')}`,
-        isOvertime: false,
+        time: isOvertime ? `${minutesLeft}m over` : `out in ${minutesLeft}m`,
+        isOvertime,
       }
     }
 
-    // State 1: Started, no needles yet
+    // State 1: Started, no needles yet - show elapsed time
     if (appointment.startedAt) {
-      const minutes = Math.floor((now - appointment.startedAt.getTime()) / 60000)
+      const msElapsed = now - appointment.startedAt.getTime()
+      const minutesElapsed = Math.floor(msElapsed / 60000)
       return {
         type: 'started' as const,
         icon: MessageCircleMore,
-        time: `${minutes}m`,
+        time: `${minutesElapsed}m`,
         isOvertime: false,
       }
     }
@@ -171,11 +173,9 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
 
         {/* Right side: time + indicators */}
         <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
-          {/* Show end time for in-progress, start time for others */}
+          {/* Show start time for all appointments */}
           <span className="text-xs text-muted-foreground">
-            {variant === 'inProgress'
-              ? formatTime(appointment.scheduledEnd)
-              : formatTime(appointment.scheduledStart)}
+            {formatTime(appointment.scheduledStart)}
           </span>
           {waitTime !== null && (
             <span className={cn('text-[10px]', waitTime > 10 ? 'text-amber-600' : 'text-muted-foreground')}>
@@ -198,21 +198,23 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
 }
 
 export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
+  // Force re-render every second to update timers
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), [])
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-lg font-semibold">Patients</h2>
-      </div>
-
       {/* Scrollable content */}
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
-          icon={<Syringe className="h-3.5 w-3.5" />}
+          icon={<Activity className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.inProgress}
           onAppointmentClick={onAppointmentClick}
           variant="inProgress"
