@@ -1,8 +1,11 @@
 'use client'
 
-import { X, Phone, Mail, Mars, Venus, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
+import { useState } from 'react'
+import { X, Phone, Mail, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getStatusColor } from '@/lib/constants'
+import { formatTime } from '@/lib/dev-time'
+import { ScrollableArea } from './ScrollableArea'
 import {
   type AppointmentWithRelations,
   getPatientDisplayName,
@@ -17,6 +20,63 @@ const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: s
   'appt_type_003': Sparkles, // Brief Follow-up
 }
 
+interface TimelineEntry {
+  label: string
+  time: Date
+}
+
+function TimelineSection({ appointment }: { appointment: AppointmentWithRelations }) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Build timeline entries in order
+  const entries: TimelineEntry[] = []
+  if (appointment.checkedInAt) entries.push({ label: 'Checked In', time: appointment.checkedInAt })
+  if (appointment.startedAt) entries.push({ label: 'Started', time: appointment.startedAt })
+  if (appointment.needleInsertionAt) entries.push({ label: 'Needles In', time: appointment.needleInsertionAt })
+  if (appointment.needleRemovalAt) entries.push({ label: 'Needles Out', time: appointment.needleRemovalAt })
+  if (appointment.completedAt) entries.push({ label: 'Completed', time: appointment.completedAt })
+
+  if (entries.length === 0) return null
+
+  // Latest entry is the last one (most recent relevant timestamp)
+  const latestEntry = entries[entries.length - 1]
+  const hasMoreEntries = entries.length > 1
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        Timeline
+      </h4>
+      <div className="space-y-1.5 text-sm">
+        {/* Show all entries when expanded, otherwise just the latest */}
+        {expanded ? (
+          <>
+            {entries.map((entry, index) => (
+              <div key={index} className="flex items-center justify-between">
+                <span className="text-muted-foreground">{entry.label}</span>
+                <span>{formatTime(entry.time)}</span>
+              </div>
+            ))}
+          </>
+        ) : (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">{latestEntry.label}</span>
+            <span>{formatTime(latestEntry.time)}</span>
+          </div>
+        )}
+      </div>
+      {hasMoreEntries && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {expanded ? 'See less' : 'See all'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface AppointmentPreviewProps {
   appointment: AppointmentWithRelations
   onClose: () => void
@@ -25,13 +85,6 @@ interface AppointmentPreviewProps {
 export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewProps) {
   const patient = appointment.patient
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  }
-
-  // Get sex icon component
-  const SexIcon = patient?.sex === 'FEMALE' ? Venus : patient?.sex === 'MALE' ? Mars : null
 
   // Get primary condition (chief complaint)
   const primaryCondition = appointment.conditions?.[0]
@@ -67,54 +120,35 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
             </div>
           </div>
         </div>
-        <div className="flex items-start gap-2">
-          {/* Appointment type icon */}
-          <AppointmentIcon className="h-5 w-5 text-muted-foreground" />
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {/* Demographics & Contact */}
-        {patient && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span>{calculateAge(patient.dateOfBirth)} years old</span>
-              {SexIcon && <SexIcon className="h-4 w-4 text-muted-foreground" />}
-              <span
-                className={cn(
-                  'ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  statusDisplay.bgColor,
-                  statusDisplay.textColor
-                )}
-              >
-                {statusDisplay.label}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-              {patient.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5" />
-                  <span>{patient.phone}</span>
-                </div>
-              )}
-              {patient.email && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>{patient.email}</span>
-                </div>
-              )}
-            </div>
+      {/* Scrollable content */}
+      <ScrollableArea className="p-4 space-y-5" deps={[appointment.id]}>
+        {/* Contact */}
+        {patient && (patient.phone || patient.email) && (
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            {patient.phone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5" />
+                <span>{patient.phone}</span>
+              </div>
+            )}
+            {patient.email && (
+              <div className="flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5" />
+                <span>{patient.email}</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Status & Chief Complaint */}
+        {/* Status, Appointment Type, Demographics & Chief Complaint */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <div
@@ -123,6 +157,18 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
             />
             <span className="text-sm font-medium">{statusDisplay.label}</span>
           </div>
+          {appointment.appointmentType && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AppointmentIcon className="h-3.5 w-3.5" />
+              <span>{appointment.appointmentType.name}</span>
+            </div>
+          )}
+          {patient && (
+            <div className="text-sm text-muted-foreground">
+              {calculateAge(patient.dateOfBirth)} years old
+              {patient.sex && `, ${patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : patient.sex}`}
+            </div>
+          )}
           {primaryCondition && (
             <div className="text-sm text-muted-foreground">
               CC: {primaryCondition.name}
@@ -131,46 +177,8 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
         </div>
 
         {/* Treatment Timeline (for in-progress/completed) */}
-        {(appointment.checkedInAt || appointment.startedAt) && (
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Timeline
-            </h4>
-            <div className="space-y-1.5 text-sm">
-              {appointment.checkedInAt && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Checked In</span>
-                  <span>{formatTime(appointment.checkedInAt)}</span>
-                </div>
-              )}
-              {appointment.startedAt && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Started</span>
-                  <span>{formatTime(appointment.startedAt)}</span>
-                </div>
-              )}
-              {appointment.needleInsertionAt && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Needles In</span>
-                  <span>{formatTime(appointment.needleInsertionAt)}</span>
-                </div>
-              )}
-              {appointment.needleRemovalAt && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Needles Out</span>
-                  <span>{formatTime(appointment.needleRemovalAt)}</span>
-                </div>
-              )}
-              {appointment.completedAt && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Completed</span>
-                  <span>{formatTime(appointment.completedAt)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+        <TimelineSection appointment={appointment} />
+      </ScrollableArea>
 
       {/* Footer Actions */}
       <div className="border-t border-border p-4">

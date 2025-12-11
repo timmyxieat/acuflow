@@ -10,6 +10,7 @@ export function TodayScreen() {
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithRelations | null>(
     null
   )
+  const [hoveredAppointmentId, setHoveredAppointmentId] = useState<string | null>(null)
 
   const handleAppointmentClick = (appointment: AppointmentWithRelations) => {
     // Toggle selection - clicking same appointment unselects it
@@ -31,28 +32,45 @@ export function TodayScreen() {
     }
   }
 
+  const handleAppointmentHover = (appointmentId: string | null) => {
+    setHoveredAppointmentId(appointmentId)
+  }
+
   return (
     <div className="flex h-full">
       {/* Timeline - Left 2/3 */}
       <div className="w-2/3" onClick={handleTimelineBackgroundClick}>
         <Timeline
           onAppointmentClick={handleAppointmentClick}
+          onAppointmentHover={handleAppointmentHover}
           selectedAppointmentId={selectedAppointment?.id}
+          hoveredAppointmentId={hoveredAppointmentId}
         />
       </div>
 
       {/* Vertical divider */}
       <div className="w-px bg-border" />
 
-      {/* Right 1/3 - Patient Cards or Appointment Preview */}
-      <div className="w-1/3">
-        {selectedAppointment ? (
-          <AppointmentPreview
-            appointment={selectedAppointment}
-            onClose={handleClosePreview}
+      {/* Right 1/3 - Patient Cards + Appointment Preview (split when selected) */}
+      <div className="w-1/3 flex flex-col">
+        {/* Patient Cards - full height or top half */}
+        <div className={selectedAppointment ? 'h-1/2 border-b border-border' : 'h-full'}>
+          <PatientCards
+            onAppointmentClick={handleAppointmentClick}
+            onAppointmentHover={handleAppointmentHover}
+            hoveredAppointmentId={hoveredAppointmentId}
+            selectedAppointmentId={selectedAppointment?.id}
           />
-        ) : (
-          <PatientCards onAppointmentClick={handleAppointmentClick} />
+        </div>
+
+        {/* Appointment Preview - bottom half when selected */}
+        {selectedAppointment && (
+          <div className="h-1/2">
+            <AppointmentPreview
+              appointment={selectedAppointment}
+              onClose={handleClosePreview}
+            />
+          </div>
         )}
       </div>
     </div>

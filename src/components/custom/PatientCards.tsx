@@ -1,9 +1,10 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { getDevNow } from '@/lib/dev-time'
+import { getDevNow, formatTime } from '@/lib/dev-time'
 import { getStatusColor } from '@/lib/constants'
 import { Syringe } from 'lucide-react'
+import { ScrollableArea } from './ScrollableArea'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
@@ -22,12 +23,18 @@ const VARIANT_STATUS_MAP: Record<string, { status: AppointmentStatus; isSigned?:
 
 interface PatientCardsProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentHover?: (appointmentId: string | null) => void
+  hoveredAppointmentId?: string | null
+  selectedAppointmentId?: string
 }
 
 interface StatusSectionProps {
   title: string
   appointments: AppointmentWithRelations[]
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentHover?: (appointmentId: string | null) => void
+  hoveredAppointmentId?: string | null
+  selectedAppointmentId?: string
   variant: 'inProgress' | 'checkedIn' | 'scheduled' | 'unsigned' | 'completed'
 }
 
@@ -35,6 +42,9 @@ function StatusSection({
   title,
   appointments,
   onAppointmentClick,
+  onAppointmentHover,
+  hoveredAppointmentId,
+  selectedAppointmentId,
   variant,
 }: StatusSectionProps) {
   if (appointments.length === 0) return null
@@ -61,6 +71,9 @@ function StatusSection({
             key={appointment.id}
             appointment={appointment}
             onClick={() => onAppointmentClick?.(appointment)}
+            onHover={(isHovered) => onAppointmentHover?.(isHovered ? appointment.id : null)}
+            isHovered={appointment.id === hoveredAppointmentId}
+            isSelected={appointment.id === selectedAppointmentId}
           />
         ))}
       </div>
@@ -71,19 +84,18 @@ function StatusSection({
 interface PatientCardProps {
   appointment: AppointmentWithRelations
   onClick?: () => void
+  onHover?: (isHovered: boolean) => void
+  isHovered?: boolean
+  isSelected?: boolean
 }
 
-function PatientCard({ appointment, onClick }: PatientCardProps) {
+function PatientCard({ appointment, onClick, onHover, isHovered, isSelected }: PatientCardProps) {
   const patient = appointment.patient
   if (!patient) return null
 
   const displayName = getPatientDisplayName(patient)
   const primaryCondition = appointment.conditions?.[0]
 
-  // Format time
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  }
 
   // Calculate wait time for checked-in patients
   const getWaitTime = () => {
@@ -127,11 +139,30 @@ function PatientCard({ appointment, onClick }: PatientCardProps) {
   // Get initials for avatar
   const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
 
+  // Get status color for hover/selected states
+  const statusColor = getStatusColor(appointment.status, appointment.isSigned)
+  const isCompleted = appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned
+
+  // Calculate background color based on state
+  // Selected: 30% opacity (50% for completed)
+  // Hovered: 18% opacity (38% for completed - needs to be more visible against gray)
+  const getBackgroundColor = () => {
+    if (isSelected) {
+      return isCompleted ? `${statusColor}50` : `${statusColor}30`
+    }
+    if (isHovered) {
+      return isCompleted ? `${statusColor}33` : `${statusColor}18` // ~20% for completed
+    }
+    return '#94a3b820'
+  }
+
   return (
     <button
       onClick={onClick}
-      className="w-full text-left transition-colors hover:opacity-80 rounded-md p-2"
-      style={{ backgroundColor: '#94a3b820' }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
+      className="w-full text-left transition-colors rounded-md p-2"
+      style={{ backgroundColor: getBackgroundColor() }}
     >
       <div className="relative flex items-center gap-2">
         {/* Appointment time - absolute top right */}
@@ -175,7 +206,9 @@ function PatientCard({ appointment, onClick }: PatientCardProps) {
   )
 }
 
-export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
+export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAppointmentId, selectedAppointmentId }: PatientCardsProps) {
+  const groupedAppointments = useMemo(() => getAppointmentsByStatus(), [])
+
   // Force re-render every second to update timers
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -183,17 +216,17 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
     return () => clearInterval(interval)
   }, [])
 
-  const groupedAppointments = useMemo(() => getAppointmentsByStatus(), [])
-
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card">
-      {/* Scrollable content */}
-      <div className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
+      <ScrollableArea className="space-y-3 px-2 py-3" deps={[groupedAppointments]}>
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
           appointments={groupedAppointments.inProgress}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentHover={onAppointmentHover}
+          hoveredAppointmentId={hoveredAppointmentId}
+          selectedAppointmentId={selectedAppointmentId}
           variant="inProgress"
         />
 
@@ -202,6 +235,9 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
           title="Checked In"
           appointments={groupedAppointments.checkedIn}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentHover={onAppointmentHover}
+          hoveredAppointmentId={hoveredAppointmentId}
+          selectedAppointmentId={selectedAppointmentId}
           variant="checkedIn"
         />
 
@@ -210,14 +246,29 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
           title="Scheduled"
           appointments={groupedAppointments.scheduled}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentHover={onAppointmentHover}
+          hoveredAppointmentId={hoveredAppointmentId}
+          selectedAppointmentId={selectedAppointmentId}
           variant="scheduled"
         />
+
+        {/* Divider between active/upcoming and completed sections */}
+        {(groupedAppointments.inProgress.length > 0 ||
+          groupedAppointments.checkedIn.length > 0 ||
+          groupedAppointments.scheduled.length > 0) &&
+          (groupedAppointments.unsigned.length > 0 ||
+            groupedAppointments.completed.length > 0) && (
+          <div className="border-t border-border mt-1 mb-3 -mx-2" />
+        )}
 
         {/* Unsigned - Need attention */}
         <StatusSection
           title="Unsigned"
           appointments={groupedAppointments.unsigned}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentHover={onAppointmentHover}
+          hoveredAppointmentId={hoveredAppointmentId}
+          selectedAppointmentId={selectedAppointmentId}
           variant="unsigned"
         />
 
@@ -226,6 +277,9 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
           title="Completed"
           appointments={groupedAppointments.completed}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentHover={onAppointmentHover}
+          hoveredAppointmentId={hoveredAppointmentId}
+          selectedAppointmentId={selectedAppointmentId}
           variant="completed"
         />
 
@@ -235,7 +289,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
             No appointments today
           </div>
         )}
-      </div>
+      </ScrollableArea>
     </div>
   )
 }

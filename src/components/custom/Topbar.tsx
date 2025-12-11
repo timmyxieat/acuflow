@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Search, X, User, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatTime } from '@/lib/dev-time'
 import {
   searchPatients,
   getAppointmentsForDate,
@@ -78,10 +79,6 @@ export function Topbar() {
     // TODO: Navigate to patient profile
     console.log('Navigate to patient:', patient.id)
     handleClose()
-  }
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
 
   return (

@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { getDevDate } from '@/lib/dev-time'
+import { getDevDate, formatTime } from '@/lib/dev-time'
 import { getStatusColor } from '@/lib/constants'
-import { ClipboardCheck, RefreshCw, Sparkles, Calendar, Mars, Venus } from 'lucide-react'
+import { ClipboardCheck, RefreshCw, Sparkles, Calendar, Mars, Venus, ChevronUp, ChevronDown } from 'lucide-react'
 import {
   getEnrichedAppointments,
   getPatientDisplayName,
@@ -29,7 +29,9 @@ const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentHover?: (appointmentId: string | null) => void
   selectedAppointmentId?: string
+  hoveredAppointmentId?: string | null
 }
 
 // Check if two appointments overlap
@@ -114,7 +116,7 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
   return result
 }
 
-export function Timeline({ onAppointmentClick, selectedAppointmentId }: TimelineProps) {
+export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
 
@@ -229,6 +231,7 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
   // Track if content is scrollable and scroll position
   const [canScrollDown, setCanScrollDown] = useState(false)
   const [canScrollUp, setCanScrollUp] = useState(false)
+  const [scrollPosition, setScrollPosition] = useState({ top: 0, height: 0 })
 
   useEffect(() => {
     const checkScroll = () => {
@@ -236,6 +239,7 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
         const { scrollTop, scrollHeight, clientHeight } = containerRef.current
         setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10)
         setCanScrollUp(scrollTop > 10)
+        setScrollPosition({ top: scrollTop, height: clientHeight })
       }
     }
 
@@ -250,6 +254,70 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
     }
   }, [hourHeight])
 
+  // Find the hovered or selected appointment and check if it's off-screen
+  const hoveredAppointment = useMemo(() => {
+    if (!hoveredAppointmentId) return null
+    return appointments.find(a => a.id === hoveredAppointmentId) || null
+  }, [hoveredAppointmentId, appointments])
+
+  const selectedAppointment = useMemo(() => {
+    if (!selectedAppointmentId) return null
+    return appointments.find(a => a.id === selectedAppointmentId) || null
+  }, [selectedAppointmentId, appointments])
+
+  // Use hovered appointment if available, otherwise fall back to selected
+  const indicatorAppointment = hoveredAppointment || selectedAppointment
+
+  const indicatorOffScreen = useMemo(() => {
+    if (!indicatorAppointment) return null
+
+    const startHour = indicatorAppointment.scheduledStart.getHours()
+    const startMinutes = indicatorAppointment.scheduledStart.getMinutes()
+    const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
+    const appointmentTop = TOP_PADDING + startOffset * hourHeight
+
+    const endHour = indicatorAppointment.scheduledEnd.getHours()
+    const endMinutes = indicatorAppointment.scheduledEnd.getMinutes()
+    const endOffset = (endHour - START_HOUR) + (endMinutes / 60)
+    const appointmentBottom = TOP_PADDING + endOffset * hourHeight
+
+    const viewportTop = scrollPosition.top
+    const viewportBottom = scrollPosition.top + scrollPosition.height
+
+    // Check if appointment is above viewport
+    if (appointmentBottom < viewportTop + 20) {
+      return 'above'
+    }
+    // Check if appointment is below viewport
+    if (appointmentTop > viewportBottom - 20) {
+      return 'below'
+    }
+    return null
+  }, [indicatorAppointment, hourHeight, scrollPosition])
+
+  // Get status color for indicator appointment
+  const indicatorStatusColor = indicatorAppointment
+    ? getStatusColor(indicatorAppointment.status, indicatorAppointment.isSigned)
+    : null
+
+  // Check if the indicator is showing selected (not hovered) appointment
+  const isIndicatorSelected = !hoveredAppointment && !!selectedAppointment
+
+  // Scroll to indicator appointment
+  const scrollToIndicator = () => {
+    if (!indicatorAppointment || !containerRef.current) return
+
+    const startHour = indicatorAppointment.scheduledStart.getHours()
+    const startMinutes = indicatorAppointment.scheduledStart.getMinutes()
+    const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
+    const appointmentTop = TOP_PADDING + startOffset * hourHeight
+
+    containerRef.current.scrollTo({
+      top: appointmentTop - 40, // 40px padding from top
+      behavior: 'smooth'
+    })
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card relative">
       {/* Scroll indicator - top fade */}
@@ -257,10 +325,64 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
         <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-gray-400/15 to-transparent pointer-events-none z-10" />
       )}
 
+      {/* Mini card indicator when item is above viewport */}
+      {indicatorOffScreen === 'above' && indicatorAppointment && indicatorStatusColor && (() => {
+        const columnInfo = columnAssignments.get(indicatorAppointment.id)
+        const column = columnInfo?.column ?? 0
+        const totalColumns = columnInfo?.totalColumns ?? 1
+        const columnWidth = 100 / totalColumns
+        const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
+        // Use selected opacity if selected, otherwise hovered opacity
+        const bgColor = isIndicatorSelected
+          ? (isCompleted ? `${indicatorStatusColor}50` : `${indicatorStatusColor}30`)
+          : (isCompleted ? `${indicatorStatusColor}33` : `${indicatorStatusColor}18`)
+        return (
+          <button
+            onClick={scrollToIndicator}
+            className="absolute top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
+            style={{
+              left: `calc(64px + ${(column * columnWidth) + (columnWidth / 2)}%)`,
+              backgroundColor: bgColor,
+              borderLeft: `3px solid ${indicatorStatusColor}`,
+            }}
+          >
+            <ChevronUp className="h-3 w-3 text-muted-foreground" />
+            <span>{indicatorAppointment.patient ? getPatientDisplayName(indicatorAppointment.patient) : 'Unknown'}</span>
+          </button>
+        )
+      })()}
+
       {/* Scroll indicator - bottom fade */}
       {canScrollDown && (
         <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-400/15 to-transparent pointer-events-none z-10" />
       )}
+
+      {/* Mini card indicator when item is below viewport */}
+      {indicatorOffScreen === 'below' && indicatorAppointment && indicatorStatusColor && (() => {
+        const columnInfo = columnAssignments.get(indicatorAppointment.id)
+        const column = columnInfo?.column ?? 0
+        const totalColumns = columnInfo?.totalColumns ?? 1
+        const columnWidth = 100 / totalColumns
+        const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
+        // Use selected opacity if selected, otherwise hovered opacity
+        const bgColor = isIndicatorSelected
+          ? (isCompleted ? `${indicatorStatusColor}50` : `${indicatorStatusColor}30`)
+          : (isCompleted ? `${indicatorStatusColor}33` : `${indicatorStatusColor}18`)
+        return (
+          <button
+            onClick={scrollToIndicator}
+            className="absolute bottom-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
+            style={{
+              left: `calc(64px + ${(column * columnWidth) + (columnWidth / 2)}%)`,
+              backgroundColor: bgColor,
+              borderLeft: `3px solid ${indicatorStatusColor}`,
+            }}
+          >
+            <span>{indicatorAppointment.patient ? getPatientDisplayName(indicatorAppointment.patient) : 'Unknown'}</span>
+            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          </button>
+        )
+      })()}
 
       {/* Timeline body */}
       <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
@@ -323,9 +445,29 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
               const style = getAppointmentStyle(appointment)
               const statusColor = getStatusColor(appointment.status, appointment.isSigned)
               const isSelected = appointment.id === selectedAppointmentId
+              const isHovered = appointment.id === hoveredAppointmentId
               const AppointmentIcon = appointment.appointmentType?.id
                 ? APPOINTMENT_TYPE_ICONS[appointment.appointmentType.id] || Calendar
                 : Calendar
+
+              // Calculate background color based on state
+              // Selected: 30% opacity (50% for completed)
+              // Hovered: 18% opacity (40% for completed - needs to be more visible against gray)
+              // Default: gray 20% opacity
+              const isCompleted = appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned
+              const getBackgroundColor = () => {
+                if (isSelected) {
+                  return isCompleted
+                    ? `${statusColor}50` // More opaque for completed to distinguish from gray
+                    : `${statusColor}30`
+                }
+                if (isHovered) {
+                  return isCompleted
+                    ? `${statusColor}33` // ~20% opacity for completed
+                    : `${statusColor}18`
+                }
+                return `${appointmentBgColor}20`
+              }
 
               return (
                 <button
@@ -334,14 +476,12 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
                     e.stopPropagation()
                     onAppointmentClick?.(appointment)
                   }}
-                  className="absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80"
+                  onMouseEnter={() => onAppointmentHover?.(appointment.id)}
+                  onMouseLeave={() => onAppointmentHover?.(null)}
+                  className="absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-colors"
                   style={{
                     ...style,
-                    backgroundColor: isSelected
-                      ? (appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned
-                          ? `${statusColor}50` // More opaque for completed to distinguish from gray
-                          : `${statusColor}30`)
-                      : `${appointmentBgColor}20`,
+                    backgroundColor: getBackgroundColor(),
                     borderLeft: `3px solid ${statusColor}`,
                   }}
                 >
@@ -352,10 +492,7 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
 
                   {/* Time */}
                   <div className="text-[11px] text-muted-foreground">
-                    {appointment.scheduledStart.toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    }).toUpperCase()}
+                    {formatTime(appointment.scheduledStart)}
                   </div>
 
                   {/* Patient name with age and gender */}
