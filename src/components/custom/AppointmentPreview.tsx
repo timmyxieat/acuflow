@@ -43,36 +43,34 @@ function TimelineSection({ appointment }: { appointment: AppointmentWithRelation
   const hasMoreEntries = entries.length > 1
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         Timeline
       </h4>
-      <div className="space-y-1.5 text-sm">
+      <div className="flex flex-col gap-1.5 text-sm">
         {/* Show all entries when expanded, otherwise just the latest */}
         {expanded ? (
-          <>
-            {entries.map((entry, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <span className="text-muted-foreground">{entry.label}</span>
-                <span>{formatTime(entry.time)}</span>
-              </div>
-            ))}
-          </>
+          entries.map((entry, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <span className="text-muted-foreground">{entry.label}</span>
+              <span>{formatTime(entry.time)}</span>
+            </div>
+          ))
         ) : (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">{latestEntry.label}</span>
             <span>{formatTime(latestEntry.time)}</span>
           </div>
         )}
+        {hasMoreEntries && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? 'See less' : 'See all'}
+          </button>
+        )}
       </div>
-      {hasMoreEntries && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {expanded ? 'See less' : 'See all'}
-        </button>
-      )}
     </div>
   )
 }
@@ -112,7 +110,7 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
             {initials}
           </div>
           <div>
-            <h2 className="text-lg font-semibold">
+            <h2 className="text-base font-semibold">
               {patient ? getPatientDisplayName(patient) : 'Unknown Patient'}
             </h2>
             <div className="text-sm text-muted-foreground">
@@ -129,52 +127,63 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
       </div>
 
       {/* Scrollable content */}
-      <ScrollableArea className="p-4 space-y-5" deps={[appointment.id]}>
+      <ScrollableArea className="flex flex-col gap-4 p-4" deps={[appointment.id]}>
+        {/* Appointment Details */}
+        <div className="flex flex-col gap-2">
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Appointment
+          </h4>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <div
+                className="h-3 w-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: statusColor }}
+              />
+              <span className="text-sm font-medium">{statusDisplay.label}</span>
+            </div>
+            {appointment.appointmentType && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AppointmentIcon className="h-3.5 w-3.5" />
+                <span>{appointment.appointmentType.name}</span>
+              </div>
+            )}
+            {patient && (
+              <div className="text-sm text-muted-foreground">
+                {calculateAge(patient.dateOfBirth)} years old
+                {patient.sex && `, ${patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : patient.sex}`}
+              </div>
+            )}
+            {primaryCondition && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">CC: </span>
+                <span className="font-medium">{primaryCondition.name}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Contact */}
         {patient && (patient.phone || patient.email) && (
-          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            {patient.phone && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5" />
-                <span>{patient.phone}</span>
-              </div>
-            )}
-            {patient.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5" />
-                <span>{patient.email}</span>
-              </div>
-            )}
+          <div className="flex flex-col gap-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Contact
+            </h4>
+            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+              {patient.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5" />
+                  <span>{patient.phone}</span>
+                </div>
+              )}
+              {patient.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>{patient.email}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
-
-        {/* Status, Appointment Type, Demographics & Chief Complaint */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div
-              className="h-3 w-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: statusColor }}
-            />
-            <span className="text-sm font-medium">{statusDisplay.label}</span>
-          </div>
-          {appointment.appointmentType && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <AppointmentIcon className="h-3.5 w-3.5" />
-              <span>{appointment.appointmentType.name}</span>
-            </div>
-          )}
-          {patient && (
-            <div className="text-sm text-muted-foreground">
-              {calculateAge(patient.dateOfBirth)} years old
-              {patient.sex && `, ${patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : patient.sex}`}
-            </div>
-          )}
-          {primaryCondition && (
-            <div className="text-sm text-muted-foreground">
-              CC: {primaryCondition.name}
-            </div>
-          )}
-        </div>
 
         {/* Treatment Timeline (for in-progress/completed) */}
         <TimelineSection appointment={appointment} />

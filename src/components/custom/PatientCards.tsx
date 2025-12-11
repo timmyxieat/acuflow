@@ -53,9 +53,9 @@ function StatusSection({
   const statusColor = getStatusColor(statusMapping.status, statusMapping.isSigned)
 
   return (
-    <div>
+    <div className="flex flex-col gap-2">
       {/* Section header */}
-      <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
+      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
         <div
           className="h-2.5 w-2.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: statusColor }}
@@ -218,7 +218,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card">
-      <ScrollableArea className="space-y-3 px-2 py-3" deps={[groupedAppointments]}>
+      <ScrollableArea className="flex flex-col gap-3 px-2 py-3" deps={[groupedAppointments]}>
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
@@ -258,7 +258,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           groupedAppointments.scheduled.length > 0) &&
           (groupedAppointments.unsigned.length > 0 ||
             groupedAppointments.completed.length > 0) && (
-          <div className="border-t border-border mt-1 mb-3 -mx-2" />
+          <div className="border-t border-border -mx-2" />
         )}
 
         {/* Unsigned - Need attention */}

@@ -478,7 +478,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
                   }}
                   onMouseEnter={() => onAppointmentHover?.(appointment.id)}
                   onMouseLeave={() => onAppointmentHover?.(null)}
-                  className="absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-colors"
+                  className="absolute overflow-hidden rounded-r-sm p-2 text-left flex flex-col justify-start transition-colors"
                   style={{
                     ...style,
                     backgroundColor: getBackgroundColor(),
@@ -486,7 +486,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
                   }}
                 >
                   {/* Appointment type icon - top right */}
-                  <div className="absolute top-1 right-1">
+                  <div className="absolute top-2 right-2">
                     <AppointmentIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
                   </div>
 
