@@ -1,13 +1,21 @@
 'use client'
 
-import { X, Phone, Mail, Mars, Venus } from 'lucide-react'
+import { X, Phone, Mail, Mars, Venus, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getStatusColor } from '@/lib/constants'
 import {
   type AppointmentWithRelations,
   getPatientDisplayName,
   calculateAge,
   getStatusDisplay,
 } from '@/data/mock-data'
+
+// Map appointment type IDs to icons
+const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'appt_type_001': ClipboardCheck, // Initial Consultation
+  'appt_type_002': RefreshCw, // Follow-up Treatment
+  'appt_type_003': Sparkles, // Brief Follow-up
+}
 
 interface AppointmentPreviewProps {
   appointment: AppointmentWithRelations
@@ -33,6 +41,14 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
     ? `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
     : '?'
 
+  // Get appointment type icon
+  const AppointmentIcon = appointment.appointmentType?.id
+    ? APPOINTMENT_TYPE_ICONS[appointment.appointmentType.id] || Calendar
+    : Calendar
+
+  // Get status color
+  const statusColor = getStatusColor(appointment.status, appointment.isSigned)
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card">
       {/* Header - Patient name and time */}
@@ -51,12 +67,16 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
             </div>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-start gap-2">
+          {/* Appointment type icon */}
+          <AppointmentIcon className="h-5 w-5 text-muted-foreground" />
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -94,17 +114,15 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
           </div>
         )}
 
-        {/* Appointment Type & Chief Complaint */}
+        {/* Status & Chief Complaint */}
         <div className="space-y-2">
-          {appointment.appointmentType && (
-            <div className="flex items-center gap-2">
-              <div
-                className="h-3 w-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: appointment.appointmentType.color || '#6366f1' }}
-              />
-              <span className="text-sm font-medium">{appointment.appointmentType.name}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <div
+              className="h-3 w-3 rounded-full flex-shrink-0"
+              style={{ backgroundColor: statusColor }}
+            />
+            <span className="text-sm font-medium">{statusDisplay.label}</span>
+          </div>
           {primaryCondition && (
             <div className="text-sm text-muted-foreground">
               CC: {primaryCondition.name}

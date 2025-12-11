@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { getDevDate } from '@/lib/dev-time'
 import { getStatusColor } from '@/lib/constants'
-import { ClipboardList, RefreshCw, Zap, Calendar, Mars, Venus } from 'lucide-react'
+import { ClipboardCheck, RefreshCw, Sparkles, Calendar, Mars, Venus } from 'lucide-react'
 import {
   getEnrichedAppointments,
   getPatientDisplayName,
@@ -15,9 +15,9 @@ import {
 
 // Map appointment type IDs to icons
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  'appt_type_001': ClipboardList, // Initial Consultation
+  'appt_type_001': ClipboardCheck, // Initial Consultation
   'appt_type_002': RefreshCw, // Follow-up Treatment
-  'appt_type_003': Zap, // Brief Follow-up
+  'appt_type_003': Sparkles, // Brief Follow-up
 }
 
 // Timeline configuration
@@ -334,13 +334,14 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
                     e.stopPropagation()
                     onAppointmentClick?.(appointment)
                   }}
-                  className={cn(
-                    'absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80',
-                    isSelected && 'ring-1 ring-gray-800 ring-offset-1 ring-offset-white'
-                  )}
+                  className="absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80"
                   style={{
                     ...style,
-                    backgroundColor: `${appointmentBgColor}20`,
+                    backgroundColor: isSelected
+                      ? (appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned
+                          ? `${statusColor}50` // More opaque for completed to distinguish from gray
+                          : `${statusColor}30`)
+                      : `${appointmentBgColor}20`,
                     borderLeft: `3px solid ${statusColor}`,
                   }}
                 >

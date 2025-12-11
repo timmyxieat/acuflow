@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { cn } from '@/lib/utils'
 import { getDevNow } from '@/lib/dev-time'
-import { getStatusTextColor } from '@/lib/constants'
-import { Armchair, CalendarClock, PenLine, CircleCheckBig, Syringe, Activity } from 'lucide-react'
+import { getStatusColor } from '@/lib/constants'
+import { Syringe } from 'lucide-react'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
@@ -27,7 +26,6 @@ interface PatientCardsProps {
 
 interface StatusSectionProps {
   title: string
-  icon: React.ReactNode
   appointments: AppointmentWithRelations[]
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
   variant: 'inProgress' | 'checkedIn' | 'scheduled' | 'unsigned' | 'completed'
@@ -35,7 +33,6 @@ interface StatusSectionProps {
 
 function StatusSection({
   title,
-  icon,
   appointments,
   onAppointmentClick,
   variant,
@@ -43,15 +40,18 @@ function StatusSection({
   if (appointments.length === 0) return null
 
   const statusMapping = VARIANT_STATUS_MAP[variant]
-  const headerColor = getStatusTextColor(statusMapping.status, statusMapping.isSigned)
+  const statusColor = getStatusColor(statusMapping.status, statusMapping.isSigned)
 
   return (
     <div>
       {/* Section header */}
-      <div className={cn('mb-2 flex items-center gap-1.5 text-sm font-semibold', headerColor)}>
-        {icon}
+      <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
+        <div
+          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: statusColor }}
+        />
         <span>{title}</span>
-        <span className="font-medium">({appointments.length})</span>
+        <span>({appointments.length})</span>
       </div>
 
       {/* Cards */}
@@ -192,7 +192,6 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
-          icon={<Activity className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.inProgress}
           onAppointmentClick={onAppointmentClick}
           variant="inProgress"
@@ -201,7 +200,6 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Checked In - Waiting */}
         <StatusSection
           title="Checked In"
-          icon={<Armchair className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.checkedIn}
           onAppointmentClick={onAppointmentClick}
           variant="checkedIn"
@@ -210,7 +208,6 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Scheduled - Upcoming */}
         <StatusSection
           title="Scheduled"
-          icon={<CalendarClock className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.scheduled}
           onAppointmentClick={onAppointmentClick}
           variant="scheduled"
@@ -219,7 +216,6 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Unsigned - Need attention */}
         <StatusSection
           title="Unsigned"
-          icon={<PenLine className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.unsigned}
           onAppointmentClick={onAppointmentClick}
           variant="unsigned"
@@ -228,7 +224,6 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
         {/* Completed - Done for today */}
         <StatusSection
           title="Completed"
-          icon={<CircleCheckBig className="h-3.5 w-3.5" />}
           appointments={groupedAppointments.completed}
           onAppointmentClick={onAppointmentClick}
           variant="completed"
