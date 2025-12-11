@@ -147,15 +147,20 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   // Get sex icon component
   const SexIcon = patient.sex === 'FEMALE' ? Venus : patient.sex === 'MALE' ? Mars : null
 
+  // Get initials for avatar
+  const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
+
   return (
     <button
       onClick={onClick}
-      className={cn(
-        'w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:bg-accent',
-        variant === 'inProgress' && 'border-blue-300 bg-blue-50/50'
-      )}
+      className="w-full text-left transition-colors hover:bg-accent rounded-md p-2 border border-border"
     >
       <div className="flex items-center gap-2">
+        {/* Avatar */}
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+          {initials}
+        </div>
+
         {/* Name and details */}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{displayName}</div>
@@ -208,7 +213,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), [])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card">
+    <div className="flex h-full flex-col overflow-hidden bg-card">
       {/* Scrollable content */}
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {/* In Progress - Most important, shows first */}

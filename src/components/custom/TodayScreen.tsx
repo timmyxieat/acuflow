@@ -19,15 +19,25 @@ export function TodayScreen() {
     setSelectedAppointment(null)
   }
 
+  // Close preview when clicking on the timeline background (not on an appointment)
+  const handleTimelineBackgroundClick = () => {
+    if (selectedAppointment) {
+      setSelectedAppointment(null)
+    }
+  }
+
   return (
-    <div className="flex h-full gap-4 p-4">
+    <div className="flex h-full">
       {/* Timeline - Left 2/3 */}
-      <div className="w-2/3">
+      <div className="w-2/3" onClick={handleTimelineBackgroundClick}>
         <Timeline
           onAppointmentClick={handleAppointmentClick}
           selectedAppointmentId={selectedAppointment?.id}
         />
       </div>
+
+      {/* Vertical divider */}
+      <div className="w-px bg-border" />
 
       {/* Right 1/3 - Patient Cards or Appointment Preview */}
       <div className="w-1/3">

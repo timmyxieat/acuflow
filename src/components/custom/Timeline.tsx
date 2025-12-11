@@ -12,7 +12,7 @@ import {
 } from '@/data/mock-data'
 
 // Timeline configuration
-const MIN_HOUR_HEIGHT = 50 // minimum pixels per hour
+const MIN_HOUR_HEIGHT = 120 // minimum pixels per hour
 const START_HOUR = 8 // 8 AM
 const END_HOUR = 18 // 6 PM
 const TOTAL_HOURS = END_HOUR - START_HOUR
@@ -199,7 +199,7 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
   const totalHeight = TOTAL_HOURS * hourHeight
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card">
+    <div className="flex h-full flex-col overflow-hidden bg-card">
       {/* Timeline body */}
       <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
         <div className="relative flex min-h-full">
@@ -265,9 +265,12 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
               return (
                 <button
                   key={appointment.id}
-                  onClick={() => onAppointmentClick?.(appointment)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAppointmentClick?.(appointment)
+                  }}
                   className={cn(
-                    'absolute overflow-hidden rounded-sm px-2 py-1.5 text-left flex flex-col justify-start transition-all hover:opacity-80',
+                    'absolute overflow-hidden rounded-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80',
                     isSelected && 'ring-2 ring-primary ring-offset-1'
                   )}
                   style={{
@@ -284,14 +287,14 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
                   </div>
 
                   {/* Patient name */}
-                  <div className="text-sm font-medium leading-tight">
+                  <div className="text-xs font-medium leading-tight">
                     {appointment.patient
                       ? getPatientDisplayName(appointment.patient)
                       : 'Unknown Patient'}
                   </div>
 
                   {/* Appointment type */}
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-[11px] text-muted-foreground">
                     {appointment.appointmentType?.name}
                   </div>
                 </button>
