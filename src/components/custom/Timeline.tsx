@@ -3,13 +3,22 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { getDevDate } from '@/lib/dev-time'
+import { getStatusColor } from '@/lib/constants'
+import { ClipboardList, RefreshCw, Zap, Calendar, Mars, Venus } from 'lucide-react'
 import {
   getEnrichedAppointments,
   getPatientDisplayName,
-  getStatusDisplay,
+  calculateAge,
   type AppointmentWithRelations,
   AppointmentStatus,
 } from '@/data/mock-data'
+
+// Map appointment type IDs to icons
+const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'appt_type_001': ClipboardList, // Initial Consultation
+  'appt_type_002': RefreshCw, // Follow-up Treatment
+  'appt_type_003': Zap, // Brief Follow-up
+}
 
 // Timeline configuration
 const MIN_HOUR_HEIGHT = 120 // minimum pixels per hour
@@ -168,18 +177,37 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
     const widthPercent = 100 / columnInfo.totalColumns
     const leftPercent = columnInfo.column * widthPercent
 
+    // Calculate left offset and width with 8px edge padding and 8px gap between columns
+    const isFirstColumn = columnInfo.column === 0
+    const isLastColumn = columnInfo.column === columnInfo.totalColumns - 1
+    const isSingleColumn = columnInfo.totalColumns === 1
+
+    let leftOffset = 8 // 8px left edge padding
+    let widthReduction = 16 // default: 8px left + 8px right edge
+
+    if (!isSingleColumn) {
+      if (isFirstColumn) {
+        leftOffset = 8 // 8px from left edge
+        widthReduction = 12 // 8px left edge + 4px (half of 8px gap)
+      } else if (isLastColumn) {
+        leftOffset = 4 // 4px (half of 8px gap)
+        widthReduction = 12 // 4px gap + 8px right edge
+      } else {
+        leftOffset = 4 // 4px (half gap from left neighbor)
+        widthReduction = 8 // 4px left + 4px right (half gaps)
+      }
+    }
+
     return {
       top: `${TOP_PADDING + startOffset * hourHeight}px`,
-      height: `${duration * hourHeight - 4}px`, // -4 for vertical gap
-      left: `calc(${leftPercent}% + 2px)`,
-      width: `calc(${widthPercent}% - 4px)`, // 2px on each side = 4px gap between columns
+      height: `${duration * hourHeight - 8}px`, // -8 for vertical gap
+      left: `calc(${leftPercent}% + ${leftOffset}px)`,
+      width: `calc(${widthPercent}% - ${widthReduction}px)`,
     }
   }
 
-  // Get border color based on appointment type
-  const getAppointmentColor = (appointment: AppointmentWithRelations) => {
-    return appointment.appointmentType?.color || '#6366f1'
-  }
+  // Background color for appointment cards
+  const appointmentBgColor = '#94a3b8' // slate-400 - light gray
 
   // Force re-render every second to update current time indicator
   const [, setTick] = useState(0)
@@ -198,8 +226,42 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
   // Total height for the timeline
   const totalHeight = TOTAL_HOURS * hourHeight
 
+  // Track if content is scrollable and scroll position
+  const [canScrollDown, setCanScrollDown] = useState(false)
+  const [canScrollUp, setCanScrollUp] = useState(false)
+
+  useEffect(() => {
+    const checkScroll = () => {
+      if (containerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = containerRef.current
+        setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10)
+        setCanScrollUp(scrollTop > 10)
+      }
+    }
+
+    checkScroll()
+    const container = containerRef.current
+    container?.addEventListener('scroll', checkScroll)
+    window.addEventListener('resize', checkScroll)
+
+    return () => {
+      container?.removeEventListener('scroll', checkScroll)
+      window.removeEventListener('resize', checkScroll)
+    }
+  }, [hourHeight])
+
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-card">
+    <div className="flex h-full flex-col overflow-hidden bg-card relative">
+      {/* Scroll indicator - top fade */}
+      {canScrollUp && (
+        <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-b from-gray-400/15 to-transparent pointer-events-none z-10" />
+      )}
+
+      {/* Scroll indicator - bottom fade */}
+      {canScrollDown && (
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-400/15 to-transparent pointer-events-none z-10" />
+      )}
+
       {/* Timeline body */}
       <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
         <div className="relative flex min-h-full">
@@ -215,14 +277,14 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
                 className="relative border-b border-border/50"
                 style={{ height: `${hourHeight}px` }}
               >
-                <span className="absolute -top-2.5 left-2 text-xs text-muted-foreground">
+                <span className="absolute top-0 left-0 right-0 -translate-y-1/2 text-center text-xs text-muted-foreground">
                   {label}
                 </span>
               </div>
             ))}
             {/* End hour label */}
             <div className="relative h-3">
-              <span className="absolute -top-2.5 left-2 text-xs text-muted-foreground">
+              <span className="absolute top-0 left-0 right-0 -translate-y-1/2 text-center text-xs text-muted-foreground">
                 {endHourLabel}
               </span>
             </div>
@@ -259,8 +321,11 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
             {/* Appointment blocks */}
             {appointments.map((appointment) => {
               const style = getAppointmentStyle(appointment)
-              const color = getAppointmentColor(appointment)
+              const statusColor = getStatusColor(appointment.status, appointment.isSigned)
               const isSelected = appointment.id === selectedAppointmentId
+              const AppointmentIcon = appointment.appointmentType?.id
+                ? APPOINTMENT_TYPE_ICONS[appointment.appointmentType.id] || Calendar
+                : Calendar
 
               return (
                 <button
@@ -270,32 +335,43 @@ export function Timeline({ onAppointmentClick, selectedAppointmentId }: Timeline
                     onAppointmentClick?.(appointment)
                   }}
                   className={cn(
-                    'absolute overflow-hidden rounded-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80',
-                    isSelected && 'ring-2 ring-primary ring-offset-1'
+                    'absolute overflow-hidden rounded-r-sm px-2 py-1 text-left flex flex-col justify-start transition-all hover:opacity-80',
+                    isSelected && 'ring-1 ring-gray-800 ring-offset-1 ring-offset-white'
                   )}
                   style={{
                     ...style,
-                    backgroundColor: `${color}20`,
+                    backgroundColor: `${appointmentBgColor}20`,
+                    borderLeft: `3px solid ${statusColor}`,
                   }}
                 >
+                  {/* Appointment type icon - top right */}
+                  <div className="absolute top-1 right-1">
+                    <AppointmentIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
+                  </div>
+
                   {/* Time */}
                   <div className="text-[11px] text-muted-foreground">
                     {appointment.scheduledStart.toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
-                    }).toLowerCase()}
+                    }).toUpperCase()}
                   </div>
 
-                  {/* Patient name */}
-                  <div className="text-xs font-medium leading-tight">
-                    {appointment.patient
-                      ? getPatientDisplayName(appointment.patient)
-                      : 'Unknown Patient'}
-                  </div>
-
-                  {/* Appointment type */}
-                  <div className="text-[11px] text-muted-foreground">
-                    {appointment.appointmentType?.name}
+                  {/* Patient name with age and gender */}
+                  <div className="text-xs font-medium leading-tight flex items-center gap-1">
+                    <span>
+                      {appointment.patient
+                        ? getPatientDisplayName(appointment.patient)
+                        : 'Unknown Patient'}
+                    </span>
+                    {appointment.patient && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-muted-foreground">{calculateAge(appointment.patient.dateOfBirth)}</span>
+                        {appointment.patient.sex === 'MALE' && <Mars className="h-3 w-3 text-muted-foreground" />}
+                        {appointment.patient.sex === 'FEMALE' && <Venus className="h-3 w-3 text-muted-foreground" />}
+                      </>
+                    )}
                   </div>
                 </button>
               )

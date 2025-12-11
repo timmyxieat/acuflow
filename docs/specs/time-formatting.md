@@ -1,6 +1,40 @@
-# Patient Card Timer Display Spec
+# Time Formatting & Timer Display Spec
 
-This document defines how time-related information is displayed on patient cards in the Today screen.
+This document defines how times and timers are formatted throughout the application.
+
+---
+
+## Time Formatting Standards
+
+All times in the application should follow these formatting rules:
+
+| Context | Format | Example |
+|---------|--------|---------|
+| Timeline hour labels | `H AM` or `H PM` | `8 AM`, `12 PM`, `6 PM` |
+| Timeline appointment cards | `H:MM AM` or `H:MM PM` | `9:00 AM`, `2:30 PM` |
+| Patient card times | `H:MM AM` or `H:MM PM` | `11:00 AM`, `3:45 PM` |
+| Appointment preview | `H:MM AM` or `H:MM PM` | `10:30 AM`, `4:00 PM` |
+
+**Rules:**
+- **AM/PM should always be uppercase** (not lowercase `am/pm`)
+- No leading zeros on hours (use `9 AM` not `09 AM`)
+- Always include minutes with colon for appointment times (`:00`, `:30`, etc.)
+- Timeline hour labels omit minutes for cleaner display
+- Use `toLocaleTimeString()` with manual uppercase conversion for consistency
+
+**Implementation:**
+```typescript
+// For times with minutes (appointment cards, patient cards)
+date.toLocaleTimeString('en-US', {
+  hour: 'numeric',
+  minute: '2-digit'
+}).toUpperCase()
+// Output: "9:00 AM", "2:30 PM"
+
+// For hour-only labels (timeline)
+`${hour12} ${hour >= 12 ? 'PM' : 'AM'}`
+// Output: "8 AM", "12 PM"
+```
 
 ---
 

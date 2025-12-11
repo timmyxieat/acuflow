@@ -12,7 +12,12 @@ export function TodayScreen() {
   )
 
   const handleAppointmentClick = (appointment: AppointmentWithRelations) => {
-    setSelectedAppointment(appointment)
+    // Toggle selection - clicking same appointment unselects it
+    if (selectedAppointment?.id === appointment.id) {
+      setSelectedAppointment(null)
+    } else {
+      setSelectedAppointment(appointment)
+    }
   }
 
   const handleClosePreview = () => {

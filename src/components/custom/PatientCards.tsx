@@ -3,14 +3,23 @@
 import { useMemo, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { getDevNow } from '@/lib/dev-time'
-import { Armchair, CalendarClock, PenLine, CircleCheckBig, MessageCircleMore, Syringe, AlarmClockCheck, Mars, Venus, Activity } from 'lucide-react'
+import { getStatusTextColor } from '@/lib/constants'
+import { Armchair, CalendarClock, PenLine, CircleCheckBig, Syringe, Activity } from 'lucide-react'
 import {
   getAppointmentsByStatus,
   getPatientDisplayName,
-  calculateAge,
   type AppointmentWithRelations,
   AppointmentStatus,
 } from '@/data/mock-data'
+
+// Variant to status mapping for header colors
+const VARIANT_STATUS_MAP: Record<string, { status: AppointmentStatus; isSigned?: boolean }> = {
+  inProgress: { status: AppointmentStatus.IN_PROGRESS },
+  checkedIn: { status: AppointmentStatus.CHECKED_IN },
+  scheduled: { status: AppointmentStatus.SCHEDULED },
+  unsigned: { status: AppointmentStatus.COMPLETED, isSigned: false },
+  completed: { status: AppointmentStatus.COMPLETED, isSigned: true },
+}
 
 interface PatientCardsProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
@@ -33,31 +42,25 @@ function StatusSection({
 }: StatusSectionProps) {
   if (appointments.length === 0) return null
 
-  const headerStyles = {
-    inProgress: 'text-blue-600',
-    checkedIn: 'text-green-600',
-    scheduled: 'text-muted-foreground',
-    unsigned: 'text-amber-600',
-    completed: 'text-slate-500',
-  }
+  const statusMapping = VARIANT_STATUS_MAP[variant]
+  const headerColor = getStatusTextColor(statusMapping.status, statusMapping.isSigned)
 
   return (
     <div>
-      {/* Section header - simple inline */}
-      <div className={cn('mb-2 flex items-center gap-1.5 text-xs font-medium', headerStyles[variant])}>
+      {/* Section header */}
+      <div className={cn('mb-2 flex items-center gap-1.5 text-sm font-semibold', headerColor)}>
         {icon}
         <span>{title}</span>
-        <span className="text-muted-foreground">({appointments.length})</span>
+        <span className="font-medium">({appointments.length})</span>
       </div>
 
       {/* Cards */}
-      <div className="space-y-1.5">
+      <div className="flex flex-col gap-2">
         {appointments.map((appointment) => (
           <PatientCard
             key={appointment.id}
             appointment={appointment}
             onClick={() => onAppointmentClick?.(appointment)}
-            variant={variant}
           />
         ))}
       </div>
@@ -68,15 +71,13 @@ function StatusSection({
 interface PatientCardProps {
   appointment: AppointmentWithRelations
   onClick?: () => void
-  variant: 'inProgress' | 'checkedIn' | 'scheduled' | 'unsigned' | 'completed'
 }
 
-function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
+function PatientCard({ appointment, onClick }: PatientCardProps) {
   const patient = appointment.patient
   if (!patient) return null
 
   const displayName = getPatientDisplayName(patient)
-  const age = calculateAge(patient.dateOfBirth)
   const primaryCondition = appointment.conditions?.[0]
 
   // Format time
@@ -98,54 +99,30 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
     const now = getDevNow()
     const NEEDLE_RETENTION_MINUTES = 20 // Standard needle retention time
 
-    // State 3: Needles out - show time left/over until appointment end
-    if (appointment.needleRemovalAt) {
-      const msUntilEnd = appointment.scheduledEnd.getTime() - now
-      const isOvertime = msUntilEnd < 0
-      const minutesLeft = Math.ceil(Math.abs(msUntilEnd) / 60000)
-      return {
-        type: 'needlesOut' as const,
-        icon: AlarmClockCheck,
-        time: isOvertime ? `${minutesLeft}m over` : `${minutesLeft}m left`,
-        isOvertime,
-      }
-    }
-
-    // State 2: Needles in - countdown from target retention time (e.g., 20 min)
-    if (appointment.needleInsertionAt) {
+    // Needles in - show MM:SS countdown for needle retention
+    if (appointment.needleInsertionAt && !appointment.needleRemovalAt) {
       const msElapsed = now - appointment.needleInsertionAt.getTime()
       const targetMs = NEEDLE_RETENTION_MINUTES * 60000
       const msRemaining = targetMs - msElapsed
       const isOvertime = msRemaining < 0
-      const minutesLeft = Math.ceil(Math.abs(msRemaining) / 60000)
+      const totalSeconds = Math.ceil(Math.abs(msRemaining) / 1000)
+      const minutes = Math.floor(totalSeconds / 60)
+      const seconds = totalSeconds % 60
+      const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`
       return {
         type: 'needling' as const,
         icon: Syringe,
-        time: isOvertime ? `${minutesLeft}m over` : `out in ${minutesLeft}m`,
+        time: isOvertime ? `-${timeStr}` : timeStr,
         isOvertime,
       }
     }
 
-    // State 1: Started, no needles yet - show elapsed time
-    if (appointment.startedAt) {
-      const msElapsed = now - appointment.startedAt.getTime()
-      const minutesElapsed = Math.floor(msElapsed / 60000)
-      return {
-        type: 'started' as const,
-        icon: MessageCircleMore,
-        time: `${minutesElapsed}m`,
-        isOvertime: false,
-      }
-    }
-
+    // No needles or needles out - no timer display
     return null
   }
 
   const waitTime = getWaitTime()
   const treatmentInfo = getTreatmentInfo()
-
-  // Get sex icon component
-  const SexIcon = patient.sex === 'FEMALE' ? Venus : patient.sex === 'MALE' ? Mars : null
 
   // Get initials for avatar
   const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
@@ -153,50 +130,46 @@ function PatientCard({ appointment, onClick, variant }: PatientCardProps) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left transition-colors hover:bg-accent rounded-md p-2 border border-border"
+      className="w-full text-left transition-colors hover:opacity-80 rounded-md p-2"
+      style={{ backgroundColor: '#94a3b820' }}
     >
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
+        {/* Appointment time - absolute top right */}
+        <span className="absolute top-0 right-0 text-xs text-muted-foreground">
+          {formatTime(appointment.scheduledStart)}
+        </span>
+
         {/* Avatar */}
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
           {initials}
         </div>
 
         {/* Name and details */}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-16">
           <div className="truncate text-sm font-medium">{displayName}</div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span>{age}</span>
-            {SexIcon && <SexIcon className="h-3 w-3" />}
             {primaryCondition && (
-              <>
-                <span>•</span>
-                <span className="truncate">{primaryCondition.name}</span>
-              </>
+              <span className="truncate">{primaryCondition.name}</span>
             )}
           </div>
         </div>
 
-        {/* Right side: time + indicators */}
-        <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
-          {/* Show start time for all appointments */}
-          <span className="text-xs text-muted-foreground">
-            {formatTime(appointment.scheduledStart)}
-          </span>
-          {waitTime !== null && (
-            <span className={cn('text-[10px]', waitTime > 10 ? 'text-amber-600' : 'text-muted-foreground')}>
-              {waitTime}m wait
-            </span>
-          )}
-          {treatmentInfo && (
-            <span className={cn(
-              'flex items-center gap-0.5 text-[10px]',
-              treatmentInfo.isOvertime ? 'text-red-600' : 'text-blue-600'
-            )}>
-              <treatmentInfo.icon className="h-3 w-3" />
-              {treatmentInfo.time}
-            </span>
-          )}
-        </div>
+        {/* Bottom right: secondary indicators */}
+        {(waitTime !== null || treatmentInfo) && (
+          <div className="absolute bottom-0 right-0 flex flex-col items-end">
+            {waitTime !== null && (
+              <span className="text-[10px] text-muted-foreground">
+                {waitTime}m ago
+              </span>
+            )}
+            {treatmentInfo && (
+              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                {treatmentInfo.icon && <treatmentInfo.icon className="h-3 w-3" />}
+                {treatmentInfo.time}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </button>
   )
@@ -215,7 +188,7 @@ export function PatientCards({ onAppointmentClick }: PatientCardsProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card">
       {/* Scrollable content */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
