@@ -58,7 +58,7 @@ export function ScrollableArea({ children, className, deps = [] }: ScrollableAre
       )}
 
       {/* Scrollable content */}
-      <div ref={scrollRef} className={cn('h-full overflow-y-overlay scrollbar scrollbar-w-[8px] scrollbar-thumb-gray-300 scrollbar-track-transparent scrollbar-thumb-rounded-full', className)}>
+      <div ref={scrollRef} className={cn('h-full scrollbar-always', className)}>
         {children}
       </div>
     </div>

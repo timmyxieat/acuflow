@@ -179,13 +179,14 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
     const widthPercent = 100 / columnInfo.totalColumns
     const leftPercent = columnInfo.column * widthPercent
 
-    // Calculate left offset and width with 8px edge padding and 8px gap between columns
+    // Calculate left offset and width with 8px left edge padding and 8px gap between columns
+    // No right edge padding - scrollbar is at edge
     const isFirstColumn = columnInfo.column === 0
     const isLastColumn = columnInfo.column === columnInfo.totalColumns - 1
     const isSingleColumn = columnInfo.totalColumns === 1
 
     let leftOffset = 8 // 8px left edge padding
-    let widthReduction = 16 // default: 8px left + 8px right edge
+    let widthReduction = 8 // default: 8px left, no right edge
 
     if (!isSingleColumn) {
       if (isFirstColumn) {
@@ -193,7 +194,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
         widthReduction = 12 // 8px left edge + 4px (half of 8px gap)
       } else if (isLastColumn) {
         leftOffset = 4 // 4px (half of 8px gap)
-        widthReduction = 12 // 4px gap + 8px right edge
+        widthReduction = 4 // 4px gap, no right edge
       } else {
         leftOffset = 4 // 4px (half gap from left neighbor)
         widthReduction = 8 // 4px left + 4px right (half gaps)
@@ -224,9 +225,6 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
   const currentMinutes = now.getMinutes()
   const currentTimeOffset = (currentHour - START_HOUR) + (currentMinutes / 60)
   const showCurrentTime = currentHour >= START_HOUR && currentHour < END_HOUR
-
-  // Total height for the timeline
-  const totalHeight = TOTAL_HOURS * hourHeight
 
   // Track if content is scrollable and scroll position
   const [canScrollDown, setCanScrollDown] = useState(false)
@@ -385,7 +383,7 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
       })()}
 
       {/* Timeline body */}
-      <div ref={containerRef} className="relative flex-1 overflow-y-overlay scrollbar scrollbar-w-[8px] scrollbar-thumb-gray-300 scrollbar-track-transparent scrollbar-thumb-rounded-full">
+      <div ref={containerRef} className="relative flex-1 scrollbar-always">
         <div className="relative flex min-h-full">
           {/* Hour labels column */}
           <div className="w-16 flex-shrink-0 relative bg-muted/30 border-r border-border">

@@ -218,7 +218,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-card">
-      <ScrollableArea className="flex flex-col gap-3 px-2 py-3" deps={[groupedAppointments]}>
+      <ScrollableArea className="flex flex-col gap-3 pl-2 py-3" deps={[groupedAppointments]}>
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"

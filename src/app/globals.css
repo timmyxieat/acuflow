@@ -128,11 +128,29 @@ body {
   }
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling - overlay on content without shifting */
 .scrollbar {
-  overflow-y: overlay !important;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.scrollbar::-webkit-scrollbar-thumb {
-  border: 1px solid #fff;
+.scrollbar-always {
+  overflow-y: scroll; /* always shows scrollbar track */
+  overflow-x: hidden;
+}
+
+.scrollbar::-webkit-scrollbar,
+.scrollbar-always::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar::-webkit-scrollbar-thumb,
+.scrollbar-always::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar::-webkit-scrollbar-track,
+.scrollbar-always::-webkit-scrollbar-track {
+  background: transparent;
 }
