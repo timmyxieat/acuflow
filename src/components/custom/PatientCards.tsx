@@ -189,12 +189,12 @@ function PatientCard({ appointment, onClick, onHover, isHovered, isSelected }: P
         {(waitTime !== null || treatmentInfo) && (
           <div className="absolute bottom-0 right-0 flex flex-col items-end">
             {waitTime !== null && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground" suppressHydrationWarning>
                 {waitTime}m ago
               </span>
             )}
             {treatmentInfo && (
-              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground" suppressHydrationWarning>
                 {treatmentInfo.icon && <treatmentInfo.icon className="h-3 w-3" />}
                 {treatmentInfo.time}
               </span>
