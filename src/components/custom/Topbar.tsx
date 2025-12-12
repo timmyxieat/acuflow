@@ -25,7 +25,7 @@ interface SearchResult {
 
 export function Topbar() {
   const router = useRouter()
-  const { header } = useHeader()
+  const { header, previousTitle } = useHeader()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('patient')
   const [query, setQuery] = useState('')
@@ -93,19 +93,11 @@ export function Topbar() {
           <>
             <button
               onClick={() => router.back()}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back{previousTitle ? ` to ${previousTitle}` : ''}</span>
             </button>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">{header.patientName}</h1>
-              {header.appointmentTime && (
-                <>
-                  <span className="text-muted-foreground">·</span>
-                  <span className="text-sm text-muted-foreground">{header.appointmentTime}</span>
-                </>
-              )}
-            </div>
           </>
         ) : (
           <>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ScrollableArea } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { formatTime } from '@/lib/dev-time'
@@ -60,6 +60,7 @@ function getContextualTimeStatus(appointment: AppointmentWithRelations): string 
 
 // =============================================================================
 // Patient Header (Left Panel)
+// Height matches AppointmentHeader (72px) for visual alignment
 // =============================================================================
 
 interface PatientHeaderProps {
@@ -71,7 +72,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
   if (!patient) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+      <div className="flex h-[72px] items-center gap-3 px-4 border-b border-border">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
           ?
         </div>
@@ -84,10 +85,10 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
   const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
   const age = calculateAge(patient.dateOfBirth)
-  const sexDisplay = patient.sex === 'MALE' ? 'M' : patient.sex === 'FEMALE' ? 'F' : ''
+  const sexDisplay = patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : null
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+    <div className="flex h-[72px] items-center gap-3 px-4 border-b border-border">
       {/* Avatar */}
       <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
         {initials}
@@ -95,7 +96,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
       <div>
         <h2 className="text-lg font-semibold">{getPatientDisplayName(patient)}</h2>
         <p className="text-sm text-muted-foreground">
-          {sexDisplay && `${sexDisplay}, `}{age}y
+          {age} years old{sexDisplay && `, ${sexDisplay}`}
         </p>
       </div>
     </div>
@@ -108,8 +109,8 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
 function VisitTimeline() {
   return (
-    <div className="flex flex-col gap-2 px-4">
-      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+    <div className="flex flex-col gap-3 px-4">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         Visit History
       </h3>
       <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
@@ -121,58 +122,79 @@ function VisitTimeline() {
 
 // =============================================================================
 // Appointment Header (Right Panel)
+// Row 1: Date · relation to today | status badge | action button
+// Row 2: Time range (smaller)
 // =============================================================================
 
 interface AppointmentHeaderProps {
   appointment: AppointmentWithRelations
 }
 
+function getRelativeDay(date: Date): string {
+  const today = new Date()
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getDate() === d2.getDate() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getFullYear() === d2.getFullYear()
+
+  if (isSameDay(date, today)) return 'Today'
+  if (isSameDay(date, tomorrow)) return 'Tomorrow'
+  if (isSameDay(date, yesterday)) return 'Yesterday'
+
+  // Calculate days difference
+  const diffTime = date.getTime() - today.getTime()
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays > 0 && diffDays <= 7) return `In ${diffDays} days`
+  if (diffDays < 0 && diffDays >= -7) return `${Math.abs(diffDays)} days ago`
+
+  return date.toLocaleDateString('en-US', { weekday: 'long' })
+}
+
 function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
-  const [contextualStatus, setContextualStatus] = useState(() => getContextualTimeStatus(appointment))
-
-  // Update contextual status every minute
-  useEffect(() => {
-    const updateStatus = () => {
-      setContextualStatus(getContextualTimeStatus(appointment))
-    }
-
-    // Update immediately
-    updateStatus()
-
-    // Update every 30 seconds for more responsive UI
-    const interval = setInterval(updateStatus, 30000)
-    return () => clearInterval(interval)
-  }, [appointment])
 
   // Determine action button
   const getActionButton = () => {
     if (appointment.status === 'SCHEDULED') {
-      return { label: 'Start Appointment', variant: 'primary' }
+      return { label: 'Start Appointment' }
     }
     if (appointment.status === 'IN_PROGRESS') {
-      return { label: 'End Appointment', variant: 'primary' }
+      return { label: 'End Appointment' }
     }
     if (appointment.status === 'COMPLETED' && !appointment.isSigned) {
-      return { label: 'Sign Note', variant: 'primary' }
+      return { label: 'Sign Note' }
     }
     return null
   }
 
   const action = getActionButton()
+  const appointmentDate = new Date(appointment.scheduledStart)
+  const dateStr = appointmentDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+  const relativeDay = getRelativeDay(appointmentDate)
+  const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
   return (
-    <div className="flex items-center justify-between border-b border-border px-6 py-4">
-      <div className="flex items-baseline gap-2">
-        <span className="text-lg font-semibold">Appointment today</span>
-        <span className="text-sm text-muted-foreground">· {contextualStatus}</span>
+    <div className="flex h-[72px] items-center justify-between border-b border-border px-6">
+      {/* Left: Date + time in a column */}
+      <div className="flex flex-col">
+        <div className="flex items-baseline gap-2">
+          <span className="text-base font-semibold">{dateStr}</span>
+          <span className="text-sm text-muted-foreground">· {relativeDay}</span>
+        </div>
+        <div className="text-sm text-muted-foreground">{timeRange}</div>
       </div>
+
+      {/* Right: Status badge + action button */}
       <div className="flex items-center gap-3">
-        {/* Status badge */}
         <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusDisplay.bgColor} ${statusDisplay.textColor}`}>
           {statusDisplay.label}
         </span>
-        {/* Action button */}
         {action && (
           <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             {action.label}
@@ -245,14 +267,9 @@ export default function AppointmentDetailPage() {
 
   // Set the global header when this page mounts
   useEffect(() => {
-    if (appointment?.patient) {
-      const patientName = getPatientDisplayName(appointment.patient)
-      const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
-
+    if (appointment) {
       setHeader({
         showBackButton: true,
-        patientName,
-        appointmentTime: timeRange,
       })
     }
 
