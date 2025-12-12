@@ -126,6 +126,9 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  button {
+    cursor: pointer;
+  }
 }
 
 /* Scrollbar styling - overlay on content without shifting */

@@ -23,6 +23,7 @@ const VARIANT_STATUS_MAP: Record<string, { status: AppointmentStatus; isSigned?:
 
 interface PatientCardsProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void
   onAppointmentHover?: (appointmentId: string | null) => void
   hoveredAppointmentId?: string | null
   selectedAppointmentId?: string
@@ -32,6 +33,7 @@ interface StatusSectionProps {
   title: string
   appointments: AppointmentWithRelations[]
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void
   onAppointmentHover?: (appointmentId: string | null) => void
   hoveredAppointmentId?: string | null
   selectedAppointmentId?: string
@@ -42,6 +44,7 @@ function StatusSection({
   title,
   appointments,
   onAppointmentClick,
+  onAppointmentDoubleClick,
   onAppointmentHover,
   hoveredAppointmentId,
   selectedAppointmentId,
@@ -71,6 +74,7 @@ function StatusSection({
             key={appointment.id}
             appointment={appointment}
             onClick={() => onAppointmentClick?.(appointment)}
+            onDoubleClick={() => onAppointmentDoubleClick?.(appointment)}
             onHover={(isHovered) => onAppointmentHover?.(isHovered ? appointment.id : null)}
             isHovered={appointment.id === hoveredAppointmentId}
             isSelected={appointment.id === selectedAppointmentId}
@@ -84,12 +88,13 @@ function StatusSection({
 interface PatientCardProps {
   appointment: AppointmentWithRelations
   onClick?: () => void
+  onDoubleClick?: () => void
   onHover?: (isHovered: boolean) => void
   isHovered?: boolean
   isSelected?: boolean
 }
 
-function PatientCard({ appointment, onClick, onHover, isHovered, isSelected }: PatientCardProps) {
+function PatientCard({ appointment, onClick, onDoubleClick, onHover, isHovered, isSelected }: PatientCardProps) {
   const patient = appointment.patient
   if (!patient) return null
 
@@ -159,6 +164,7 @@ function PatientCard({ appointment, onClick, onHover, isHovered, isSelected }: P
   return (
     <button
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
       className="w-full text-left transition-colors rounded-md p-2"
@@ -206,7 +212,7 @@ function PatientCard({ appointment, onClick, onHover, isHovered, isSelected }: P
   )
 }
 
-export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAppointmentId, selectedAppointmentId }: PatientCardsProps) {
+export function PatientCards({ onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, hoveredAppointmentId, selectedAppointmentId }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), [])
 
   // Force re-render every second to update timers
@@ -224,6 +230,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           title="In Progress"
           appointments={groupedAppointments.inProgress}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentDoubleClick={onAppointmentDoubleClick}
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
@@ -235,6 +242,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           title="Checked In"
           appointments={groupedAppointments.checkedIn}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentDoubleClick={onAppointmentDoubleClick}
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
@@ -246,6 +254,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           title="Scheduled"
           appointments={groupedAppointments.scheduled}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentDoubleClick={onAppointmentDoubleClick}
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
@@ -266,6 +275,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           title="Unsigned"
           appointments={groupedAppointments.unsigned}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentDoubleClick={onAppointmentDoubleClick}
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
@@ -277,6 +287,7 @@ export function PatientCards({ onAppointmentClick, onAppointmentHover, hoveredAp
           title="Completed"
           appointments={groupedAppointments.completed}
           onAppointmentClick={onAppointmentClick}
+          onAppointmentDoubleClick={onAppointmentDoubleClick}
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}

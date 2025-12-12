@@ -1,16 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { AppointmentPreview } from './AppointmentPreview'
 import type { AppointmentWithRelations } from '@/data/mock-data'
 
 export function TodayScreen() {
+  const router = useRouter()
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithRelations | null>(
     null
   )
   const [hoveredAppointmentId, setHoveredAppointmentId] = useState<string | null>(null)
+
+  // Handle Escape key to deselect appointment
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && selectedAppointment) {
+        setSelectedAppointment(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedAppointment])
 
   const handleAppointmentClick = (appointment: AppointmentWithRelations) => {
     // Toggle selection - clicking same appointment unselects it
@@ -19,6 +33,10 @@ export function TodayScreen() {
     } else {
       setSelectedAppointment(appointment)
     }
+  }
+
+  const handleAppointmentDoubleClick = (appointment: AppointmentWithRelations) => {
+    router.push(`/appointments/${appointment.id}`)
   }
 
   const handleClosePreview = () => {
@@ -42,6 +60,7 @@ export function TodayScreen() {
       <div className="w-2/3" onClick={handleTimelineBackgroundClick}>
         <Timeline
           onAppointmentClick={handleAppointmentClick}
+          onAppointmentDoubleClick={handleAppointmentDoubleClick}
           onAppointmentHover={handleAppointmentHover}
           selectedAppointmentId={selectedAppointment?.id}
           hoveredAppointmentId={hoveredAppointmentId}
@@ -57,6 +76,7 @@ export function TodayScreen() {
         <div className={selectedAppointment ? 'h-1/2 border-b border-border' : 'h-full'}>
           <PatientCards
             onAppointmentClick={handleAppointmentClick}
+            onAppointmentDoubleClick={handleAppointmentDoubleClick}
             onAppointmentHover={handleAppointmentHover}
             hoveredAppointmentId={hoveredAppointmentId}
             selectedAppointmentId={selectedAppointment?.id}

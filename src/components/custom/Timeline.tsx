@@ -29,6 +29,7 @@ const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void
   onAppointmentHover?: (appointmentId: string | null) => void
   selectedAppointmentId?: string
   hoveredAppointmentId?: string | null
@@ -116,7 +117,7 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
   return result
 }
 
-export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
+export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
   const scrollableRef = useRef<ScrollableAreaRef>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
@@ -452,6 +453,10 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
                   onClick={(e) => {
                     e.stopPropagation()
                     onAppointmentClick?.(appointment)
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    onAppointmentDoubleClick?.(appointment)
                   }}
                   onMouseEnter={() => onAppointmentHover?.(appointment.id)}
                   onMouseLeave={() => onAppointmentHover?.(null)}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ScrollableArea } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { formatTime } from '@/lib/dev-time'
@@ -10,8 +10,18 @@ import {
   getPatientDisplayName,
   calculateAge,
   getStatusDisplay,
+  getPatientVisitHistory,
   type AppointmentWithRelations,
+  type VisitWithAppointment,
 } from '@/data/mock-data'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
+
+// Map appointment type IDs to icons (same as Timeline.tsx)
+const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  'appt_type_001': ClipboardCheck, // Initial Consultation
+  'appt_type_002': RefreshCw, // Follow-up Treatment
+  'appt_type_003': Sparkles, // Brief Follow-up
+}
 
 // =============================================================================
 // Contextual Time Display Helper
@@ -104,17 +114,131 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 }
 
 // =============================================================================
-// Visit Timeline (Left Panel) - Placeholder
+// Visit Timeline (Left Panel)
 // =============================================================================
 
-function VisitTimeline() {
+interface VisitTimelineProps {
+  patientId: string
+  selectedVisitId: string | null
+  onSelectVisit: (visitId: string | null) => void
+}
+
+function formatVisitDate(date: Date): string {
+  const now = new Date()
+  const visitDate = new Date(date)
+
+  // Check if same year
+  const isSameYear = now.getFullYear() === visitDate.getFullYear()
+
+  if (isSameYear) {
+    return visitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  return visitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function VisitCard({
+  visit,
+  isSelected,
+  onClick,
+}: {
+  visit: VisitWithAppointment
+  isSelected: boolean
+  onClick: () => void
+}) {
+  const appointmentType = visit.appointment?.appointmentType
+  const isSigned = visit.appointment?.isSigned ?? true
+  const visitDate = visit.appointment?.scheduledStart
+    ? new Date(visit.appointment.scheduledStart)
+    : new Date(visit.createdAt)
+
+  // Get the icon component for this appointment type (same pattern as Timeline)
+  const IconComponent = appointmentType?.id
+    ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
+    : Calendar
+
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        w-full text-left rounded-lg border p-3 transition-all
+        ${isSelected
+          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+          : 'border-border bg-card hover:bg-muted/50 hover:border-muted-foreground/20'
+        }
+      `}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          {/* Appointment type icon - simple style like Timeline */}
+          <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {/* Date */}
+            <span className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+              {formatVisitDate(visitDate)}
+            </span>
+            {/* Chief complaint */}
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+              {visit.chiefComplaint || 'No chief complaint recorded'}
+            </p>
+          </div>
+        </div>
+        {/* Signed indicator */}
+        {isSigned && (
+          <div className="flex-shrink-0 mt-0.5">
+            <div className="h-4 w-4 rounded-full bg-green-100 flex items-center justify-center">
+              <Check className="h-2.5 w-2.5 text-green-600" />
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Currently viewing label */}
+      {isSelected && (
+        <div className="mt-2 pt-2 border-t border-primary/20">
+          <span className="text-[10px] font-medium text-primary uppercase tracking-wider">
+            Currently viewing
+          </span>
+        </div>
+      )}
+    </button>
+  )
+}
+
+function VisitTimeline({ patientId, selectedVisitId, onSelectVisit }: VisitTimelineProps) {
+  const visitHistory = getPatientVisitHistory(patientId)
+
+  // Empty state for new patients
+  if (visitHistory.length === 0) {
+    return (
+      <div className="flex flex-col gap-3 px-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Visit History
+        </h3>
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            First visit for this patient
+          </p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            Past visits will appear here
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3 px-4">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         Visit History
       </h3>
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-        Visit timeline will appear here
+      <div className="flex flex-col gap-2">
+        {visitHistory.map((visit) => (
+          <VisitCard
+            key={visit.id}
+            visit={visit}
+            isSelected={selectedVisitId === visit.id}
+            onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id)}
+          />
+        ))}
       </div>
     </div>
   )
@@ -261,6 +385,9 @@ export default function AppointmentDetailPage() {
   const { setHeader, resetHeader } = useHeader()
   const appointmentId = params.id as string
 
+  // State for selected visit in timeline (for preview)
+  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+
   // Find the appointment from mock data
   const appointments = getEnrichedAppointments()
   const appointment = appointments.find((a) => a.id === appointmentId)
@@ -280,6 +407,11 @@ export default function AppointmentDetailPage() {
   // Only re-run when appointment ID changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointmentId])
+
+  // Handle visit selection from timeline
+  const handleSelectVisit = (visitId: string | null) => {
+    setSelectedVisitId(visitId)
+  }
 
   if (!appointment) {
     return (
@@ -309,7 +441,13 @@ export default function AppointmentDetailPage() {
 
         {/* Visit Timeline - Scrollable */}
         <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointmentId]}>
-          <VisitTimeline />
+          {appointment.patient && (
+            <VisitTimeline
+              patientId={appointment.patient.id}
+              selectedVisitId={selectedVisitId}
+              onSelectVisit={handleSelectVisit}
+            />
+          )}
         </ScrollableArea>
       </div>
 

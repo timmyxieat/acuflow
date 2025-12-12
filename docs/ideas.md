@@ -1,5 +1,9 @@
 # Ideas & Future Features
 
+## Core Idea of App
+
+- All about navigation (and flow)
+
 ## General
 
 - show cursor:pointer for clickable items
@@ -8,10 +12,26 @@
 
 - Today nav item has an expand that expands the in progress appointments to quickly show them
 
+## Right Sidebar Idea
+
+- OR persistent secondary navigation move cards left of the calendar
+  - have it collapse and toggle between patient appointments
+- have a collapsed version of patient cards on the right
+- clicking on a patient - column persists - opens up SOAP
+
 ## Today Screen
 
 - Press Esc to unselect appointment
 - Double click/long press to open appointment detail
+  - Figure out for iPad navigation - probably add a second button or touch target
+- Figure out scrolling with iPad - not working right now (prob tailwind scrollbar)
+- Feedback
+  - Increase size of the appointment detail overlay OR transition to modal
+  - OR **On the PatientCard it "expands the card"**
+  - take off shadow? somehow make it look like 2 solid entities
+    (maybe down arrow instead of shadow)
+  - If we keep it vertically stacked, move the selected patient so it's visible
+  - Open Full Record hard to reach
 
 ## Search
 
@@ -19,6 +39,7 @@
 - Appointments (2 at most):
   - The upcoming appointment — shown first if today
   - Last visit appointment — shown first otherwise
+- Quick access to Today's patients - In Progress
 
 ## Patient Intake
 

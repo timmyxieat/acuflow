@@ -489,6 +489,7 @@ model AppointmentType {
   durationMinutes Int // 90, 60, etc.
   description     String?
   color           String? // For calendar display
+  icon            String? // Lucide icon name (e.g., "clipboard-list", "repeat", "clock")
   isDefault       Boolean @default(false)
   isActive        Boolean @default(true)
 

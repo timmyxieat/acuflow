@@ -15,6 +15,7 @@ import type {
   AppointmentType,
   Appointment,
   PatientNote,
+  Visit,
 } from "@/generated/prisma/browser";
 
 // Import enums from Prisma
@@ -38,6 +39,7 @@ export type {
   AppointmentType,
   Appointment,
   PatientNote,
+  Visit,
 };
 
 export {
@@ -62,6 +64,16 @@ export interface AppointmentWithRelations extends Appointment {
   practitioner?: Practitioner;
   appointmentType?: AppointmentType;
   conditions?: PatientCondition[];
+}
+
+/**
+ * Visit with related appointment data for timeline display
+ */
+export interface VisitWithAppointment extends Visit {
+  appointment?: Appointment & {
+    appointmentType?: AppointmentType;
+  };
+  chiefComplaint?: string; // Extracted from conditions for display
 }
 
 // =============================================================================
@@ -146,6 +158,7 @@ export const mockAppointmentTypes: AppointmentType[] = [
     description:
       "New patient intake, health history review, and first treatment",
     color: "#6366f1", // Indigo
+    icon: "clipboard-list", // Lucide icon name
     isDefault: true,
     isActive: true,
     createdAt: new Date("2024-01-01"),
@@ -158,6 +171,7 @@ export const mockAppointmentTypes: AppointmentType[] = [
     durationMinutes: 60,
     description: "Returning patient treatment session",
     color: "#10b981", // Emerald
+    icon: "repeat", // Lucide icon name
     isDefault: true,
     isActive: true,
     createdAt: new Date("2024-01-01"),
@@ -170,6 +184,7 @@ export const mockAppointmentTypes: AppointmentType[] = [
     durationMinutes: 30,
     description: "Quick check-in or maintenance treatment",
     color: "#f59e0b", // Amber
+    icon: "clock", // Lucide icon name
     isDefault: false,
     isActive: true,
     createdAt: new Date("2024-01-01"),
@@ -1109,6 +1124,733 @@ export const mockAppointments: Appointment[] = [
 ];
 
 // =============================================================================
+// MOCK PAST APPOINTMENTS (for visit history)
+// =============================================================================
+
+function getPastDate(daysAgo: number, hours: number, minutes: number = 0): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
+export const mockPastAppointments: Appointment[] = [
+  // Emily Johnson - 4 past visits (frequent patient)
+  {
+    id: "past_appt_e1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_001", // Initial
+    scheduledStart: getPastDate(90, 10),
+    scheduledEnd: getPastDate(90, 11, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(90, 9, 55),
+    startedAt: getPastDate(90, 10),
+    needleInsertionAt: getPastDate(90, 10, 30),
+    needleRemovalAt: getPastDate(90, 11),
+    completedAt: getPastDate(90, 11, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(90, 10),
+    updatedAt: getPastDate(90, 11, 20),
+  },
+  {
+    id: "past_appt_e2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(60, 14),
+    scheduledEnd: getPastDate(60, 15),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(60, 13, 55),
+    startedAt: getPastDate(60, 14),
+    needleInsertionAt: getPastDate(60, 14, 15),
+    needleRemovalAt: getPastDate(60, 14, 45),
+    completedAt: getPastDate(60, 14, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(60, 14),
+    updatedAt: getPastDate(60, 14, 55),
+  },
+  {
+    id: "past_appt_e3",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(30, 10),
+    scheduledEnd: getPastDate(30, 11),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(30, 9, 50),
+    startedAt: getPastDate(30, 10),
+    needleInsertionAt: getPastDate(30, 10, 10),
+    needleRemovalAt: getPastDate(30, 10, 40),
+    completedAt: getPastDate(30, 10, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(30, 10),
+    updatedAt: getPastDate(30, 10, 55),
+  },
+  {
+    id: "past_appt_e4",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(7, 11),
+    scheduledEnd: getPastDate(7, 12),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(7, 10, 55),
+    startedAt: getPastDate(7, 11),
+    needleInsertionAt: getPastDate(7, 11, 10),
+    needleRemovalAt: getPastDate(7, 11, 40),
+    completedAt: getPastDate(7, 11, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(7, 11),
+    updatedAt: getPastDate(7, 11, 55),
+  },
+
+  // Robert Martinez - 3 past visits
+  {
+    id: "past_appt_r1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_002",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(120, 9),
+    scheduledEnd: getPastDate(120, 10, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(120, 8, 55),
+    startedAt: getPastDate(120, 9),
+    needleInsertionAt: getPastDate(120, 9, 30),
+    needleRemovalAt: getPastDate(120, 10),
+    completedAt: getPastDate(120, 10, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(120, 9),
+    updatedAt: getPastDate(120, 10, 20),
+  },
+  {
+    id: "past_appt_r2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_002",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(45, 15),
+    scheduledEnd: getPastDate(45, 16),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(45, 14, 50),
+    startedAt: getPastDate(45, 15),
+    needleInsertionAt: getPastDate(45, 15, 10),
+    needleRemovalAt: getPastDate(45, 15, 40),
+    completedAt: getPastDate(45, 15, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(45, 15),
+    updatedAt: getPastDate(45, 15, 55),
+  },
+  {
+    id: "past_appt_r3",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_002",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(14, 9),
+    scheduledEnd: getPastDate(14, 10),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(14, 8, 55),
+    startedAt: getPastDate(14, 9),
+    needleInsertionAt: getPastDate(14, 9, 10),
+    needleRemovalAt: getPastDate(14, 9, 40),
+    completedAt: getPastDate(14, 9, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(14, 9),
+    updatedAt: getPastDate(14, 9, 55),
+  },
+
+  // Jennifer Lee - 2 past visits
+  {
+    id: "past_appt_j1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_003",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(75, 11),
+    scheduledEnd: getPastDate(75, 12, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(75, 10, 55),
+    startedAt: getPastDate(75, 11),
+    needleInsertionAt: getPastDate(75, 11, 30),
+    needleRemovalAt: getPastDate(75, 12),
+    completedAt: getPastDate(75, 12, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(75, 11),
+    updatedAt: getPastDate(75, 12, 20),
+  },
+  {
+    id: "past_appt_j2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_003",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(21, 14),
+    scheduledEnd: getPastDate(21, 15),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(21, 13, 55),
+    startedAt: getPastDate(21, 14),
+    needleInsertionAt: getPastDate(21, 14, 10),
+    needleRemovalAt: getPastDate(21, 14, 40),
+    completedAt: getPastDate(21, 14, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(21, 14),
+    updatedAt: getPastDate(21, 14, 55),
+  },
+
+  // David Kim - 3 past visits
+  {
+    id: "past_appt_d1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_004",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(100, 10),
+    scheduledEnd: getPastDate(100, 11, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(100, 9, 55),
+    startedAt: getPastDate(100, 10),
+    needleInsertionAt: getPastDate(100, 10, 30),
+    needleRemovalAt: getPastDate(100, 11),
+    completedAt: getPastDate(100, 11, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(100, 10),
+    updatedAt: getPastDate(100, 11, 20),
+  },
+  {
+    id: "past_appt_d2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_004",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(50, 16),
+    scheduledEnd: getPastDate(50, 17),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(50, 15, 55),
+    startedAt: getPastDate(50, 16),
+    needleInsertionAt: getPastDate(50, 16, 10),
+    needleRemovalAt: getPastDate(50, 16, 40),
+    completedAt: getPastDate(50, 16, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(50, 16),
+    updatedAt: getPastDate(50, 16, 55),
+  },
+  {
+    id: "past_appt_d3",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_004",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(10, 11),
+    scheduledEnd: getPastDate(10, 12),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(10, 10, 55),
+    startedAt: getPastDate(10, 11),
+    needleInsertionAt: getPastDate(10, 11, 10),
+    needleRemovalAt: getPastDate(10, 11, 40),
+    completedAt: getPastDate(10, 11, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(10, 11),
+    updatedAt: getPastDate(10, 11, 55),
+  },
+
+  // Maria Garcia - 5 past visits (package user)
+  {
+    id: "past_appt_m1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_005",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(150, 9),
+    scheduledEnd: getPastDate(150, 10, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(150, 8, 55),
+    startedAt: getPastDate(150, 9),
+    needleInsertionAt: getPastDate(150, 9, 30),
+    needleRemovalAt: getPastDate(150, 10),
+    completedAt: getPastDate(150, 10, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(150, 9),
+    updatedAt: getPastDate(150, 10, 20),
+  },
+  {
+    id: "past_appt_m2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_005",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(120, 14),
+    scheduledEnd: getPastDate(120, 15),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(120, 13, 55),
+    startedAt: getPastDate(120, 14),
+    needleInsertionAt: getPastDate(120, 14, 10),
+    needleRemovalAt: getPastDate(120, 14, 40),
+    completedAt: getPastDate(120, 14, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(120, 14),
+    updatedAt: getPastDate(120, 14, 55),
+  },
+  {
+    id: "past_appt_m3",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_005",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(90, 10),
+    scheduledEnd: getPastDate(90, 11),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(90, 9, 55),
+    startedAt: getPastDate(90, 10),
+    needleInsertionAt: getPastDate(90, 10, 10),
+    needleRemovalAt: getPastDate(90, 10, 40),
+    completedAt: getPastDate(90, 10, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(90, 10),
+    updatedAt: getPastDate(90, 10, 55),
+  },
+  {
+    id: "past_appt_m4",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_005",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(60, 15),
+    scheduledEnd: getPastDate(60, 16),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(60, 14, 55),
+    startedAt: getPastDate(60, 15),
+    needleInsertionAt: getPastDate(60, 15, 10),
+    needleRemovalAt: getPastDate(60, 15, 40),
+    completedAt: getPastDate(60, 15, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(60, 15),
+    updatedAt: getPastDate(60, 15, 55),
+  },
+  {
+    id: "past_appt_m5",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_005",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(30, 11),
+    scheduledEnd: getPastDate(30, 12),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(30, 10, 55),
+    startedAt: getPastDate(30, 11),
+    needleInsertionAt: getPastDate(30, 11, 10),
+    needleRemovalAt: getPastDate(30, 11, 40),
+    completedAt: getPastDate(30, 11, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(30, 11),
+    updatedAt: getPastDate(30, 11, 55),
+  },
+
+  // Susan Brown - 2 past visits
+  {
+    id: "past_appt_s1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_007",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(60, 10),
+    scheduledEnd: getPastDate(60, 11, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(60, 9, 55),
+    startedAt: getPastDate(60, 10),
+    needleInsertionAt: getPastDate(60, 10, 30),
+    needleRemovalAt: getPastDate(60, 11),
+    completedAt: getPastDate(60, 11, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(60, 10),
+    updatedAt: getPastDate(60, 11, 20),
+  },
+  {
+    id: "past_appt_s2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_007",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(21, 14),
+    scheduledEnd: getPastDate(21, 15),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(21, 13, 55),
+    startedAt: getPastDate(21, 14),
+    needleInsertionAt: getPastDate(21, 14, 10),
+    needleRemovalAt: getPastDate(21, 14, 40),
+    completedAt: getPastDate(21, 14, 55),
+    treatmentDurationMinutes: 30,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(21, 14),
+    updatedAt: getPastDate(21, 14, 55),
+  },
+
+  // William Davis - 1 past visit (newer patient)
+  {
+    id: "past_appt_w1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_008",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(30, 15),
+    scheduledEnd: getPastDate(30, 16, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(30, 14, 55),
+    startedAt: getPastDate(30, 15),
+    needleInsertionAt: getPastDate(30, 15, 30),
+    needleRemovalAt: getPastDate(30, 16),
+    completedAt: getPastDate(30, 16, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(30, 15),
+    updatedAt: getPastDate(30, 16, 20),
+  },
+];
+
+// =============================================================================
+// MOCK VISITS (Clinical documentation for past appointments)
+// =============================================================================
+
+export const mockVisits: Visit[] = [
+  // Emily Johnson visits
+  {
+    id: "visit_e1",
+    appointmentId: "past_appt_e1",
+    subjective: { raw: "New patient. Chief complaint: Low back pain x 3 months. Worse with prolonged sitting at work. Pain 8/10. Also reports work-related stress affecting sleep." },
+    objective: { raw: "Tongue: pale, thin white coating. Pulse: wiry, thin. Palpation: tenderness L4-L5 paraspinal, bilateral." },
+    assessment: { raw: "Qi and Blood stagnation in lower back. Liver Qi stagnation with underlying Qi deficiency." },
+    plan: { raw: "Treatment principle: Move Qi and Blood, relax sinews. Points: BL23, BL25, BL40, GB34 bilateral. LV3, LI4 bilateral (Four Gates). Recommend weekly treatments x 6 weeks." },
+    signedAt: getPastDate(90, 11, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(90, 10),
+    updatedAt: getPastDate(90, 11, 20),
+  },
+  {
+    id: "visit_e2",
+    appointmentId: "past_appt_e2",
+    subjective: { raw: "Follow-up for LBP. Pain improved to 6/10. Better able to sit at work. Still some stiffness in morning. Stress levels slightly improved." },
+    objective: { raw: "Tongue: pale pink, thin coating. Pulse: less wiry than before. ROM improved ~30%." },
+    assessment: { raw: "Qi and Blood stagnation improving. Continue current approach." },
+    plan: { raw: "Same protocol with e-stim on BL points. Added GV20, Yintang for stress. Recommend biweekly treatments going forward." },
+    signedAt: getPastDate(60, 14, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(60, 14),
+    updatedAt: getPastDate(60, 14, 55),
+  },
+  {
+    id: "visit_e3",
+    appointmentId: "past_appt_e3",
+    subjective: { raw: "LBP 4/10 today. Much better overall. Occasional flare-ups after long drives. Sleep improved, feels less stressed." },
+    objective: { raw: "Tongue: pink, thin white coating. Pulse: moderate, slightly wiry. Palpation: minimal tenderness." },
+    assessment: { raw: "Significant improvement. Liver Qi stagnation resolving." },
+    plan: { raw: "Maintenance treatment. BL23, BL25, GB34, BL40. Four Gates. Added SP6 for overall support." },
+    signedAt: getPastDate(30, 10, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(30, 10),
+    updatedAt: getPastDate(30, 10, 55),
+  },
+  {
+    id: "visit_e4",
+    appointmentId: "past_appt_e4",
+    subjective: { raw: "Doing well. LBP 3/10. Had minor flare last week after helping friend move furniture. Stress manageable." },
+    objective: { raw: "Tongue: pink, thin coating. Pulse: moderate. Palpation: mild tenderness L4-L5." },
+    assessment: { raw: "Stable. Minor flare from overexertion - expected." },
+    plan: { raw: "Standard protocol. BL23, BL25, BL40, GB34 bilateral. Four Gates. Advised on proper lifting mechanics." },
+    signedAt: getPastDate(7, 11, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(7, 11),
+    updatedAt: getPastDate(7, 11, 55),
+  },
+
+  // Robert Martinez visits
+  {
+    id: "visit_r1",
+    appointmentId: "past_appt_r1",
+    subjective: { raw: "New patient. Right knee pain x 2 years. Diagnosed with OA. Worse with stairs, weather changes. Also managing HTN with medication." },
+    objective: { raw: "Tongue: red, dry coating. Pulse: wiry, slightly rapid. Knee: swelling medial compartment, crepitus on flexion." },
+    assessment: { raw: "Bi syndrome - Damp-Heat in channels. Kidney/Liver Yin deficiency underlying." },
+    plan: { raw: "Points: ST35, Xiyan, ST36, SP9, GB34 (right). KD3, SP6 bilateral for Yin. Recommend 8 treatments." },
+    signedAt: getPastDate(120, 10, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(120, 9),
+    updatedAt: getPastDate(120, 10, 20),
+  },
+  {
+    id: "visit_r2",
+    appointmentId: "past_appt_r2",
+    subjective: { raw: "Knee doing better. Less swelling. Can do stairs more easily. BP stable per PCP." },
+    objective: { raw: "Tongue: less red. Pulse: less wiry. Knee: minimal swelling, full ROM." },
+    assessment: { raw: "Damp-Heat clearing. Good response to treatment." },
+    plan: { raw: "Continue knee points with e-stim. Added LV3, LI4 for Qi circulation. Monthly maintenance recommended." },
+    signedAt: getPastDate(45, 15, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(45, 15),
+    updatedAt: getPastDate(45, 15, 55),
+  },
+  {
+    id: "visit_r3",
+    appointmentId: "past_appt_r3",
+    subjective: { raw: "Maintenance visit. Knee stable, occasional stiffness in morning. Overall doing well." },
+    objective: { raw: "Tongue: pale pink. Pulse: moderate. Knee: no swelling, good ROM." },
+    assessment: { raw: "Stable. Bi syndrome well controlled." },
+    plan: { raw: "Maintenance protocol: ST35, Xiyan, ST36, GB34. KD3, SP6. Continue monthly." },
+    signedAt: getPastDate(14, 9, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(14, 9),
+    updatedAt: getPastDate(14, 9, 55),
+  },
+
+  // Jennifer Lee visits
+  {
+    id: "visit_j1",
+    appointmentId: "past_appt_j1",
+    subjective: { raw: "New patient. Migraine headaches x 5 years. 2-3x/month, often around menses. Pain 9/10 during episodes. Works at computer all day - also has neck tension." },
+    objective: { raw: "Tongue: red sides, thin yellow coating. Pulse: wiry, rapid. Neck: bilateral trapezius tension, tender GB21." },
+    assessment: { raw: "Liver Yang rising with underlying Liver Blood deficiency. Neck tension contributing." },
+    plan: { raw: "Points: GB20, GB21, Taiyang, LV3, LI4, SP6. Recommend twice monthly around cycle." },
+    signedAt: getPastDate(75, 12, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(75, 11),
+    updatedAt: getPastDate(75, 12, 20),
+  },
+  {
+    id: "visit_j2",
+    appointmentId: "past_appt_j2",
+    subjective: { raw: "Migraines improved - only 1 this month, intensity 5/10. Neck tension still present but better. Using ergonomic setup now." },
+    objective: { raw: "Tongue: less red on sides. Pulse: less wiry. Neck: improved, less tender." },
+    assessment: { raw: "Good progress. Continue treating root and branch." },
+    plan: { raw: "GB20, GB21, Taiyang, SJ5, LV3, LI4, SP6. Continue twice monthly." },
+    signedAt: getPastDate(21, 14, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(21, 14),
+    updatedAt: getPastDate(21, 14, 55),
+  },
+
+  // David Kim visits
+  {
+    id: "visit_d1",
+    appointmentId: "past_appt_d1",
+    subjective: { raw: "New patient. Insomnia x 1 year. Difficulty falling asleep, early waking (3-4am). Also has tinnitus - high pitched, worse with stress. Very stressed at work." },
+    objective: { raw: "Tongue: red tip, thin yellow coating. Pulse: thin, rapid. Appears fatigued." },
+    assessment: { raw: "Heart and Kidney Yin deficiency. Heart fire disturbing Shen. Tinnitus from Kidney deficiency." },
+    plan: { raw: "Points: HT7, PC6, Anmian, SP6, KD3, KD6. Yintang, GV20. Recommend weekly x 8." },
+    signedAt: getPastDate(100, 11, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(100, 10),
+    updatedAt: getPastDate(100, 11, 20),
+  },
+  {
+    id: "visit_d2",
+    appointmentId: "past_appt_d2",
+    subjective: { raw: "Sleep quality 5/10 (was 3/10). Falling asleep faster. Still some early waking. Tinnitus unchanged. Work stress continues." },
+    objective: { raw: "Tongue: red tip less pronounced. Pulse: less rapid. Appears less fatigued." },
+    assessment: { raw: "Improvement in Shen disturbance. Continue nourishing Yin." },
+    plan: { raw: "Same protocol with e-stim on auricular points. Added SJ17 for tinnitus. Continue weekly." },
+    signedAt: getPastDate(50, 16, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(50, 16),
+    updatedAt: getPastDate(50, 16, 55),
+  },
+  {
+    id: "visit_d3",
+    appointmentId: "past_appt_d3",
+    subjective: { raw: "Sleep much better - 6/10. Sleeping through night most days. Tinnitus slightly improved when not stressed." },
+    objective: { raw: "Tongue: pale pink, thin coating. Pulse: moderate, less rapid. Looks more rested." },
+    assessment: { raw: "Good progress. Heart fire calming, Kidney Yin strengthening." },
+    plan: { raw: "Maintain protocol. HT7, PC6, Anmian, SP6, KD3. Yintang, GV20. Biweekly now." },
+    signedAt: getPastDate(10, 11, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(10, 11),
+    updatedAt: getPastDate(10, 11, 55),
+  },
+
+  // Maria Garcia visits
+  {
+    id: "visit_m1",
+    appointmentId: "past_appt_m1",
+    subjective: { raw: "New patient. Dysmenorrhea since teenage years. Severe cramping days 1-2, pain 8/10. Has to miss work. No children yet, hoping to conceive next year." },
+    objective: { raw: "Tongue: pale purple, thin coating. Pulse: choppy, thin. Abdomen: tender lower quadrants." },
+    assessment: { raw: "Blood stasis in uterus with underlying Blood deficiency. Liver Qi stagnation contributing." },
+    plan: { raw: "Points: SP6, SP8, CV4, CV6, ST29 bilateral. LV3, LI4. Recommend weekly, especially pre-menstrual." },
+    signedAt: getPastDate(150, 10, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(150, 9),
+    updatedAt: getPastDate(150, 10, 20),
+  },
+  {
+    id: "visit_m2",
+    appointmentId: "past_appt_m2",
+    subjective: { raw: "Last period slightly better - pain 7/10. Still needed ibuprofen but less. Cycle regular." },
+    objective: { raw: "Tongue: less purple. Pulse: less choppy. Abdomen: less tender." },
+    assessment: { raw: "Blood stasis reducing. Continue building Blood." },
+    plan: { raw: "Same protocol. Added BL17, BL20 for Blood production. Continue weekly." },
+    signedAt: getPastDate(120, 14, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(120, 14),
+    updatedAt: getPastDate(120, 14, 55),
+  },
+  {
+    id: "visit_m3",
+    appointmentId: "past_appt_m3",
+    subjective: { raw: "Period pain 5/10 this month. Big improvement! Only needed ibuprofen day 1. Energy better overall." },
+    objective: { raw: "Tongue: pale pink. Pulse: moderate, less choppy. Abdomen: minimal tenderness." },
+    assessment: { raw: "Excellent progress. Blood stasis clearing, Blood building." },
+    plan: { raw: "Continue with e-stim on CV4, CV6. SP6, SP8, ST29. Four Gates. Biweekly now." },
+    signedAt: getPastDate(90, 10, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(90, 10),
+    updatedAt: getPastDate(90, 10, 55),
+  },
+  {
+    id: "visit_m4",
+    appointmentId: "past_appt_m4",
+    subjective: { raw: "Doing great! Period pain 4/10. No missed work. Starting to plan for pregnancy next few months." },
+    objective: { raw: "Tongue: pink, thin coating. Pulse: moderate. Abdomen: soft, non-tender." },
+    assessment: { raw: "Significant improvement. Good foundation for fertility." },
+    plan: { raw: "Fertility-supportive protocol: SP6, CV4, CV6, KD3, ST36, LV3. Continue biweekly." },
+    signedAt: getPastDate(60, 15, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(60, 15),
+    updatedAt: getPastDate(60, 15, 55),
+  },
+  {
+    id: "visit_m5",
+    appointmentId: "past_appt_m5",
+    subjective: { raw: "Period pain 3/10. Very manageable. Energy good. Will start trying to conceive in 2 months." },
+    objective: { raw: "Tongue: pink, moist. Pulse: moderate, smooth. Overall excellent presentation." },
+    assessment: { raw: "Excellent state. Ready for pre-conception optimization." },
+    plan: { raw: "Pre-conception protocol: SP6, CV4, KD3, KD6, ST36, BL23. Monthly maintenance." },
+    signedAt: getPastDate(30, 11, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(30, 11),
+    updatedAt: getPastDate(30, 11, 55),
+  },
+
+  // Susan Brown visits
+  {
+    id: "visit_s1",
+    appointmentId: "past_appt_s1",
+    subjective: { raw: "New patient. IBS-C x 3 years. Bloating, constipation (BM every 2-3 days). Also fatigued, especially afternoon slump." },
+    objective: { raw: "Tongue: pale, swollen, teeth marks, thin white coating. Pulse: weak, slippery. Abdomen: distended, tender around ST25." },
+    assessment: { raw: "Spleen Qi deficiency with Dampness. Secondary Liver overacting on Spleen." },
+    plan: { raw: "Points: ST25, ST36, SP6, CV12, CV6. LV3 for Liver/Spleen harmony. Recommend weekly x 6." },
+    signedAt: getPastDate(60, 11, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(60, 10),
+    updatedAt: getPastDate(60, 11, 20),
+  },
+  {
+    id: "visit_s2",
+    appointmentId: "past_appt_s2",
+    subjective: { raw: "Bowels more regular - BM every 1-2 days now. Less bloating. Energy somewhat better, afternoon slump less severe." },
+    objective: { raw: "Tongue: less swollen. Pulse: slightly stronger. Abdomen: less distended." },
+    assessment: { raw: "Spleen Qi strengthening. Dampness reducing." },
+    plan: { raw: "Same protocol with e-stim on ST25, CV12. Added SP3 to strengthen Spleen. Continue biweekly." },
+    signedAt: getPastDate(21, 14, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(21, 14),
+    updatedAt: getPastDate(21, 14, 55),
+  },
+
+  // William Davis visits
+  {
+    id: "visit_w1",
+    appointmentId: "past_appt_w1",
+    subjective: { raw: "New patient. Right sciatica x 2 months. Pain radiating from hip to calf. 5/10 at rest, 7/10 with activity. Retired teacher, loves gardening - had to stop." },
+    objective: { raw: "Tongue: purple hue. Pulse: wiry, choppy. SLR positive at 45° right. Tenderness piriformis, BL points." },
+    assessment: { raw: "Qi and Blood stagnation in Taiyang and Shaoyang channels. Underlying Kidney deficiency (age-related)." },
+    plan: { raw: "Points: BL25, BL36, BL40, BL57, GB30, GB34 (right). KD3 bilateral. Recommend twice weekly x 3 weeks." },
+    signedAt: getPastDate(30, 16, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(30, 15),
+    updatedAt: getPastDate(30, 16, 20),
+  },
+];
+
+// =============================================================================
 // ENRICHED APPOINTMENTS (with joined data for UI)
 // =============================================================================
 
@@ -1355,4 +2097,95 @@ export function getConditionStatusDisplay(status: ConditionStatus) {
   };
 
   return statusMap[status];
+}
+
+/**
+ * Get visit history for a patient (with enriched data)
+ * Returns visits sorted by date (most recent first)
+ */
+export function getPatientVisitHistory(patientId: string): VisitWithAppointment[] {
+  // Get all past appointments for this patient
+  const patientPastAppointments = mockPastAppointments.filter(
+    (appt) => appt.patientId === patientId && appt.status === AppointmentStatus.COMPLETED
+  );
+
+  // Get visits for these appointments
+  const visits: VisitWithAppointment[] = [];
+
+  for (const appt of patientPastAppointments) {
+    const visit = mockVisits.find((v) => v.appointmentId === appt.id);
+    if (visit) {
+      // Extract chief complaint from subjective (first sentence or truncated)
+      const subjective = visit.subjective as { raw?: string } | null;
+      const rawText = subjective?.raw || "";
+
+      // Try to extract chief complaint from patterns like "Chief complaint:" or first sentence
+      let chiefComplaint = "";
+      const ccMatch = rawText.match(/Chief complaint:?\s*([^.]+)/i);
+      if (ccMatch) {
+        chiefComplaint = ccMatch[1].trim();
+      } else {
+        // Get first meaningful phrase (up to first period or 50 chars)
+        const firstSentence = rawText.split(".")[0];
+        chiefComplaint = firstSentence.length > 50
+          ? firstSentence.substring(0, 47) + "..."
+          : firstSentence;
+      }
+
+      visits.push({
+        ...visit,
+        appointment: {
+          ...appt,
+          appointmentType: mockAppointmentTypes.find(
+            (at) => at.id === appt.appointmentTypeId
+          ),
+        },
+        chiefComplaint,
+      });
+    }
+  }
+
+  // Sort by date (most recent first)
+  return visits.sort((a, b) => {
+    const dateA = a.appointment?.scheduledStart ? new Date(a.appointment.scheduledStart).getTime() : 0;
+    const dateB = b.appointment?.scheduledStart ? new Date(b.appointment.scheduledStart).getTime() : 0;
+    return dateB - dateA;
+  });
+}
+
+/**
+ * Get a single visit by ID with enriched data
+ */
+export function getVisitById(visitId: string): VisitWithAppointment | null {
+  const visit = mockVisits.find((v) => v.id === visitId);
+  if (!visit) return null;
+
+  // Find the appointment for this visit
+  const appointment = mockPastAppointments.find((a) => a.id === visit.appointmentId);
+  if (!appointment) return null;
+
+  // Extract chief complaint
+  const subjective = visit.subjective as { raw?: string } | null;
+  const rawText = subjective?.raw || "";
+  let chiefComplaint = "";
+  const ccMatch = rawText.match(/Chief complaint:?\s*([^.]+)/i);
+  if (ccMatch) {
+    chiefComplaint = ccMatch[1].trim();
+  } else {
+    const firstSentence = rawText.split(".")[0];
+    chiefComplaint = firstSentence.length > 50
+      ? firstSentence.substring(0, 47) + "..."
+      : firstSentence;
+  }
+
+  return {
+    ...visit,
+    appointment: {
+      ...appointment,
+      appointmentType: mockAppointmentTypes.find(
+        (at) => at.id === appointment.appointmentTypeId
+      ),
+    },
+    chiefComplaint,
+  };
 }
