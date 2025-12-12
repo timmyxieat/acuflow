@@ -256,7 +256,7 @@ function PatientCard({
       {isSelected && (
         <motion.div
           layoutId="selection-indicator"
-          className={`absolute inset-0 ${compact ? "" : "rounded-sm"}`}
+          className="absolute inset-0"
           style={{
             backgroundColor: isCompleted ? `${statusColor}50` : `${statusColor}30`,
             boxShadow: `inset 3px 0 0 0 ${statusColor}`,

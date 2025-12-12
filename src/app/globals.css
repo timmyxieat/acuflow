@@ -182,6 +182,14 @@ body {
   display: none;  /* Chrome, Safari, Opera */
 }
 
+/* Keyboard navigation mode - suppress hover effects when using arrow keys */
+/* The data attribute is set by TransitionContext when arrow keys are used */
+body[data-keyboard-nav="true"] button:hover,
+body[data-keyboard-nav="true"] [role="button"]:hover {
+  background-color: inherit;
+  border-color: inherit;
+}
+
 /* Bell shake animation for timer alerts */
 /* Shakes for 1.5s, then pauses for 8.5s (total 10s cycle) */
 @keyframes bell-shake {

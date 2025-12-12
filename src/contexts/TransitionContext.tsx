@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 
 interface TransitionOrigin {
   x: number
@@ -18,9 +18,12 @@ interface TransitionContextType {
   transitionSource: TransitionSource
   slideDirection: SlideDirection
   selectedAppointmentId: string | null
+  lastSelectedAppointmentId: string | null
+  isKeyboardNavMode: boolean
   startTransition: (rect: DOMRect, source: TransitionSource) => void
   setSlideDirection: (direction: SlideDirection) => void
   setSelectedAppointmentId: (id: string | null) => void
+  setKeyboardNavMode: (active: boolean) => void
   completeTransition: () => void
 }
 
@@ -31,7 +34,45 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionSource, setTransitionSource] = useState<TransitionSource>('today')
   const [slideDirection, setSlideDirection] = useState<SlideDirection>(null)
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
+  const [selectedAppointmentId, setSelectedAppointmentIdState] = useState<string | null>(null)
+  const [lastSelectedAppointmentId, setLastSelectedAppointmentId] = useState<string | null>(null)
+  const [isKeyboardNavMode, setIsKeyboardNavMode] = useState(false)
+
+  // Global mouse move listener to exit keyboard nav mode
+  useEffect(() => {
+    const handleMouseMove = () => {
+      if (isKeyboardNavMode) {
+        setIsKeyboardNavMode(false)
+      }
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [isKeyboardNavMode])
+
+  // Set data attribute on body for CSS-based hover suppression
+  useEffect(() => {
+    if (isKeyboardNavMode) {
+      document.body.setAttribute('data-keyboard-nav', 'true')
+    } else {
+      document.body.removeAttribute('data-keyboard-nav')
+    }
+  }, [isKeyboardNavMode])
+
+  // Wrap setKeyboardNavMode to be callable from anywhere
+  const setKeyboardNavMode = useCallback((active: boolean) => {
+    setIsKeyboardNavMode(active)
+  }, [])
+
+  // Wrap setSelectedAppointmentId to save "last selected" when deselecting
+  const setSelectedAppointmentId = useCallback((id: string | null) => {
+    setSelectedAppointmentIdState((currentId) => {
+      // When deselecting (setting to null), remember the current selection
+      if (id === null && currentId !== null) {
+        setLastSelectedAppointmentId(currentId)
+      }
+      return id
+    })
+  }, [])
 
   const startTransition = useCallback((rect: DOMRect, source: TransitionSource) => {
     setOrigin({
@@ -58,9 +99,12 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         transitionSource,
         slideDirection,
         selectedAppointmentId,
+        lastSelectedAppointmentId,
+        isKeyboardNavMode,
         startTransition,
         setSlideDirection,
         setSelectedAppointmentId,
+        setKeyboardNavMode,
         completeTransition,
       }}
     >

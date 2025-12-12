@@ -1,11 +1,12 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
+import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { formatTime } from '@/lib/dev-time'
 import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import {
@@ -125,6 +126,8 @@ interface VisitTimelineProps {
   patientId: string
   selectedVisitId: string | null
   onSelectVisit: (visitId: string | null) => void
+  hoveredVisitId?: string | null
+  onHoverVisit?: (visitId: string | null) => void
 }
 
 function formatVisitDate(date: Date): string {
@@ -143,11 +146,15 @@ function formatVisitDate(date: Date): string {
 function VisitCard({
   visit,
   isSelected,
+  isHovered,
   onClick,
+  onHover,
 }: {
   visit: VisitWithAppointment
   isSelected: boolean
+  isHovered?: boolean
   onClick: () => void
+  onHover?: (isHovered: boolean) => void
 }) {
   const appointmentType = visit.appointment?.appointmentType
   const isSigned = visit.appointment?.isSigned ?? true
@@ -163,11 +170,15 @@ function VisitCard({
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
       className={`
         w-full text-left rounded-lg border p-3 transition-all
         ${isSelected
           ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-          : 'border-border bg-card hover:bg-muted/50 hover:border-muted-foreground/20'
+          : isHovered
+            ? 'border-muted-foreground/20 bg-muted/50'
+            : 'border-border bg-card'
         }
       `}
     >
@@ -207,7 +218,7 @@ function VisitCard({
   )
 }
 
-function VisitTimeline({ patientId, selectedVisitId, onSelectVisit }: VisitTimelineProps) {
+function VisitTimeline({ patientId, selectedVisitId, onSelectVisit, hoveredVisitId, onHoverVisit }: VisitTimelineProps) {
   const visitHistory = getPatientVisitHistory(patientId)
 
   // Empty state for new patients
@@ -240,7 +251,9 @@ function VisitTimeline({ patientId, selectedVisitId, onSelectVisit }: VisitTimel
             key={visit.id}
             visit={visit}
             isSelected={selectedVisitId === visit.id}
+            isHovered={hoveredVisitId === visit.id}
             onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id)}
+            onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
           />
         ))}
       </div>
@@ -393,12 +406,19 @@ export default function AppointmentDetailPage() {
     slideDirection,
     startTransition,
     setSlideDirection,
+    setSelectedAppointmentId,
+    isKeyboardNavMode,
+    setKeyboardNavMode,
     completeTransition,
   } = useTransition()
   const appointmentId = params.id as string
 
   // State for selected visit in timeline (for preview)
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+
+  // Hover state with keyboard nav awareness
+  const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
+  const [, setHoveredVisitId, effectiveHoveredVisitId] = useHoverWithKeyboardNav<string>()
 
   // Find the appointment from mock data
   const appointments = getEnrichedAppointments()
@@ -415,6 +435,12 @@ export default function AppointmentDetailPage() {
       ...grouped.completed,
     ].map(a => a.id)
   }, [])
+
+  // Get ordered visit IDs for the current patient (for arrow key navigation in visit history)
+  const orderedVisitIds = useMemo(() => {
+    if (!appointment?.patient?.id) return []
+    return getPatientVisitHistory(appointment.patient.id).map(v => v.id)
+  }, [appointment?.patient?.id])
 
   // Set the global header when this page mounts
   useEffect(() => {
@@ -442,6 +468,75 @@ export default function AppointmentDetailPage() {
     }
   }, [isTransitioning, completeTransition])
 
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Check if user is typing in an input/textarea
+    const activeElement = document.activeElement
+    const isTyping = activeElement instanceof HTMLInputElement ||
+      activeElement instanceof HTMLTextAreaElement ||
+      activeElement?.getAttribute('contenteditable') === 'true'
+
+    // ESC: if visit is selected, deselect it; otherwise go back to Today
+    if (event.key === 'Escape') {
+      if (selectedVisitId) {
+        setSelectedVisitId(null)
+      } else {
+        router.push('/')
+      }
+      return
+    }
+
+    // Arrow keys (only when not typing)
+    if (!isTyping && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault()
+
+      // Enter keyboard nav mode (disables hover highlighting)
+      setKeyboardNavMode(true)
+
+      // If a visit is selected, navigate between visits
+      if (selectedVisitId && orderedVisitIds.length > 0) {
+        const currentIndex = orderedVisitIds.indexOf(selectedVisitId)
+        if (currentIndex === -1) return
+
+        let newIndex: number
+        if (event.key === 'ArrowDown') {
+          newIndex = Math.min(currentIndex + 1, orderedVisitIds.length - 1)
+        } else {
+          newIndex = Math.max(currentIndex - 1, 0)
+        }
+
+        if (newIndex !== currentIndex) {
+          setSelectedVisitId(orderedVisitIds[newIndex])
+        }
+        return
+      }
+
+      // Otherwise, navigate between appointments (patient cards)
+      const currentIndex = orderedAppointmentIds.indexOf(appointmentId)
+      if (currentIndex === -1) return
+
+      let newIndex: number
+      if (event.key === 'ArrowDown') {
+        newIndex = Math.min(currentIndex + 1, orderedAppointmentIds.length - 1)
+      } else {
+        newIndex = Math.max(currentIndex - 1, 0)
+      }
+
+      // Only navigate if actually changing
+      if (newIndex !== currentIndex) {
+        const newAppointmentId = orderedAppointmentIds[newIndex]
+        setSlideDirection(newIndex > currentIndex ? 'down' : 'up')
+        startTransition(document.body.getBoundingClientRect(), 'appointment')
+        router.push(`/appointments/${newAppointmentId}`)
+      }
+    }
+  }, [router, appointmentId, orderedAppointmentIds, orderedVisitIds, selectedVisitId, setSlideDirection, startTransition, setKeyboardNavMode])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
   // Handle visit selection from timeline
   const handleSelectVisit = (visitId: string | null) => {
     setSelectedVisitId(visitId)
@@ -466,9 +561,13 @@ export default function AppointmentDetailPage() {
     )
   }
 
-  // Handle appointment click from PatientCards - navigate to that appointment
+  // Handle appointment click from PatientCards - navigate to that appointment or back to Today
   const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations, rect?: DOMRect) => {
-    if (clickedAppointment.id !== appointmentId) {
+    if (clickedAppointment.id === appointmentId) {
+      // Clicking the already-selected card: deselect and go back to Today
+      setSelectedAppointmentId(null)
+      router.push('/')
+    } else {
       // Calculate slide direction based on position in list
       const currIndex = orderedAppointmentIds.indexOf(appointmentId)
       const newIndex = orderedAppointmentIds.indexOf(clickedAppointment.id)
@@ -500,6 +599,8 @@ export default function AppointmentDetailPage() {
         <div className="h-full">
           <PatientCards
             onAppointmentClick={handleAppointmentClick}
+            onAppointmentHover={setHoveredAppointmentId}
+            hoveredAppointmentId={effectiveHoveredAppointmentId}
             selectedAppointmentId={appointmentId}
             compact
           />
@@ -544,6 +645,8 @@ export default function AppointmentDetailPage() {
                     patientId={appointment.patient.id}
                     selectedVisitId={selectedVisitId}
                     onSelectVisit={handleSelectVisit}
+                    hoveredVisitId={effectiveHoveredVisitId}
+                    onHoverVisit={setHoveredVisitId}
                   />
                 )}
               </ScrollableArea>
