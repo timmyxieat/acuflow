@@ -313,8 +313,11 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
           : (isCompleted ? `${indicatorStatusColor}33` : `${indicatorStatusColor}18`)
         return (
           <button
-            onClick={scrollToIndicator}
-            className="absolute top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
+            onClick={(e) => {
+              e.stopPropagation()
+              scrollToIndicator()
+            }}
+            className="absolute top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2 whitespace-nowrap"
             style={{
               left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
@@ -341,8 +344,11 @@ export function Timeline({ onAppointmentClick, onAppointmentHover, selectedAppoi
           : (isCompleted ? `${indicatorStatusColor}33` : `${indicatorStatusColor}18`)
         return (
           <button
-            onClick={scrollToIndicator}
-            className="absolute bottom-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2"
+            onClick={(e) => {
+              e.stopPropagation()
+              scrollToIndicator()
+            }}
+            className="absolute bottom-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2 whitespace-nowrap"
             style={{
               left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
