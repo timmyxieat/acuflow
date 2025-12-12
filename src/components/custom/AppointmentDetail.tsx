@@ -1,16 +1,10 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards } from '@/components/custom'
-import { useHeader } from '@/contexts/HeaderContext'
-import { useTransition } from '@/contexts/TransitionContext'
+import { useState } from 'react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
+import { ScrollableArea } from './ScrollableArea'
 import { formatTime } from '@/lib/dev-time'
-import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import {
-  getEnrichedAppointments,
-  getAppointmentsByStatus,
   getPatientDisplayName,
   calculateAge,
   getStatusDisplay,
@@ -18,9 +12,8 @@ import {
   type AppointmentWithRelations,
   type VisitWithAppointment,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
 
-// Map appointment type IDs to icons (same as Timeline.tsx)
+// Map appointment type IDs to icons
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'appt_type_001': ClipboardCheck, // Initial Consultation
   'appt_type_002': RefreshCw, // Follow-up Treatment
@@ -36,7 +29,6 @@ function getContextualTimeStatus(appointment: AppointmentWithRelations): string 
   const start = new Date(appointment.scheduledStart)
   const end = new Date(appointment.scheduledEnd)
 
-  // Before appointment starts
   if (now < start) {
     const diffMs = start.getTime() - now.getTime()
     const diffMin = Math.round(diffMs / 60000)
@@ -47,7 +39,6 @@ function getContextualTimeStatus(appointment: AppointmentWithRelations): string 
     return `in ${diffHours}h`
   }
 
-  // During appointment (between start and end)
   if (now >= start && now < end) {
     const diffMs = end.getTime() - now.getTime()
     const diffMin = Math.round(diffMs / 60000)
@@ -62,7 +53,6 @@ function getContextualTimeStatus(appointment: AppointmentWithRelations): string 
     return `${diffHours}h ${remainingMin}m remaining`
   }
 
-  // After appointment end
   const diffMs = now.getTime() - end.getTime()
   const diffMin = Math.round(diffMs / 60000)
   if (diffMin < 60) {
@@ -73,8 +63,7 @@ function getContextualTimeStatus(appointment: AppointmentWithRelations): string 
 }
 
 // =============================================================================
-// Patient Header (Left Panel)
-// Height matches AppointmentHeader (72px) for visual alignment
+// Patient Header
 // =============================================================================
 
 interface PatientHeaderProps {
@@ -103,7 +92,6 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
   return (
     <div className="flex h-[72px] items-center gap-3 px-4 border-b border-border">
-      {/* Avatar */}
       <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
         {initials}
       </div>
@@ -118,7 +106,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 }
 
 // =============================================================================
-// Visit Timeline (Left Panel)
+// Visit Timeline
 // =============================================================================
 
 interface VisitTimelineProps {
@@ -130,8 +118,6 @@ interface VisitTimelineProps {
 function formatVisitDate(date: Date): string {
   const now = new Date()
   const visitDate = new Date(date)
-
-  // Check if same year
   const isSameYear = now.getFullYear() === visitDate.getFullYear()
 
   if (isSameYear) {
@@ -155,7 +141,6 @@ function VisitCard({
     ? new Date(visit.appointment.scheduledStart)
     : new Date(visit.createdAt)
 
-  // Get the icon component for this appointment type (same pattern as Timeline)
   const IconComponent = appointmentType?.id
     ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
     : Calendar
@@ -173,20 +158,16 @@ function VisitCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
-          {/* Appointment type icon - simple style like Timeline */}
           <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            {/* Date */}
             <span className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
               {formatVisitDate(visitDate)}
             </span>
-            {/* Chief complaint */}
             <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
               {visit.chiefComplaint || 'No chief complaint recorded'}
             </p>
           </div>
         </div>
-        {/* Signed indicator */}
         {isSigned && (
           <div className="flex-shrink-0 mt-0.5">
             <div className="h-4 w-4 rounded-full bg-green-100 flex items-center justify-center">
@@ -195,7 +176,6 @@ function VisitCard({
           </div>
         )}
       </div>
-      {/* Currently viewing label */}
       {isSelected && (
         <div className="mt-2 pt-2 border-t border-primary/20">
           <span className="text-[10px] font-medium text-primary uppercase tracking-wider">
@@ -210,7 +190,6 @@ function VisitCard({
 function VisitTimeline({ patientId, selectedVisitId, onSelectVisit }: VisitTimelineProps) {
   const visitHistory = getPatientVisitHistory(patientId)
 
-  // Empty state for new patients
   if (visitHistory.length === 0) {
     return (
       <div className="flex flex-col gap-3 px-4">
@@ -249,9 +228,7 @@ function VisitTimeline({ patientId, selectedVisitId, onSelectVisit }: VisitTimel
 }
 
 // =============================================================================
-// Appointment Header (Right Panel)
-// Row 1: Date · relation to today | status badge | action button
-// Row 2: Time range (smaller)
+// Appointment Header
 // =============================================================================
 
 interface AppointmentHeaderProps {
@@ -274,7 +251,6 @@ function getRelativeDay(date: Date): string {
   if (isSameDay(date, tomorrow)) return 'Tomorrow'
   if (isSameDay(date, yesterday)) return 'Yesterday'
 
-  // Calculate days difference
   const diffTime = date.getTime() - today.getTime()
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
 
@@ -287,7 +263,6 @@ function getRelativeDay(date: Date): string {
 function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
 
-  // Determine action button
   const getActionButton = () => {
     if (appointment.status === 'SCHEDULED') {
       return { label: 'Start Appointment' }
@@ -309,7 +284,6 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
 
   return (
     <div className="flex h-[72px] items-center justify-between border-b border-border px-6">
-      {/* Left: Date + time in a column */}
       <div className="flex flex-col">
         <div className="flex items-baseline gap-2">
           <span className="text-base font-semibold">{dateStr}</span>
@@ -317,8 +291,6 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
         </div>
         <div className="text-sm text-muted-foreground">{timeRange}</div>
       </div>
-
-      {/* Right: Status badge + action button */}
       <div className="flex items-center gap-3">
         <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusDisplay.bgColor} ${statusDisplay.textColor}`}>
           {statusDisplay.label}
@@ -334,7 +306,7 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
 }
 
 // =============================================================================
-// SOAP Sections (Right Panel) - Placeholder
+// SOAP Sections (Placeholder)
 // =============================================================================
 
 function SOAPSections() {
@@ -360,7 +332,7 @@ function SOAPSections() {
 }
 
 // =============================================================================
-// Patient Intake Section (Right Panel) - Placeholder
+// Patient Intake Section (Placeholder)
 // =============================================================================
 
 function PatientIntakeSection() {
@@ -380,193 +352,41 @@ function PatientIntakeSection() {
 }
 
 // =============================================================================
-// Main Page Component
+// Main AppointmentDetail Component
 // =============================================================================
 
-export default function AppointmentDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const { setHeader, resetHeader } = useHeader()
-  const {
-    isTransitioning,
-    transitionSource,
-    slideDirection,
-    startTransition,
-    setSlideDirection,
-    completeTransition,
-  } = useTransition()
-  const appointmentId = params.id as string
+interface AppointmentDetailProps {
+  appointment: AppointmentWithRelations
+}
 
-  // State for selected visit in timeline (for preview)
+export function AppointmentDetail({ appointment }: AppointmentDetailProps) {
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
 
-  // Find the appointment from mock data
-  const appointments = getEnrichedAppointments()
-  const appointment = appointments.find((a) => a.id === appointmentId)
-
-  // Get flat ordered list of all appointments (same order as PatientCards)
-  const orderedAppointmentIds = useMemo(() => {
-    const grouped = getAppointmentsByStatus()
-    return [
-      ...grouped.inProgress,
-      ...grouped.checkedIn,
-      ...grouped.scheduled,
-      ...grouped.unsigned,
-      ...grouped.completed,
-    ].map(a => a.id)
-  }, [])
-
-  // Set the global header when this page mounts
-  useEffect(() => {
-    if (appointment) {
-      setHeader({
-        showBackButton: true,
-      })
-    }
-
-    // Reset header when leaving the page
-    return () => {
-      resetHeader()
-    }
-  // Only re-run when appointment ID changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointmentId])
-
-  // Complete transition after animation
-  useEffect(() => {
-    if (isTransitioning) {
-      const timer = setTimeout(() => {
-        completeTransition()
-      }, 400) // Match animation duration
-      return () => clearTimeout(timer)
-    }
-  }, [isTransitioning, completeTransition])
-
-  // Handle visit selection from timeline
-  const handleSelectVisit = (visitId: string | null) => {
-    setSelectedVisitId(visitId)
-  }
-
-  if (!appointment) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-lg font-semibold">Appointment not found</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            The appointment you're looking for doesn't exist.
-          </p>
-          <button
-            onClick={() => router.back()}
-            className="mt-4 text-sm text-primary hover:underline"
-          >
-            Go back
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Handle appointment click from PatientCards - navigate to that appointment
-  const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations, rect?: DOMRect) => {
-    if (clickedAppointment.id !== appointmentId) {
-      // Calculate slide direction based on position in list
-      const currIndex = orderedAppointmentIds.indexOf(appointmentId)
-      const newIndex = orderedAppointmentIds.indexOf(clickedAppointment.id)
-
-      if (currIndex !== -1 && newIndex !== -1) {
-        // If clicking appointment below current, slide down; if above, slide up
-        setSlideDirection(newIndex > currIndex ? 'down' : 'up')
-      }
-
-      if (rect) {
-        startTransition(rect, 'appointment')
-      }
-      router.push(`/appointments/${clickedAppointment.id}`)
-    }
-  }
-
-  // Only animate sidebar width when coming from Today screen
-  const shouldAnimateSidebar = transitionSource === 'today'
-
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - compact mode, only animate width when coming from Today */}
-      <motion.div
-        className="flex flex-col flex-shrink-0"
-        initial={shouldAnimateSidebar ? { width: SIDEBAR_ANIMATION.expandedWidth } : false}
-        animate={{ width: SIDEBAR_ANIMATION.collapsedWidth }}
-        transition={SIDEBAR_ANIMATION.transition}
-      >
-        <div className="h-full">
-          <PatientCards
-            onAppointmentClick={handleAppointmentClick}
-            selectedAppointmentId={appointmentId}
-            compact
-          />
-        </div>
-      </motion.div>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Left Panel - Patient Info & Visit Timeline */}
+      <div className="flex w-[300px] flex-col border-r border-border bg-card">
+        <PatientHeader appointment={appointment} />
+        <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointment.id]}>
+          {appointment.patient && (
+            <VisitTimeline
+              patientId={appointment.patient.id}
+              selectedVisitId={selectedVisitId}
+              onSelectVisit={setSelectedVisitId}
+            />
+          )}
+        </ScrollableArea>
+      </div>
 
-      {/* Vertical divider */}
-      <div className="w-px bg-border" />
-
-      {/* Main content - slides in from right from Today, vertical slide between appointments */}
-      <div className="flex flex-1 overflow-hidden">
-        <AnimatePresence mode="wait" initial={true}>
-          <motion.div
-            key={appointmentId}
-            className="flex flex-1"
-            initial={{
-              // From Today: slide from right, between appointments: vertical slide
-              x: transitionSource === 'today' ? 100 : 0,
-              y: transitionSource === 'appointment'
-                ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                : 0,
-              opacity: 0,
-            }}
-            animate={{ x: 0, y: 0, opacity: 1 }}
-            exit={{
-              y: transitionSource === 'appointment'
-                ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                : 0,
-              opacity: 0,
-            }}
-            transition={SIDEBAR_ANIMATION.transition}
-          >
-            {/* Middle Panel - Patient Info & Visit Timeline */}
-            <div className="flex w-[300px] flex-col border-r border-border bg-card">
-              {/* Patient Header */}
-              <PatientHeader appointment={appointment} />
-
-              {/* Visit Timeline - Scrollable */}
-              <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointmentId]}>
-                {appointment.patient && (
-                  <VisitTimeline
-                    patientId={appointment.patient.id}
-                    selectedVisitId={selectedVisitId}
-                    onSelectVisit={handleSelectVisit}
-                  />
-                )}
-              </ScrollableArea>
-            </div>
-
-            {/* Right Panel - Appointment Details & SOAP */}
-            <div className="flex flex-1 flex-col overflow-hidden bg-background">
-              {/* Appointment Header */}
-              <AppointmentHeader appointment={appointment} />
-
-              {/* Scrollable Content */}
-              <ScrollableArea className="flex-1 py-6 pl-6 pr-4" deps={[appointmentId]}>
-                <div className="flex flex-col gap-8">
-                  {/* Patient Intake (Collapsible) */}
-                  <PatientIntakeSection />
-
-                  {/* SOAP Sections */}
-                  <SOAPSections />
-                </div>
-              </ScrollableArea>
-            </div>
-          </motion.div>
-        </AnimatePresence>
+      {/* Right Panel - Appointment Details & SOAP */}
+      <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        <AppointmentHeader appointment={appointment} />
+        <ScrollableArea className="flex-1 py-6 pl-6 pr-4" deps={[appointment.id]}>
+          <div className="flex flex-col gap-8">
+            <PatientIntakeSection />
+            <SOAPSections />
+          </div>
+        </ScrollableArea>
       </div>
     </div>
   )

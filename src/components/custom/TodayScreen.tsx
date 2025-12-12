@@ -2,25 +2,24 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { useTransition } from '@/contexts/TransitionContext'
+import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import type { AppointmentWithRelations } from '@/data/mock-data'
-
-// Width constants
-const EXPANDED_WIDTH = 200 // pixels for animation
-const COLLAPSED_WIDTH = 72
 
 export function TodayScreen() {
   const router = useRouter()
-  const { startTransition } = useTransition()
+  const { startTransition, selectedAppointmentId, setSelectedAppointmentId } = useTransition()
   const [hoveredAppointmentId, setHoveredAppointmentId] = useState<string | null>(null)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Single click navigates directly to appointment with transition
   const handleAppointmentClick = (appointment: AppointmentWithRelations, rect?: DOMRect) => {
+    // Store selection in context so it persists when navigating back
+    setSelectedAppointmentId(appointment.id)
     if (rect) {
       startTransition(rect, 'today')
     }
@@ -37,18 +36,23 @@ export function TodayScreen() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - animated width (expands from compact when returning) */}
+      {/* Patient Cards - animated width */}
       <motion.div
         className="flex flex-col relative flex-shrink-0"
-        initial={{ width: 64 }}
-        animate={{ width: isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
-        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        initial={{ width: SIDEBAR_ANIMATION.expandedWidth }}
+        animate={{
+          width: isCollapsed
+            ? SIDEBAR_ANIMATION.collapsedWidth
+            : SIDEBAR_ANIMATION.expandedWidth
+        }}
+        transition={SIDEBAR_ANIMATION.transition}
       >
         <div className="h-full overflow-hidden">
           <PatientCards
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={handleAppointmentHover}
             hoveredAppointmentId={hoveredAppointmentId}
+            selectedAppointmentId={selectedAppointmentId ?? undefined}
             compact={isCollapsed}
           />
         </div>
@@ -70,23 +74,25 @@ export function TodayScreen() {
       {/* Vertical divider */}
       <div className="w-px bg-border" />
 
-      {/* Timeline - slides in from the left when returning */}
-      <motion.div
-        className="flex-1"
-        initial={{ x: -100, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{
-          duration: 0.3,
-          ease: [0.4, 0, 0.2, 1],
-          delay: 0.05,
-        }}
-      >
-        <Timeline
-          onAppointmentClick={handleAppointmentClick}
-          onAppointmentHover={handleAppointmentHover}
-          hoveredAppointmentId={hoveredAppointmentId}
-        />
-      </motion.div>
+      {/* Timeline - slides in/out when expanding/collapsing */}
+      <AnimatePresence mode="wait">
+        {!isCollapsed && (
+          <motion.div
+            key="timeline"
+            className="flex-1"
+            initial={CONTENT_SLIDE_ANIMATION.horizontal.initial}
+            animate={CONTENT_SLIDE_ANIMATION.horizontal.animate}
+            exit={CONTENT_SLIDE_ANIMATION.horizontal.exit}
+            transition={CONTENT_SLIDE_ANIMATION.transition}
+          >
+            <Timeline
+              onAppointmentClick={handleAppointmentClick}
+              onAppointmentHover={handleAppointmentHover}
+              hoveredAppointmentId={hoveredAppointmentId}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

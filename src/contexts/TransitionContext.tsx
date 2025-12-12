@@ -17,8 +17,10 @@ interface TransitionContextType {
   isTransitioning: boolean
   transitionSource: TransitionSource
   slideDirection: SlideDirection
+  selectedAppointmentId: string | null
   startTransition: (rect: DOMRect, source: TransitionSource) => void
   setSlideDirection: (direction: SlideDirection) => void
+  setSelectedAppointmentId: (id: string | null) => void
   completeTransition: () => void
 }
 
@@ -29,6 +31,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [transitionSource, setTransitionSource] = useState<TransitionSource>('today')
   const [slideDirection, setSlideDirection] = useState<SlideDirection>(null)
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
 
   const startTransition = useCallback((rect: DOMRect, source: TransitionSource) => {
     setOrigin({
@@ -54,8 +57,10 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         isTransitioning,
         transitionSource,
         slideDirection,
+        selectedAppointmentId,
         startTransition,
         setSlideDirection,
+        setSelectedAppointmentId,
         completeTransition,
       }}
     >

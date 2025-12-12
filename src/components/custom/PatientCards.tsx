@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
+import { SPRING_TRANSITION, FADE_SLIDE_TRANSITION } from "@/lib/animations";
 import { Timer, Bell } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
@@ -76,29 +77,28 @@ function StatusSection({
   );
 
   return (
-    <motion.div className="flex flex-col gap-2" layout>
+    <div className="flex flex-col gap-2">
       {/* Section header - compact shows dot + count, full shows dot + title + count */}
-      <motion.div
-        layout
+      <div
         className={`flex items-center gap-1.5 text-sm font-medium text-foreground ${
-          compact ? "justify-center px-1" : "pl-2"
+          compact ? "pl-2" : "pl-2"
         }`}
       >
         <motion.div
           layoutId={`status-dot-${variant}`}
           className="h-2.5 w-2.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: statusColor }}
-          transition={{ type: "spring", stiffness: 500, damping: 35 }}
+          transition={SPRING_TRANSITION}
         />
         <AnimatePresence mode="popLayout">
           {!compact && (
             <motion.span
               key="title"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden whitespace-nowrap"
+              initial={FADE_SLIDE_TRANSITION.initial}
+              animate={FADE_SLIDE_TRANSITION.animate}
+              exit={FADE_SLIDE_TRANSITION.exit}
+              transition={FADE_SLIDE_TRANSITION.transition}
+              className="whitespace-nowrap"
             >
               {title}
             </motion.span>
@@ -107,16 +107,14 @@ function StatusSection({
         <motion.span
           layoutId={`status-count-${variant}`}
           className={compact ? "text-muted-foreground font-normal" : ""}
-          transition={{ type: "spring", stiffness: 500, damping: 35 }}
+          transition={SPRING_TRANSITION}
         >
           ({appointments.length})
         </motion.span>
-      </motion.div>
+      </div>
 
       {/* Cards */}
-      <div
-        className={`flex flex-col gap-2 ${compact ? "items-center" : ""}`}
-      >
+      <div className="flex flex-col gap-2">
         {appointments.map((appointment) => (
           <PatientCard
             key={appointment.id}
@@ -132,7 +130,7 @@ function StatusSection({
           />
         ))}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -236,109 +234,105 @@ function PatientCard({
   const CARD_HEIGHT = "h-[62px]";
 
   const appointmentId = appointment.id;
-  const springTransition = { type: "spring" as const, stiffness: 500, damping: 35 };
 
   // Unified layout - elements animate between compact and full positions
   return (
     <motion.button
-      layout
+      layout="position"
+      data-appointment-id={appointmentId}
       onClick={(e) => onClick?.(e.currentTarget.getBoundingClientRect())}
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
       className={`relative px-2 ${
         compact
-          ? `pt-2 pb-1 flex flex-col items-center justify-center gap-1 ${CARD_HEIGHT}`
+          ? `flex flex-col items-start justify-center gap-1 ${CARD_HEIGHT}`
           : `w-full text-left flex items-center ${CARD_HEIGHT}`
       }`}
       style={getHoverStyles()}
-      transition={springTransition}
+      transition={SPRING_TRANSITION}
     >
-      {/* Selection indicator */}
+      {/* Selection indicator - shared layoutId so it animates between cards */}
       {isSelected && (
         <motion.div
-          layoutId={`selection-indicator-${appointmentId}`}
+          layoutId="selection-indicator"
           className={`absolute inset-0 ${compact ? "" : "rounded-sm"}`}
           style={{
             backgroundColor: isCompleted ? `${statusColor}50` : `${statusColor}30`,
             boxShadow: `inset 3px 0 0 0 ${statusColor}`,
           }}
-          transition={springTransition}
+          transition={SPRING_TRANSITION}
         />
       )}
 
       {/* Content wrapper - changes layout direction */}
-      <motion.div
-        layout
+      <div
         className={`relative z-10 flex ${
-          compact ? "flex-col items-center gap-1" : "items-center gap-2"
+          compact ? "flex-col items-start gap-1" : "items-start gap-2"
         }`}
-        transition={springTransition}
       >
         {/* Avatar - shared across modes */}
         <motion.div
           layoutId={`avatar-${appointmentId}`}
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
-          transition={springTransition}
+          transition={SPRING_TRANSITION}
         >
           {initials}
         </motion.div>
 
-        {/* Name and Time container - only in full mode */}
-        <AnimatePresence mode="popLayout">
-          {!compact && (
-            <motion.div
-              key="name-time-container"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.2 }}
-              className="min-w-0 flex-1 overflow-hidden"
-            >
-              {/* Patient name */}
-              <div className="truncate text-sm font-medium">{displayName}</div>
-              {/* Time display - below name */}
-              <div
-                className="flex items-center gap-1 text-[11px] text-muted-foreground"
-                suppressHydrationWarning
+        {/* Expanded mode: Name + Time stacked vertically */}
+        {!compact && (
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
+            {/* Name - fades + slides from right */}
+            <AnimatePresence mode="popLayout">
+              <motion.div
+                key="name"
+                initial={FADE_SLIDE_TRANSITION.initial}
+                animate={FADE_SLIDE_TRANSITION.animate}
+                exit={FADE_SLIDE_TRANSITION.exit}
+                transition={FADE_SLIDE_TRANSITION.transition}
               >
-                {timeDisplay.icon && (
-                  <timeDisplay.icon
-                    className={`h-3 w-3 ${
-                      timeDisplay.shake ? "animate-bell-shake" : ""
-                    }`}
-                  />
-                )}
-                <span>{timeDisplay.text}</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Time - only in compact mode (separate element for layout animation) */}
-        <AnimatePresence mode="popLayout">
-          {compact && (
+                <div className="truncate text-sm font-medium">{displayName}</div>
+              </motion.div>
+            </AnimatePresence>
+            {/* Time - below name */}
             <motion.div
-              key="compact-time"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="flex w-8 items-center justify-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap"
+              layoutId={`time-${appointmentId}`}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground"
+              transition={SPRING_TRANSITION}
               suppressHydrationWarning
             >
               {timeDisplay.icon && (
                 <timeDisplay.icon
-                  className={`h-2.5 w-2.5 flex-shrink-0 ${
+                  className={`h-3 w-3 flex-shrink-0 ${
                     timeDisplay.shake ? "animate-bell-shake" : ""
                   }`}
                 />
               )}
               <span>{timeDisplay.text}</span>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+          </div>
+        )}
+
+        {/* Compact mode: Time below avatar */}
+        {compact && (
+          <motion.div
+            layoutId={`time-${appointmentId}`}
+            className="flex items-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap"
+            transition={SPRING_TRANSITION}
+            suppressHydrationWarning
+          >
+            {timeDisplay.icon && (
+              <timeDisplay.icon
+                className={`h-2.5 w-2.5 flex-shrink-0 ${
+                  timeDisplay.shake ? "animate-bell-shake" : ""
+                }`}
+              />
+            )}
+            <span>{timeDisplay.text}</span>
+          </motion.div>
+        )}
+      </div>
     </motion.button>
   );
 }
@@ -352,6 +346,7 @@ export function PatientCards({
   compact,
 }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), []);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Force re-render every second to update timers
   const [, setTick] = useState(0);
@@ -360,9 +355,43 @@ export function PatientCards({
     return () => clearInterval(interval);
   }, []);
 
+  // Scroll to selected appointment card when selection changes (only if not visible)
+  useEffect(() => {
+    if (selectedAppointmentId && containerRef.current) {
+      const timeoutId = setTimeout(() => {
+        const cardElement = containerRef.current?.querySelector(
+          `[data-appointment-id="${selectedAppointmentId}"]`
+        ) as HTMLElement | null;
+
+        if (cardElement) {
+          const scrollableParent = cardElement.closest('.scrollbar-none, .scrollbar-auto') as HTMLElement | null;
+          if (!scrollableParent) return;
+
+          const cardRect = cardElement.getBoundingClientRect();
+          const parentRect = scrollableParent.getBoundingClientRect();
+
+          // Check if card is fully visible within the scrollable area
+          const isFullyVisible =
+            cardRect.top >= parentRect.top &&
+            cardRect.bottom <= parentRect.bottom;
+
+          // Only scroll if not fully visible
+          if (!isFullyVisible) {
+            // Use "nearest" to minimize movement - just enough to make it visible
+            cardElement.scrollIntoView({
+              behavior: "smooth",
+              block: "nearest",
+            });
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [selectedAppointmentId]);
+
   return (
     <LayoutGroup>
-      <div className="flex h-full flex-col overflow-hidden bg-sidebar">
+      <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         <ScrollableArea
           className="flex flex-col gap-3 py-3"
           deps={[groupedAppointments]}
