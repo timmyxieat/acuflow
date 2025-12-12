@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { X, Phone, Mail, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getStatusColor } from '@/lib/constants'
@@ -81,6 +82,7 @@ interface AppointmentPreviewProps {
 }
 
 export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewProps) {
+  const router = useRouter()
   const patient = appointment.patient
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
 
@@ -191,7 +193,10 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
 
       {/* Footer Actions */}
       <div className="border-t border-border p-4">
-        <button className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+        <button
+          onClick={() => router.push(`/appointments/${appointment.id}`)}
+          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
           Open Full Record
         </button>
       </div>

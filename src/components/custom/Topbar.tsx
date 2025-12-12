@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Search, X, User, Calendar } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Search, X, User, Calendar, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatTime } from '@/lib/dev-time'
+import { useHeader } from '@/contexts/HeaderContext'
 import {
   searchPatients,
   getAppointmentsForDate,
@@ -22,6 +24,8 @@ interface SearchResult {
 }
 
 export function Topbar() {
+  const router = useRouter()
+  const { header } = useHeader()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('patient')
   const [query, setQuery] = useState('')
@@ -83,16 +87,38 @@ export function Topbar() {
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
-      {/* Page title area - will be dynamic later */}
+      {/* Page title area - contextual based on route */}
       <div className="flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Today</h1>
-        <span className="text-sm text-muted-foreground">
-          {new Date().toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </span>
+        {header.showBackButton ? (
+          <>
+            <button
+              onClick={() => router.back()}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">{header.patientName}</h1>
+              {header.appointmentTime && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-sm text-muted-foreground">{header.appointmentTime}</span>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-semibold">{header.title || 'Today'}</h1>
+            <span className="text-sm text-muted-foreground">
+              {header.subtitle || new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </span>
+          </>
+        )}
       </div>
 
       {/* Search area */}
