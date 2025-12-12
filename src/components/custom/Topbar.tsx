@@ -86,17 +86,17 @@ export function Topbar() {
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-sidebar px-6">
       {/* Page title area - contextual based on route */}
       <div className="flex items-center gap-4">
         {header.showBackButton ? (
           <>
             <button
-              onClick={() => router.back()}
+              onClick={() => router.push('/')}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Back{previousTitle ? ` to ${previousTitle}` : ''}</span>
+              <span>Back to Today</span>
             </button>
           </>
         ) : (

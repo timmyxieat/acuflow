@@ -3,6 +3,12 @@
 ## Core Idea of App
 
 - All about navigation (and flow)
+- Tie to a mission to unify all acupuncturists
+  - Release a Lead Magnet micro application
+  - A dream to unify all acupuncturists, aware of all the different techniques, but not limited by them
+    - They focus on the branch, but they forgot the root
+  - Map of Japan with different clans - battling each other
+  - 
 
 ## General
 

@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ScrollableArea } from '@/components/custom'
+import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { formatTime } from '@/lib/dev-time'
 import {
@@ -432,9 +432,30 @@ export default function AppointmentDetailPage() {
     )
   }
 
+  // Handle appointment click from PatientCards - navigate to that appointment
+  const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations) => {
+    if (clickedAppointment.id !== appointmentId) {
+      router.push(`/appointments/${clickedAppointment.id}`)
+    }
+  }
+
   return (
     <div className="flex h-full">
-      {/* Left Panel - Patient Info & Visit Timeline */}
+      {/* Patient Cards - compact mode (avatar + time only) */}
+      <div className="w-16 flex flex-col">
+        <div className="h-full">
+          <PatientCards
+            onAppointmentClick={handleAppointmentClick}
+            selectedAppointmentId={appointmentId}
+            compact
+          />
+        </div>
+      </div>
+
+      {/* Vertical divider */}
+      <div className="w-px bg-border" />
+
+      {/* Middle Panel - Patient Info & Visit Timeline */}
       <div className="flex w-[300px] flex-col border-r border-border bg-card">
         {/* Patient Header */}
         <PatientHeader appointment={appointment} />

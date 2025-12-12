@@ -21,7 +21,7 @@ const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: s
 }
 
 // Timeline configuration
-const MIN_HOUR_HEIGHT = 120 // minimum pixels per hour
+const MIN_HOUR_HEIGHT = 150 // minimum pixels per hour
 const START_HOUR = 8 // 8 AM
 const END_HOUR = 18 // 6 PM
 const TOTAL_HOURS = END_HOUR - START_HOUR
@@ -305,7 +305,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
         const columnInfo = columnAssignments.get(indicatorAppointment.id)
         const column = columnInfo?.column ?? 0
         const totalColumns = columnInfo?.totalColumns ?? 1
-        // Calculate center position within appointments area (excluding 64px hour labels)
+        // Calculate center position within appointments area (excluding hour labels column)
         const centerPercent = ((column + 0.5) / totalColumns) * 100
         const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
         // Use selected opacity if selected, otherwise hovered opacity
@@ -320,7 +320,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
             }}
             className="absolute top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2 whitespace-nowrap"
             style={{
-              left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
+              left: `calc(52px + (100% - 52px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
               borderLeft: `3px solid ${indicatorStatusColor}`,
             }}
@@ -336,7 +336,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
         const columnInfo = columnAssignments.get(indicatorAppointment.id)
         const column = columnInfo?.column ?? 0
         const totalColumns = columnInfo?.totalColumns ?? 1
-        // Calculate center position within appointments area (excluding 64px hour labels)
+        // Calculate center position within appointments area (excluding hour labels column)
         const centerPercent = ((column + 0.5) / totalColumns) * 100
         const isCompleted = indicatorAppointment.status === AppointmentStatus.COMPLETED && indicatorAppointment.isSigned
         // Use selected opacity if selected, otherwise hovered opacity
@@ -351,7 +351,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
             }}
             className="absolute bottom-1 z-20 flex items-center gap-1 px-2 py-1 rounded-r-sm text-xs font-medium transition-all hover:opacity-80 -translate-x-1/2 whitespace-nowrap"
             style={{
-              left: `calc(64px + (100% - 64px) * ${centerPercent / 100})`,
+              left: `calc(52px + (100% - 52px) * ${centerPercent / 100})`,
               backgroundColor: bgColor,
               borderLeft: `3px solid ${indicatorStatusColor}`,
             }}
@@ -366,25 +366,23 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
       <ScrollableArea ref={scrollableRef} onScroll={handleScroll} deps={[hourHeight]}>
         <div className="relative flex min-h-full">
           {/* Hour labels column */}
-          <div className="w-16 flex-shrink-0 relative bg-muted/30 border-r border-border">
-            {/* Top padding for first label */}
-            <div className="h-3" />
-            {/* Top border line */}
-            <div className="border-t border-border/50" />
+          <div className="flex-shrink-0 border-r border-border">
+            {/* Top padding */}
+            <div className="h-[13px] border-b border-border/50" />
             {hours.map(({ hour, label }) => (
               <div
                 key={hour}
-                className="relative border-b border-border/50"
+                className="border-b border-border/50 flex items-start justify-center px-2"
                 style={{ height: `${hourHeight}px` }}
               >
-                <span className="absolute top-0 left-0 right-0 -translate-y-1/2 text-center text-xs text-muted-foreground">
+                <span className="-translate-y-1/2 text-xs text-muted-foreground whitespace-nowrap">
                   {label}
                 </span>
               </div>
             ))}
             {/* End hour label */}
-            <div className="relative h-3">
-              <span className="absolute top-0 left-0 right-0 -translate-y-1/2 text-center text-xs text-muted-foreground">
+            <div className="h-[13px] flex items-start justify-center px-2">
+              <span className="-translate-y-1/2 text-xs text-muted-foreground whitespace-nowrap">
                 {endHourLabel}
               </span>
             </div>
@@ -493,6 +491,13 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
                       </>
                     )}
                   </div>
+
+                  {/* Chief complaint */}
+                  {appointment.conditions?.[0] && (
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {appointment.conditions[0].name}
+                    </div>
+                  )}
                 </button>
               )
             })}

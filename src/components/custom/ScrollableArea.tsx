@@ -21,6 +21,8 @@ interface ScrollableAreaProps {
   deps?: unknown[]
   /** Callback when scroll position changes */
   onScroll?: (position: ScrollPosition) => void
+  /** Hide the scrollbar while maintaining scroll functionality */
+  hideScrollbar?: boolean
 }
 
 /**
@@ -33,10 +35,12 @@ interface ScrollableAreaProps {
  * - Use ref to access scrollTo() and getScrollPosition()
  */
 export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>(
-  function ScrollableArea({ children, className, deps = [], onScroll }, ref) {
+  function ScrollableArea({ children, className, deps = [], onScroll, hideScrollbar = false }, ref) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const [canScrollUp, setCanScrollUp] = useState(false)
     const [canScrollDown, setCanScrollDown] = useState(false)
+    const [isScrolling, setIsScrolling] = useState(false)
+    const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Expose scrollTo and getScrollPosition via ref
     useImperativeHandle(ref, () => ({
@@ -57,6 +61,19 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
           setCanScrollUp(scrollTop > 10)
           setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10)
           onScroll?.({ scrollTop, scrollHeight, clientHeight })
+
+          // Show scrollbar on scroll
+          if (!hideScrollbar) {
+            setIsScrolling(true)
+            // Clear existing timeout
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current)
+            }
+            // Hide scrollbar after 1.5s of no scrolling
+            scrollTimeoutRef.current = setTimeout(() => {
+              setIsScrolling(false)
+            }, 1500)
+          }
         }
       }
 
@@ -71,6 +88,9 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
 
       return () => {
         clearTimeout(timeoutId)
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
         container?.removeEventListener('scroll', checkScroll)
         window.removeEventListener('resize', checkScroll)
       }
@@ -90,7 +110,15 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
         )}
 
         {/* Scrollable content */}
-        <div ref={scrollRef} className={cn('h-full scrollbar-always', className)}>
+        <div
+          ref={scrollRef}
+          className={cn(
+            'h-full',
+            hideScrollbar ? 'scrollbar-none' : 'scrollbar-auto',
+            !hideScrollbar && isScrolling && 'is-scrolling',
+            className
+          )}
+        >
           {children}
         </div>
       </div>
