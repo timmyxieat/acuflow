@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
 import { Timer, Bell } from "lucide-react";
@@ -34,7 +35,7 @@ function formatCompactTime(date: Date): string {
 }
 
 interface PatientCardsProps {
-  onAppointmentClick?: (appointment: AppointmentWithRelations) => void;
+  onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void;
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void;
   onAppointmentHover?: (appointmentId: string | null) => void;
   hoveredAppointmentId?: string | null;
@@ -46,7 +47,7 @@ interface PatientCardsProps {
 interface StatusSectionProps {
   title: string;
   appointments: AppointmentWithRelations[];
-  onAppointmentClick?: (appointment: AppointmentWithRelations) => void;
+  onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void;
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void;
   onAppointmentHover?: (appointmentId: string | null) => void;
   hoveredAppointmentId?: string | null;
@@ -75,26 +76,52 @@ function StatusSection({
   );
 
   return (
-    <div className={compact ? "flex flex-col gap-1" : "flex flex-col gap-2"}>
-      {/* Section header - hide in compact mode */}
-      {!compact && (
-        <div className="flex items-center gap-1.5 text-sm font-medium text-foreground pl-2">
-          <div
-            className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: statusColor }}
-          />
-          <span>{title}</span>
-          <span>({appointments.length})</span>
-        </div>
-      )}
+    <motion.div className="flex flex-col gap-2" layout>
+      {/* Section header - compact shows dot + count, full shows dot + title + count */}
+      <motion.div
+        layout
+        className={`flex items-center gap-1.5 text-sm font-medium text-foreground ${
+          compact ? "justify-center px-1" : "pl-2"
+        }`}
+      >
+        <motion.div
+          layoutId={`status-dot-${variant}`}
+          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: statusColor }}
+          transition={{ type: "spring", stiffness: 500, damping: 35 }}
+        />
+        <AnimatePresence mode="popLayout">
+          {!compact && (
+            <motion.span
+              key="title"
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden whitespace-nowrap"
+            >
+              {title}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        <motion.span
+          layoutId={`status-count-${variant}`}
+          className={compact ? "text-muted-foreground font-normal" : ""}
+          transition={{ type: "spring", stiffness: 500, damping: 35 }}
+        >
+          ({appointments.length})
+        </motion.span>
+      </motion.div>
 
       {/* Cards */}
-      <div className={compact ? "flex flex-col gap-1" : "flex flex-col gap-2"}>
+      <div
+        className={`flex flex-col gap-2 ${compact ? "items-center" : ""}`}
+      >
         {appointments.map((appointment) => (
           <PatientCard
             key={appointment.id}
             appointment={appointment}
-            onClick={() => onAppointmentClick?.(appointment)}
+            onClick={(rect) => onAppointmentClick?.(appointment, rect)}
             onDoubleClick={() => onAppointmentDoubleClick?.(appointment)}
             onHover={(isHovered) =>
               onAppointmentHover?.(isHovered ? appointment.id : null)
@@ -105,13 +132,13 @@ function StatusSection({
           />
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 interface PatientCardProps {
   appointment: AppointmentWithRelations;
-  onClick?: () => void;
+  onClick?: (rect: DOMRect) => void;
   onDoubleClick?: () => void;
   onHover?: (isHovered: boolean) => void;
   isHovered?: boolean;
@@ -134,7 +161,9 @@ function PatientCard({
   const displayName = getPatientDisplayName(patient);
 
   // Get the time display based on status
-  const getTimeDisplay = (): {
+  const getTimeDisplay = (
+    isCompact?: boolean
+  ): {
     text: string;
     icon?: typeof Timer;
     shake?: boolean;
@@ -150,9 +179,9 @@ function PatientCard({
         const msRemaining = targetMs - msElapsed;
 
         if (msRemaining <= 0) {
-          // Timer complete
+          // Timer complete - shorter text for compact mode
           return {
-            text: "Timer is up",
+            text: isCompact ? "Done" : "Timer is up",
             icon: Bell,
             shake: true,
           };
@@ -171,13 +200,13 @@ function PatientCard({
     }
 
     // All other cases - show start time (compact format if in compact mode)
-    if (compact) {
+    if (isCompact) {
       return { text: formatCompactTime(appointment.scheduledStart) };
     }
     return { text: formatTime(appointment.scheduledStart) };
   };
 
-  const timeDisplay = getTimeDisplay();
+  const timeDisplay = getTimeDisplay(compact);
 
   // Get initials for avatar
   const initials = `${patient.firstName?.[0] || ""}${
@@ -189,16 +218,9 @@ function PatientCard({
   const isCompleted =
     appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned;
 
-  // Calculate styles based on state
-  // No background by default, inset left border + background on hover/selection
-  const getStyles = () => {
-    if (isSelected) {
-      return {
-        backgroundColor: isCompleted ? `${statusColor}50` : `${statusColor}30`,
-        boxShadow: `inset 3px 0 0 0 ${statusColor}`,
-      };
-    }
-    if (isHovered) {
+  // Calculate hover styles (selection is handled by layoutId indicator)
+  const getHoverStyles = () => {
+    if (isHovered && !isSelected) {
       return {
         backgroundColor: isCompleted ? `${statusColor}33` : `${statusColor}18`,
         boxShadow: `inset 3px 0 0 0 ${statusColor}`,
@@ -210,76 +232,114 @@ function PatientCard({
     };
   };
 
-  // Compact mode: avatar + time stacked vertically, centered
-  if (compact) {
-    return (
-      <button
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
-        onMouseEnter={() => onHover?.(true)}
-        onMouseLeave={() => onHover?.(false)}
-        className="w-full transition-all py-2 px-1 flex flex-col items-center gap-1"
-        style={getStyles()}
-      >
-        {/* Avatar */}
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-          {initials}
-        </div>
-        {/* Time */}
-        <div
-          className="flex items-center gap-0.5 text-[10px] text-muted-foreground"
-          suppressHydrationWarning
-        >
-          {timeDisplay.icon && (
-            <timeDisplay.icon
-              className={`h-2.5 w-2.5 ${
-                timeDisplay.shake ? "animate-bell-shake" : ""
-              }`}
-            />
-          )}
-          <span>{timeDisplay.text}</span>
-        </div>
-      </button>
-    );
-  }
+  // Card height: 62px (avatar 32px + gap 4px + time 14px + padding 12px = 62px)
+  const CARD_HEIGHT = "h-[62px]";
 
-  // Full mode: avatar + name/time horizontally
+  const appointmentId = appointment.id;
+  const springTransition = { type: "spring" as const, stiffness: 500, damping: 35 };
+
+  // Unified layout - elements animate between compact and full positions
   return (
-    <button
-      onClick={onClick}
+    <motion.button
+      layout
+      onClick={(e) => onClick?.(e.currentTarget.getBoundingClientRect())}
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className="w-full text-left transition-all p-2"
-      style={getStyles()}
+      className={`relative px-2 ${
+        compact
+          ? `pt-2 pb-1 flex flex-col items-center justify-center gap-1 ${CARD_HEIGHT}`
+          : `w-full text-left flex items-center ${CARD_HEIGHT}`
+      }`}
+      style={getHoverStyles()}
+      transition={springTransition}
     >
-      <div className="flex items-center gap-2">
-        {/* Avatar */}
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-          {initials}
-        </div>
+      {/* Selection indicator */}
+      {isSelected && (
+        <motion.div
+          layoutId={`selection-indicator-${appointmentId}`}
+          className={`absolute inset-0 ${compact ? "" : "rounded-sm"}`}
+          style={{
+            backgroundColor: isCompleted ? `${statusColor}50` : `${statusColor}30`,
+            boxShadow: `inset 3px 0 0 0 ${statusColor}`,
+          }}
+          transition={springTransition}
+        />
+      )}
 
-        {/* Name and Time */}
-        <div className="min-w-0 flex-1">
-          {/* Patient name */}
-          <div className="truncate text-sm font-medium">{displayName}</div>
-          {/* Time display - below name, smaller font */}
-          <div
-            className="flex items-center gap-1 text-[11px] text-muted-foreground"
-            suppressHydrationWarning
-          >
-            {timeDisplay.icon && (
-              <timeDisplay.icon
-                className={`h-3 w-3 ${
-                  timeDisplay.shake ? "animate-bell-shake" : ""
-                }`}
-              />
-            )}
-            <span>{timeDisplay.text}</span>
-          </div>
-        </div>
-      </div>
-    </button>
+      {/* Content wrapper - changes layout direction */}
+      <motion.div
+        layout
+        className={`relative z-10 flex ${
+          compact ? "flex-col items-center gap-1" : "items-center gap-2"
+        }`}
+        transition={springTransition}
+      >
+        {/* Avatar - shared across modes */}
+        <motion.div
+          layoutId={`avatar-${appointmentId}`}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
+          transition={springTransition}
+        >
+          {initials}
+        </motion.div>
+
+        {/* Name and Time container - only in full mode */}
+        <AnimatePresence mode="popLayout">
+          {!compact && (
+            <motion.div
+              key="name-time-container"
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: 0.2 }}
+              className="min-w-0 flex-1 overflow-hidden"
+            >
+              {/* Patient name */}
+              <div className="truncate text-sm font-medium">{displayName}</div>
+              {/* Time display - below name */}
+              <div
+                className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                suppressHydrationWarning
+              >
+                {timeDisplay.icon && (
+                  <timeDisplay.icon
+                    className={`h-3 w-3 ${
+                      timeDisplay.shake ? "animate-bell-shake" : ""
+                    }`}
+                  />
+                )}
+                <span>{timeDisplay.text}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Time - only in compact mode (separate element for layout animation) */}
+        <AnimatePresence mode="popLayout">
+          {compact && (
+            <motion.div
+              key="compact-time"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex w-8 items-center justify-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap"
+              suppressHydrationWarning
+            >
+              {timeDisplay.icon && (
+                <timeDisplay.icon
+                  className={`h-2.5 w-2.5 flex-shrink-0 ${
+                    timeDisplay.shake ? "animate-bell-shake" : ""
+                  }`}
+                />
+              )}
+              <span>{timeDisplay.text}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.button>
   );
 }
 
@@ -301,12 +361,13 @@ export function PatientCards({
   }, []);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-sidebar">
-      <ScrollableArea
-        className={compact ? "flex flex-col gap-1 py-2" : "flex flex-col gap-3 py-3"}
-        deps={[groupedAppointments]}
-        hideScrollbar
-      >
+    <LayoutGroup>
+      <div className="flex h-full flex-col overflow-hidden bg-sidebar">
+        <ScrollableArea
+          className="flex flex-col gap-3 py-3"
+          deps={[groupedAppointments]}
+          hideScrollbar
+        >
         {/* In Progress - Most important, shows first */}
         <StatusSection
           title="In Progress"
@@ -347,10 +408,9 @@ export function PatientCards({
         />
 
         {/* Divider between active/upcoming and completed sections */}
-        {!compact &&
-          (groupedAppointments.inProgress.length > 0 ||
-            groupedAppointments.checkedIn.length > 0 ||
-            groupedAppointments.scheduled.length > 0) &&
+        {(groupedAppointments.inProgress.length > 0 ||
+          groupedAppointments.checkedIn.length > 0 ||
+          groupedAppointments.scheduled.length > 0) &&
           (groupedAppointments.unsigned.length > 0 ||
             groupedAppointments.completed.length > 0) && (
             <div className="border-t border-border -mx-2" />
@@ -390,7 +450,8 @@ export function PatientCards({
             No appointments today
           </div>
         )}
-      </ScrollableArea>
-    </div>
+        </ScrollableArea>
+      </div>
+    </LayoutGroup>
   );
 }

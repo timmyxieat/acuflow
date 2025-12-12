@@ -28,7 +28,7 @@ const TOTAL_HOURS = END_HOUR - START_HOUR
 const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
-  onAppointmentClick?: (appointment: AppointmentWithRelations) => void
+  onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void
   onAppointmentHover?: (appointmentId: string | null) => void
   selectedAppointmentId?: string
@@ -450,7 +450,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
                   key={appointment.id}
                   onClick={(e) => {
                     e.stopPropagation()
-                    onAppointmentClick?.(appointment)
+                    onAppointmentClick?.(appointment, e.currentTarget.getBoundingClientRect())
                   }}
                   onDoubleClick={(e) => {
                     e.stopPropagation()

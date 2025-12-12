@@ -1,12 +1,15 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
+import { useTransition } from '@/contexts/TransitionContext'
 import { formatTime } from '@/lib/dev-time'
 import {
   getEnrichedAppointments,
+  getAppointmentsByStatus,
   getPatientDisplayName,
   calculateAge,
   getStatusDisplay,
@@ -383,6 +386,14 @@ export default function AppointmentDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { setHeader, resetHeader } = useHeader()
+  const {
+    isTransitioning,
+    transitionSource,
+    slideDirection,
+    startTransition,
+    setSlideDirection,
+    completeTransition,
+  } = useTransition()
   const appointmentId = params.id as string
 
   // State for selected visit in timeline (for preview)
@@ -391,6 +402,18 @@ export default function AppointmentDetailPage() {
   // Find the appointment from mock data
   const appointments = getEnrichedAppointments()
   const appointment = appointments.find((a) => a.id === appointmentId)
+
+  // Get flat ordered list of all appointments (same order as PatientCards)
+  const orderedAppointmentIds = useMemo(() => {
+    const grouped = getAppointmentsByStatus()
+    return [
+      ...grouped.inProgress,
+      ...grouped.checkedIn,
+      ...grouped.scheduled,
+      ...grouped.unsigned,
+      ...grouped.completed,
+    ].map(a => a.id)
+  }, [])
 
   // Set the global header when this page mounts
   useEffect(() => {
@@ -407,6 +430,16 @@ export default function AppointmentDetailPage() {
   // Only re-run when appointment ID changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointmentId])
+
+  // Complete transition after animation
+  useEffect(() => {
+    if (isTransitioning) {
+      const timer = setTimeout(() => {
+        completeTransition()
+      }, 400) // Match animation duration
+      return () => clearTimeout(timer)
+    }
+  }, [isTransitioning, completeTransition])
 
   // Handle visit selection from timeline
   const handleSelectVisit = (visitId: string | null) => {
@@ -433,16 +466,36 @@ export default function AppointmentDetailPage() {
   }
 
   // Handle appointment click from PatientCards - navigate to that appointment
-  const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations) => {
+  const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations, rect?: DOMRect) => {
     if (clickedAppointment.id !== appointmentId) {
+      // Calculate slide direction based on position in list
+      const currIndex = orderedAppointmentIds.indexOf(appointmentId)
+      const newIndex = orderedAppointmentIds.indexOf(clickedAppointment.id)
+
+      if (currIndex !== -1 && newIndex !== -1) {
+        // If clicking appointment below current, slide down; if above, slide up
+        setSlideDirection(newIndex > currIndex ? 'down' : 'up')
+      }
+
+      if (rect) {
+        startTransition(rect, 'appointment')
+      }
       router.push(`/appointments/${clickedAppointment.id}`)
     }
   }
 
+  // Only animate sidebar width when coming from Today screen
+  const shouldAnimateSidebar = transitionSource === 'today'
+
   return (
-    <div className="flex h-full">
-      {/* Patient Cards - compact mode (avatar + time only) */}
-      <div className="w-16 flex flex-col">
+    <div className="flex h-full overflow-hidden">
+      {/* Patient Cards - compact mode, only animate width when coming from Today */}
+      <motion.div
+        className="flex flex-col flex-shrink-0"
+        initial={shouldAnimateSidebar ? { width: 200 } : false}
+        animate={{ width: 'auto' }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      >
         <div className="h-full">
           <PatientCards
             onAppointmentClick={handleAppointmentClick}
@@ -450,43 +503,72 @@ export default function AppointmentDetailPage() {
             compact
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Vertical divider */}
       <div className="w-px bg-border" />
 
-      {/* Middle Panel - Patient Info & Visit Timeline */}
-      <div className="flex w-[300px] flex-col border-r border-border bg-card">
-        {/* Patient Header */}
-        <PatientHeader appointment={appointment} />
+      {/* Main content - slides in from right from Today, vertical slide between appointments */}
+      <div className="flex flex-1 overflow-hidden">
+        <AnimatePresence mode="wait" initial={true}>
+          <motion.div
+            key={appointmentId}
+            className="flex flex-1"
+            initial={{
+              // From Today: slide from right, between appointments: vertical slide
+              x: transitionSource === 'today' ? 100 : 0,
+              y: transitionSource === 'appointment'
+                ? (slideDirection === 'up' ? 50 : slideDirection === 'down' ? -50 : 0)
+                : 0,
+              opacity: 0,
+            }}
+            animate={{ x: 0, y: 0, opacity: 1 }}
+            exit={{
+              y: transitionSource === 'appointment'
+                ? (slideDirection === 'up' ? -50 : slideDirection === 'down' ? 50 : 0)
+                : 0,
+              opacity: 0,
+            }}
+            transition={{
+              duration: 0.25,
+              ease: [0.4, 0, 0.2, 1],
+            }}
+          >
+            {/* Middle Panel - Patient Info & Visit Timeline */}
+            <div className="flex w-[300px] flex-col border-r border-border bg-card">
+              {/* Patient Header */}
+              <PatientHeader appointment={appointment} />
 
-        {/* Visit Timeline - Scrollable */}
-        <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointmentId]}>
-          {appointment.patient && (
-            <VisitTimeline
-              patientId={appointment.patient.id}
-              selectedVisitId={selectedVisitId}
-              onSelectVisit={handleSelectVisit}
-            />
-          )}
-        </ScrollableArea>
-      </div>
+              {/* Visit Timeline - Scrollable */}
+              <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointmentId]}>
+                {appointment.patient && (
+                  <VisitTimeline
+                    patientId={appointment.patient.id}
+                    selectedVisitId={selectedVisitId}
+                    onSelectVisit={handleSelectVisit}
+                  />
+                )}
+              </ScrollableArea>
+            </div>
 
-      {/* Right Panel - Appointment Details & SOAP */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-background">
-        {/* Appointment Header */}
-        <AppointmentHeader appointment={appointment} />
+            {/* Right Panel - Appointment Details & SOAP */}
+            <div className="flex flex-1 flex-col overflow-hidden bg-background">
+              {/* Appointment Header */}
+              <AppointmentHeader appointment={appointment} />
 
-        {/* Scrollable Content */}
-        <ScrollableArea className="flex-1 py-6 pl-6 pr-4" deps={[appointmentId]}>
-          <div className="flex flex-col gap-8">
-            {/* Patient Intake (Collapsible) */}
-            <PatientIntakeSection />
+              {/* Scrollable Content */}
+              <ScrollableArea className="flex-1 py-6 pl-6 pr-4" deps={[appointmentId]}>
+                <div className="flex flex-col gap-8">
+                  {/* Patient Intake (Collapsible) */}
+                  <PatientIntakeSection />
 
-            {/* SOAP Sections */}
-            <SOAPSections />
-          </div>
-        </ScrollableArea>
+                  {/* SOAP Sections */}
+                  <SOAPSections />
+                </div>
+              </ScrollableArea>
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )
