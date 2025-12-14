@@ -8,9 +8,15 @@ import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { useAutoSave } from '@/hooks/useAutoSave'
-import { saveVisitSOAP, loadVisitSOAP } from '@/lib/api/visits'
+import { saveVisitSOAP, loadVisitSOAP, hasSOAPContent } from '@/lib/api/visits'
 import { formatTime } from '@/lib/dev-time'
-import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
+import {
+  SIDEBAR_ANIMATION,
+  CONTENT_SLIDE_ANIMATION,
+  CARD_SELECTION_ANIMATION,
+  SOAP_PREVIEW_ANIMATION,
+  BUTTON_POP_ANIMATION,
+} from '@/lib/animations'
 import {
   getEnrichedAppointments,
   getAppointmentById,
@@ -20,12 +26,13 @@ import {
   getStatusDisplay,
   getPatientVisitHistory,
   getPatientScheduledAppointments,
+  getPatientTodayAppointmentId,
   getVisitById,
   type AppointmentWithRelations,
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus } from 'lucide-react'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -187,12 +194,12 @@ function VisitCard({
     const base = 'w-full text-left rounded-lg border p-3 transition-all'
 
     if (isSelected && isFocused) {
-      // Selected + Focused: both states combined
-      return `${base} border-primary bg-primary/5 ring-2 ring-inset ring-primary/50`
+      // Selected + Focused: both states combined (muted ring + keyboard focus indicator)
+      return `${base} border-transparent bg-transparent ring-2 ring-muted-foreground/40`
     }
     if (isSelected) {
-      // Selected only: viewing this visit
-      return `${base} border-primary bg-primary/5 ring-1 ring-primary/20`
+      // Selected only: previewing this visit (muted outline, no fill)
+      return `${base} border-transparent bg-transparent ring-2 ring-muted-foreground/40`
     }
     if (isFocused) {
       // Focused only: keyboard nav is here
@@ -217,7 +224,7 @@ function VisitCard({
           <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             {/* Date */}
-            <span className={`text-sm font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+            <span className="text-sm font-medium text-foreground">
               {formatVisitDate(visitDate)}
             </span>
             {/* Chief complaint */}
@@ -235,14 +242,27 @@ function VisitCard({
           </div>
         )}
       </div>
-      {/* Currently viewing label */}
-      {isSelected && (
-        <div className="mt-2 pt-2 border-t border-primary/20">
-          <span className="text-[10px] font-medium text-primary uppercase tracking-wider">
-            Currently viewing
-          </span>
-        </div>
-      )}
+      {/* Selection indicator with animation - centered */}
+      <AnimatePresence>
+        {isSelected && (
+          <div className="mt-2 pt-2 overflow-hidden text-center">
+            <motion.div
+              className="border-t border-muted-foreground/20 origin-center"
+              initial={CARD_SELECTION_ANIMATION.divider.initial}
+              animate={CARD_SELECTION_ANIMATION.divider.animate}
+              exit={CARD_SELECTION_ANIMATION.divider.exit}
+            />
+            <motion.span
+              className="block mt-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+              initial={CARD_SELECTION_ANIMATION.label.initial}
+              animate={CARD_SELECTION_ANIMATION.label.animate}
+              exit={CARD_SELECTION_ANIMATION.label.exit}
+            >
+              Previewing
+            </motion.span>
+          </div>
+        )}
+      </AnimatePresence>
     </button>
   )
 }
@@ -260,10 +280,36 @@ function ScheduledVisitCard({
   const appointmentType = appointment.appointmentType
   const visitDate = new Date(appointment.scheduledStart)
 
+  // Check signing status
+  const hasSoapContent = hasSOAPContent(appointment.id)
+  const isSigned = appointment.isSigned
+
   // Get the icon component for this appointment type
   const IconComponent = appointmentType?.id
     ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
     : Calendar
+
+  // Render signing status indicator (16x16 / h-4 w-4 to match VisitCard)
+  const renderSigningIndicator = () => {
+    if (isSigned) {
+      // Signed: green checkmark in circle
+      return (
+        <div className="h-4 w-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+          <Check className="h-2.5 w-2.5 text-green-600" />
+        </div>
+      )
+    }
+    if (hasSoapContent) {
+      // Has content but unsigned: amber minus icon
+      return (
+        <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <Minus className="h-2.5 w-2.5 text-amber-600" />
+        </div>
+      )
+    }
+    // No content: no indicator
+    return null
+  }
 
   // Format the date for scheduled appointments
   const formatScheduledDate = (date: Date): string => {
@@ -285,15 +331,15 @@ function ScheduledVisitCard({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  // For today's appointment (currently viewing), show permanently selected state
+  // For current appointment (editing), show blue "in progress" styling
   if (isCurrentAppointment) {
     return (
-      <div className="w-full text-left rounded-lg border border-primary bg-primary/5 ring-1 ring-primary/20 p-3">
+      <div className="w-full text-left rounded-lg border border-blue-500 bg-blue-50 p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 flex-1 min-w-0">
-            <IconComponent className="h-4 w-4 text-primary/60 flex-shrink-0 mt-0.5" />
+            <IconComponent className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <span className="text-sm font-medium text-primary">
+              <span className="text-sm font-medium text-blue-600">
                 {formatScheduledDate(visitDate)}
               </span>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -301,11 +347,22 @@ function ScheduledVisitCard({
               </p>
             </div>
           </div>
+          {renderSigningIndicator()}
         </div>
-        <div className="mt-2 pt-2 border-t border-primary/20">
-          <span className="text-[10px] font-medium text-primary uppercase tracking-wider">
-            Currently editing
-          </span>
+        {/* Selection indicator with animation - centered */}
+        <div className="mt-2 pt-2 overflow-hidden text-center">
+          <motion.div
+            className="border-t border-blue-200 origin-center"
+            initial={CARD_SELECTION_ANIMATION.divider.initial}
+            animate={CARD_SELECTION_ANIMATION.divider.animate}
+          />
+          <motion.span
+            className="block mt-2 text-[10px] font-medium text-blue-600 uppercase tracking-wider"
+            initial={CARD_SELECTION_ANIMATION.label.initial}
+            animate={CARD_SELECTION_ANIMATION.label.animate}
+          >
+            Editing
+          </motion.span>
         </div>
       </div>
     )
@@ -329,30 +386,38 @@ function ScheduledVisitCard({
             </p>
           </div>
         </div>
+        {renderSigningIndicator()}
       </div>
     </button>
   )
 }
 
 function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSelectVisit, onSelectScheduledAppointment, hoveredVisitId, onHoverVisit, isZoneFocused, focusedIndex }: VisitTimelineProps) {
+  const { showFutureAppointments, setShowFutureAppointments } = useTransition()
   const visitHistory = getPatientVisitHistory(patientId)
   const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
 
-  // Separate appointments into categories
-  const currentAppt = scheduledAppointments.find(a => a.id === currentAppointmentId)
-  // Future appointments (excluding current) - these are collapsible
-  const futureAppointments = scheduledAppointments.filter(a => a.isFuture && a.id !== currentAppointmentId)
-  // Today's appointments (excluding current) - for when viewing a future appointment
-  const todayAppointments = scheduledAppointments.filter(a => !a.isFuture && a.id !== currentAppointmentId)
+  // Sort all appointments chronologically (farthest date first, nearest at bottom)
+  const sortedAppointments = [...scheduledAppointments].sort((a, b) => {
+    return new Date(b.scheduledStart).getTime() - new Date(a.scheduledStart).getTime()
+  })
 
-  // State for expanding/collapsing future appointments
-  const [showFutureAppointments, setShowFutureAppointments] = useState(false)
+  // Count collapsible future appointments (future && not current) for the expand/collapse button
+  const collapsibleCount = sortedAppointments.filter(a => a.isFuture && a.id !== currentAppointmentId).length
 
   // Handler for clicking on a scheduled appointment
   const handleScheduledAppointmentClick = (appointmentId: string) => {
     if (onSelectScheduledAppointment) {
       onSelectScheduledAppointment(appointmentId)
     }
+  }
+
+  // Determine if an appointment should be visible
+  const isAppointmentVisible = (appointment: ScheduledAppointmentWithType) => {
+    // Always show today's appointments and the current appointment
+    if (!appointment.isFuture || appointment.id === currentAppointmentId) return true
+    // Show other future appointments only when expanded
+    return showFutureAppointments
   }
 
   return (
@@ -364,7 +429,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
             Scheduled Visits
           </h3>
           {/* Expand/Collapse button for future appointments */}
-          {futureAppointments.length > 0 && (
+          {collapsibleCount > 0 && (
             <button
               onClick={() => setShowFutureAppointments(!showFutureAppointments)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -376,7 +441,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                 </>
               ) : (
                 <>
-                  <span>+{futureAppointments.length} more</span>
+                  <span>+{collapsibleCount} more</span>
                   <ChevronDown className="h-3 w-3" />
                 </>
               )}
@@ -385,33 +450,15 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
         </div>
 
         <div className="flex flex-col gap-2">
-          {/* Future appointments (collapsed by default) - shown in reverse order so nearest is at bottom */}
-          {showFutureAppointments && [...futureAppointments].reverse().map((appointment) => (
+          {/* Single chronological list - visibility controlled by isAppointmentVisible */}
+          {sortedAppointments.filter(isAppointmentVisible).map((appointment) => (
             <ScheduledVisitCard
               key={appointment.id}
               appointment={appointment}
-              isCurrentAppointment={false}
-              onClick={() => handleScheduledAppointmentClick(appointment.id)}
+              isCurrentAppointment={appointment.id === currentAppointmentId}
+              onClick={appointment.id !== currentAppointmentId ? () => handleScheduledAppointmentClick(appointment.id) : undefined}
             />
           ))}
-
-          {/* Today's appointments (when viewing a future appointment) */}
-          {todayAppointments.map((appointment) => (
-            <ScheduledVisitCard
-              key={appointment.id}
-              appointment={appointment}
-              isCurrentAppointment={false}
-              onClick={() => handleScheduledAppointmentClick(appointment.id)}
-            />
-          ))}
-
-          {/* Current appointment (always visible) */}
-          {currentAppt && (
-            <ScheduledVisitCard
-              appointment={currentAppt}
-              isCurrentAppointment={true}
-            />
-          )}
         </div>
       </div>
 
@@ -641,14 +688,19 @@ function SOAPSections({
             {/* Section header with optional action button */}
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">{section.label}</h3>
-              {isPlan && selectedVisit && onUsePastTreatment && (
-                <button
-                  onClick={onUsePastTreatment}
-                  className="text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                >
-                  Use past treatment
-                </button>
-              )}
+              <AnimatePresence>
+                {isPlan && selectedVisit && onUsePastTreatment && (
+                  <motion.button
+                    onClick={onUsePastTreatment}
+                    className="text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                    initial={BUTTON_POP_ANIMATION.initial}
+                    animate={BUTTON_POP_ANIMATION.animate}
+                    exit={BUTTON_POP_ANIMATION.exit}
+                  >
+                    Use past treatment
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Textarea for current note - auto-expands with content */}
@@ -666,11 +718,19 @@ function SOAPSections({
             />
 
             {/* Compact preview from selected past visit - inline styling, no header */}
-            {previewContent && (
-              <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
-                {previewContent}
-              </p>
-            )}
+            <AnimatePresence mode="wait">
+              {previewContent && (
+                <motion.p
+                  key={`${selectedVisitId}-${section.key}`}
+                  className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2"
+                  initial={SOAP_PREVIEW_ANIMATION.initial}
+                  animate={SOAP_PREVIEW_ANIMATION.animate(index)}
+                  exit={SOAP_PREVIEW_ANIMATION.exit}
+                >
+                  {previewContent}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </div>
         )
       })}
@@ -709,6 +769,7 @@ export default function AppointmentDetailPage() {
   const {
     isTransitioning,
     transitionSource,
+    transitionPatientId,
     slideDirection,
     startTransition,
     setSlideDirection,
@@ -742,7 +803,7 @@ export default function AppointmentDetailPage() {
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
 
   // Auto-save SOAP notes
-  const { status: saveStatus, markAsSaved } = useAutoSave({
+  const { status: saveStatus, markAsSaved, flush: flushSave } = useAutoSave({
     data: soapData,
     onSave: async (data) => {
       await saveVisitSOAP({ appointmentId, soap: data })
@@ -791,6 +852,13 @@ export default function AppointmentDetailPage() {
   const orderedVisitIds = useMemo(() => {
     if (!appointment?.patient?.id) return []
     return getPatientVisitHistory(appointment.patient.id).map(v => v.id)
+  }, [appointment?.patient?.id])
+
+  // Get today's appointment ID for the patient (for PatientCards selection)
+  // When viewing a future appointment, we still want to highlight the patient's today card
+  const selectedAppointmentIdForCards = useMemo(() => {
+    if (!appointment?.patient?.id) return undefined
+    return getPatientTodayAppointmentId(appointment.patient.id) ?? undefined
   }, [appointment?.patient?.id])
 
   // Set the global header when this page mounts
@@ -1023,7 +1091,7 @@ export default function AppointmentDetailPage() {
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={setHoveredAppointmentId}
             hoveredAppointmentId={effectiveHoveredAppointmentId}
-            selectedAppointmentId={appointmentId}
+            selectedAppointmentId={selectedAppointmentIdForCards}
             compact
           />
         </div>
@@ -1035,18 +1103,21 @@ export default function AppointmentDetailPage() {
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Middle Panel - Patient Info & Visit Timeline */}
-        {/* This section is animated on 'today' transition, static on 'scheduled' */}
+        {/* Static on same-patient 'scheduled' transitions, animated otherwise */}
         <AnimatePresence mode="wait" initial={true}>
           <motion.div
-            key={transitionSource === 'scheduled' ? 'patient-panel-static' : appointmentId}
+            key={transitionSource === 'scheduled' && transitionPatientId === appointment?.patient?.id
+              ? 'patient-panel-static'
+              : appointmentId}
             className="flex w-[300px] flex-col border-r border-border bg-card"
             initial={{
-              x: transitionSource === 'today' ? 100 : 0,
-              opacity: transitionSource === 'today' ? 0 : 1,
+              // Animate in from right for 'today' or different-patient 'scheduled' transitions
+              x: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 100 : 0,
+              opacity: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 0 : 1,
             }}
             animate={{ x: 0, opacity: 1 }}
             exit={{
-              opacity: transitionSource === 'today' ? 0 : 1,
+              opacity: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 0 : 1,
             }}
             transition={SIDEBAR_ANIMATION.transition}
           >
@@ -1061,7 +1132,9 @@ export default function AppointmentDetailPage() {
                   currentAppointmentId={appointmentId}
                   selectedVisitId={selectedVisitId}
                   onSelectVisit={handleSelectVisit}
-                  onSelectScheduledAppointment={(apptId) => {
+                  onSelectScheduledAppointment={async (apptId) => {
+                    // Flush any pending SOAP saves before navigating
+                    await flushSave()
                     // Determine direction based on appointment dates
                     const currentApptDate = new Date(appointment.scheduledStart)
                     const targetAppt = getAppointmentById(apptId)
@@ -1070,8 +1143,8 @@ export default function AppointmentDetailPage() {
                       const direction = targetApptDate > currentApptDate ? 'down' : 'up'
                       setSlideDirection(direction)
                     }
-                    // Set transition source to 'scheduled' for different animation
-                    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled')
+                    // Set transition source to 'scheduled' with current patient ID for same-patient detection
+                    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id)
                     router.push(`/appointments/${apptId}`)
                   }}
                   hoveredVisitId={effectiveHoveredVisitId}

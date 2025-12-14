@@ -20,10 +20,13 @@ interface TransitionContextType {
   selectedAppointmentId: string | null
   lastSelectedAppointmentId: string | null
   isKeyboardNavMode: boolean
-  startTransition: (rect: DOMRect, source: TransitionSource) => void
+  showFutureAppointments: boolean
+  transitionPatientId: string | null
+  startTransition: (rect: DOMRect, source: TransitionSource, patientId?: string) => void
   setSlideDirection: (direction: SlideDirection) => void
   setSelectedAppointmentId: (id: string | null) => void
   setKeyboardNavMode: (active: boolean) => void
+  setShowFutureAppointments: (show: boolean) => void
   completeTransition: () => void
 }
 
@@ -37,6 +40,8 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [selectedAppointmentId, setSelectedAppointmentIdState] = useState<string | null>(null)
   const [lastSelectedAppointmentId, setLastSelectedAppointmentId] = useState<string | null>(null)
   const [isKeyboardNavMode, setIsKeyboardNavMode] = useState(false)
+  const [showFutureAppointments, setShowFutureAppointments] = useState(false)
+  const [transitionPatientId, setTransitionPatientId] = useState<string | null>(null)
 
   // Global mouse move listener to exit keyboard nav mode
   useEffect(() => {
@@ -74,7 +79,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const startTransition = useCallback((rect: DOMRect, source: TransitionSource) => {
+  const startTransition = useCallback((rect: DOMRect, source: TransitionSource, patientId?: string) => {
     setOrigin({
       x: rect.x,
       y: rect.y,
@@ -82,6 +87,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
       height: rect.height,
     })
     setTransitionSource(source)
+    setTransitionPatientId(patientId ?? null)
     setIsTransitioning(true)
   }, [])
 
@@ -101,10 +107,13 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         selectedAppointmentId,
         lastSelectedAppointmentId,
         isKeyboardNavMode,
+        showFutureAppointments,
+        transitionPatientId,
         startTransition,
         setSlideDirection,
         setSelectedAppointmentId,
         setKeyboardNavMode,
+        setShowFutureAppointments,
         completeTransition,
       }}
     >

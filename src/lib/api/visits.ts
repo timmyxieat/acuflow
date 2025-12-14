@@ -31,6 +31,30 @@ function getStorageKey(appointmentId: string): string {
 }
 
 /**
+ * Check if an appointment has any SOAP content saved
+ * Returns true if any of S/O/A/P fields have content
+ */
+export function hasSOAPContent(appointmentId: string): boolean {
+  if (typeof window === 'undefined') return false
+
+  try {
+    const key = getStorageKey(appointmentId)
+    const stored = localStorage.getItem(key)
+    if (!stored) return false
+
+    const parsed = JSON.parse(stored)
+    return !!(
+      parsed.subjective?.trim() ||
+      parsed.objective?.trim() ||
+      parsed.assessment?.trim() ||
+      parsed.plan?.trim()
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
  * Load SOAP data from localStorage
  * Returns null if no saved data exists
  */

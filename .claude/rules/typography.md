@@ -32,6 +32,9 @@ Copy-paste ready Tailwind classes for common use cases.
 | **Inline with text** | 14px | `h-3.5 w-3.5` | Phone/email icons, appointment type |
 | **Small inline** | 12px | `h-3 w-3` | Gender icons, chevrons, timer icon |
 | **Status dot** | 10px | `h-2.5 w-2.5` | Colored status indicators |
+| **Status indicator** | 16px container | `h-4 w-4 rounded-full` + `h-2.5 w-2.5` icon | Signed/unsigned badges |
+
+**Status indicator pattern:** Use a 16px rounded container (`h-4 w-4 rounded-full bg-{color}-100`) with a 10px icon inside (`h-2.5 w-2.5 text-{color}-600`). Examples: green checkmark for signed, amber minus for unsigned.
 
 **Touch target rule:** Icons can be small, but their clickable area should be at least 44px (`h-11`).
 

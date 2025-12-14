@@ -104,6 +104,17 @@ export function useAutoSave<T>({
     }
   }, [])
 
+  // Flush pending saves immediately (call before navigation)
+  const flush = useCallback(async () => {
+    // Clear pending debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+    // Save immediately if there are unsaved changes
+    await save()
+  }, [save])
+
   // Debounced effect - triggers save after delay
   useEffect(() => {
     if (!enabled) return
@@ -143,5 +154,5 @@ export function useAutoSave<T>({
     }
   }, [])
 
-  return { status, markAsSaved }
+  return { status, markAsSaved, flush }
 }

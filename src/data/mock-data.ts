@@ -2118,6 +2118,15 @@ export function getAppointmentById(appointmentId: string): AppointmentWithRelati
 // =============================================================================
 
 /**
+ * Get today's appointment ID for a patient (if they have one)
+ * Returns the first matching appointment ID, or null if patient has no appointment today
+ */
+export function getPatientTodayAppointmentId(patientId: string): string | null {
+  const todayAppt = mockAppointments.find((a) => a.patientId === patientId);
+  return todayAppt?.id ?? null;
+}
+
+/**
  * Get appointments grouped by status for the Today screen
  */
 export function getAppointmentsByStatus() {
@@ -2446,6 +2455,7 @@ export interface ScheduledAppointmentWithType {
   scheduledStart: Date;
   scheduledEnd: Date;
   status: AppointmentStatus;
+  isSigned: boolean;
   appointmentType?: AppointmentType;
   isFuture: boolean; // True if scheduled for a future date (not today)
 }
@@ -2494,6 +2504,7 @@ export function getPatientScheduledAppointments(
       scheduledStart: appt.scheduledStart,
       scheduledEnd: appt.scheduledEnd,
       status: appt.status,
+      isSigned: 'isSigned' in appt ? appt.isSigned : false,
       appointmentType: mockAppointmentTypes.find(
         (at) => at.id === appt.appointmentTypeId
       ),
