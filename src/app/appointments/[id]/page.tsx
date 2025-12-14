@@ -166,9 +166,7 @@ interface VisitTimelineProps {
 }
 
 // Format date for timeline cards
-function formatTimelineDate(date: Date, isCurrentAppointment?: boolean): string {
-  if (isCurrentAppointment) return 'Today'
-
+function formatTimelineDate(date: Date): string {
   const now = new Date()
   const visitDate = new Date(date)
 
@@ -233,7 +231,7 @@ interface TimelineCardProps {
   date: Date
   appointmentTypeId?: string
   chiefComplaint?: string | null
-  isCurrentAppointment?: boolean
+  isEditing?: boolean  // True when this card's appointment matches URL's appointmentId
   isUnsigned?: boolean
   isSelected?: boolean
   isHovered?: boolean
@@ -251,7 +249,7 @@ function TimelineCard({
   date,
   appointmentTypeId,
   chiefComplaint,
-  isCurrentAppointment,
+  isEditing,
   isUnsigned,
   isSelected,
   isHovered,
@@ -283,7 +281,7 @@ function TimelineCard({
   const cardContent = (
     <>
       {/* Hover background - CSS-only */}
-      {!isSelected && !isCurrentAppointment && (
+      {!isSelected && !isEditing && (
         <div
           className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
           style={{ backgroundColor: hoverBgColor }}
@@ -304,8 +302,8 @@ function TimelineCard({
       <div className={`relative z-10 flex items-center justify-between gap-2 pl-3 pr-2 ${TIMELINE_CARD_HEIGHT}`}>
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           {/* Line 1: Date only */}
-          <span className={`text-sm font-medium ${isCurrentAppointment ? 'text-blue-600' : 'text-foreground'}`}>
-            {formatTimelineDate(date, isCurrentAppointment)}
+          <span className={`text-sm font-medium ${isEditing ? 'text-blue-600' : 'text-foreground'}`}>
+            {formatTimelineDate(date)}
           </span>
           {/* Line 2: Chief complaint (always show placeholder if empty for consistent height) */}
           <p className="text-xs text-muted-foreground truncate">
@@ -315,17 +313,17 @@ function TimelineCard({
 
         {/* Right side icon */}
         <div className="flex-shrink-0">
-          {isCurrentAppointment && (
+          {isEditing && (
             <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">
               Editing
             </span>
           )}
-          {isUnsigned && !isCurrentAppointment && (
+          {isUnsigned && !isEditing && (
             <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center">
               <Minus className="h-2.5 w-2.5 text-amber-600" />
             </div>
           )}
-          {!isCurrentAppointment && !isUnsigned && (
+          {!isEditing && !isUnsigned && (
             <IconComponent className="h-4 w-4 text-muted-foreground/60" />
           )}
         </div>
@@ -333,8 +331,8 @@ function TimelineCard({
     </>
   )
 
-  // Current appointment is not clickable
-  if (isCurrentAppointment) {
+  // Editing card is not clickable (already viewing this appointment)
+  if (isEditing) {
     return (
       <div
         className="relative"
@@ -372,12 +370,16 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
   const visitHistory = getPatientVisitHistory(patientId)
   const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
 
-  // Find the current appointment
-  const currentAppointment = scheduledAppointments.find(a => a.id === currentAppointmentId)
+  // Find today's appointment (based on date, not URL)
+  const todayAppointment = scheduledAppointments.find(a => {
+    const apptDate = new Date(a.scheduledStart)
+    const today = new Date()
+    return apptDate.toDateString() === today.toDateString()
+  })
 
-  // Separate upcoming (future, not current) appointments
+  // Separate upcoming (future) appointments - includes ALL future appointments
   const upcomingAppointments = scheduledAppointments
-    .filter(a => a.isFuture && a.id !== currentAppointmentId)
+    .filter(a => a.isFuture)
     .sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
 
   // Separate unsigned visits (past, not signed) and signed history
@@ -386,6 +388,16 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
 
   // Count for expand/collapse
   const upcomingCount = upcomingAppointments.length
+
+  // Check if the currently editing appointment is in the upcoming list
+  const isEditingUpcoming = upcomingAppointments.some(a => a.id === currentAppointmentId)
+
+  // Auto-expand upcoming section if we're editing a future appointment
+  useEffect(() => {
+    if (isEditingUpcoming && !showFutureAppointments) {
+      setShowFutureAppointments(true)
+    }
+  }, [isEditingUpcoming, showFutureAppointments, setShowFutureAppointments])
 
   // Handler for clicking a scheduled appointment (navigates to it)
   const handleScheduledAppointmentClick = (appointmentId: string) => {
@@ -403,18 +415,21 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Today Section - Current appointment being edited */}
-      {currentAppointment && (
+      {/* Today Section - Today's appointment (may or may not be the one being edited) */}
+      {todayAppointment && (
         <TimelineSection
           title="Today"
           color={TIMELINE_COLORS.today}
           count={1}
         >
           <TimelineCard
-            id={currentAppointment.id}
-            date={new Date(currentAppointment.scheduledStart)}
-            appointmentTypeId={currentAppointment.appointmentType?.id}
-            isCurrentAppointment={true}
+            id={todayAppointment.id}
+            date={new Date(todayAppointment.scheduledStart)}
+            appointmentTypeId={todayAppointment.appointmentType?.id}
+            isEditing={todayAppointment.id === currentAppointmentId}
+            onClick={todayAppointment.id !== currentAppointmentId
+              ? () => handleScheduledAppointmentClick(todayAppointment.id)
+              : undefined}
             color={TIMELINE_COLORS.today}
           />
         </TimelineSection>
@@ -456,7 +471,6 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
             {showFutureAppointments && (
               <motion.div
                 className="flex flex-col overflow-hidden"
-                style={{ borderLeft: `3px dashed ${TIMELINE_COLORS.upcoming}40` }}
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
@@ -468,8 +482,13 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                     id={appointment.id}
                     date={new Date(appointment.scheduledStart)}
                     appointmentTypeId={appointment.appointmentType?.id}
-                    onClick={() => handleScheduledAppointmentClick(appointment.id)}
-                    color={TIMELINE_COLORS.upcoming}
+                    isEditing={appointment.id === currentAppointmentId}
+                    onClick={appointment.id !== currentAppointmentId
+                      ? () => handleScheduledAppointmentClick(appointment.id)
+                      : undefined}
+                    color={appointment.id === currentAppointmentId
+                      ? TIMELINE_COLORS.today  // Blue when editing
+                      : TIMELINE_COLORS.upcoming}
                   />
                 ))}
               </motion.div>
@@ -1227,7 +1246,7 @@ export default function AppointmentDetailPage() {
             <PatientHeader appointment={appointment} />
 
             {/* Visit Timeline - Scrollable */}
-            <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
+            <ScrollableArea className="flex-1 py-4" deps={[appointmentId]}>
               {appointment.patient && (
                 <VisitTimeline
                   patientId={appointment.patient.id}
