@@ -112,8 +112,8 @@ function StatusSection({
         </motion.span>
       </div>
 
-      {/* Cards */}
-      <div className="flex flex-col gap-2">
+      {/* Cards - no gap so left borders connect into one line */}
+      <div className="flex flex-col">
         {appointments.map((appointment) => (
           <PatientCard
             key={appointment.id}
@@ -215,19 +215,8 @@ function PatientCard({
   const isCompleted =
     appointment.status === AppointmentStatus.COMPLETED && appointment.isSigned;
 
-  // Calculate hover styles (selection is handled by layoutId indicator)
-  const getHoverStyles = () => {
-    if (isHovered && !isSelected) {
-      return {
-        backgroundColor: isCompleted ? `${statusColor}33` : `${statusColor}18`,
-        boxShadow: `inset 3px 0 0 0 ${statusColor}`,
-      };
-    }
-    return {
-      backgroundColor: "transparent",
-      boxShadow: "none",
-    };
-  };
+  // Static muted border on all cards; selection indicator handles full-color + background
+  const mutedBorder = `inset 3px 0 0 0 ${statusColor}40`;
 
   // Card height: 62px (avatar 32px + gap 4px + time 14px + padding 12px = 62px)
   const CARD_HEIGHT = "h-[62px]";
@@ -242,21 +231,29 @@ function PatientCard({
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className={`relative px-2 ${
+      className={`group relative px-2 ${
         compact
           ? `flex flex-col items-start justify-center gap-1 ${CARD_HEIGHT}`
           : `w-full text-left flex items-center ${CARD_HEIGHT}`
       }`}
-      animate={getHoverStyles()}
-      transition={{ duration: 0.15 }}
+      style={{ boxShadow: mutedBorder }}
     >
-      {/* Selection indicator - shared layoutId so it animates between cards */}
+      {/* Hover background - CSS-only, respects @media (hover: hover) so no flash on touch */}
+      {!isSelected && (
+        <div
+          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+          style={{ backgroundColor: `${statusColor}15` }}
+        />
+      )}
+
+      {/* Selection indicator - shared layoutId so it morphs between cards */}
+      {/* Handles background fill + full-color left border */}
       {isSelected && (
         <motion.div
           layoutId="selection-indicator"
-          className="absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundColor: isCompleted ? `${statusColor}50` : `${statusColor}30`,
+            backgroundColor: isCompleted ? `${statusColor}40` : `${statusColor}25`,
             boxShadow: `inset 3px 0 0 0 ${statusColor}`,
           }}
           transition={SPRING_TRANSITION}
@@ -269,7 +266,7 @@ function PatientCard({
           compact ? "flex-col items-start gap-1" : "items-start gap-2"
         }`}
       >
-        {/* Avatar - shared across modes */}
+        {/* Avatar */}
         <motion.div
           layoutId={`avatar-${appointmentId}`}
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
