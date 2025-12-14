@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo, useLayoutEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Timeline } from './Timeline'
@@ -11,8 +11,12 @@ import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { SIDEBAR_ANIMATION } from '@/lib/animations'
 import { getAppointmentsByStatus, type AppointmentWithRelations } from '@/data/mock-data'
 
+// CSS clamp value for consistent responsive width
+const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
+
 export function TodayScreen() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const {
     startTransition,
     selectedAppointmentId,
@@ -22,6 +26,37 @@ export function TodayScreen() {
   } = useTransition()
   const [, setHoveredAppointmentId, effectiveHoveredId] = useHoverWithKeyboardNav<string>()
   const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Dynamic expanded width (calculated client-side)
+  const [expandedWidth, setExpandedWidth] = useState(SIDEBAR_ANIMATION.getExpandedWidth())
+
+  // Recalculate width on window resize
+  useLayoutEffect(() => {
+    const updateWidth = () => setExpandedWidth(SIDEBAR_ANIMATION.getExpandedWidth())
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
+  // Read selection from URL query param on mount
+  useEffect(() => {
+    const selectedFromUrl = searchParams.get('selected')
+    if (selectedFromUrl && !selectedAppointmentId) {
+      setSelectedAppointmentId(selectedFromUrl)
+    }
+  }, [searchParams, selectedAppointmentId, setSelectedAppointmentId])
+
+  // Update URL when selection changes (for keyboard navigation)
+  const updateUrlSelection = useCallback((appointmentId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (appointmentId) {
+      params.set('selected', appointmentId)
+    } else {
+      params.delete('selected')
+    }
+    const newUrl = params.toString() ? `?${params.toString()}` : '/'
+    router.replace(newUrl, { scroll: false })
+  }, [searchParams, router])
 
   // Get flat ordered list of all appointment IDs (same order as PatientCards)
   const orderedAppointmentIds = useMemo(() => {
@@ -58,6 +93,7 @@ export function TodayScreen() {
     // ESC: deselect the card and stay on Today
     if (event.key === 'Escape' && selectedAppointmentId) {
       setSelectedAppointmentId(null)
+      updateUrlSelection(null)
     }
     // Enter: if card selected, go to appointment; if no card, just select the last one
     if (event.key === 'Enter') {
@@ -67,6 +103,7 @@ export function TodayScreen() {
       } else if (lastSelectedAppointmentId) {
         // No card selected: just highlight the last selected card (don't navigate)
         setSelectedAppointmentId(lastSelectedAppointmentId)
+        updateUrlSelection(lastSelectedAppointmentId)
       }
     }
     // Arrow keys: navigate between cards
@@ -82,6 +119,7 @@ export function TodayScreen() {
         const startId = lastSelectedAppointmentId ||
           (event.key === 'ArrowDown' ? orderedAppointmentIds[0] : orderedAppointmentIds[orderedAppointmentIds.length - 1])
         setSelectedAppointmentId(startId)
+        updateUrlSelection(startId)
         return
       }
 
@@ -100,9 +138,11 @@ export function TodayScreen() {
           : currentIndex - 1
       }
 
-      setSelectedAppointmentId(orderedAppointmentIds[newIndex])
+      const newId = orderedAppointmentIds[newIndex]
+      setSelectedAppointmentId(newId)
+      updateUrlSelection(newId)
     }
-  }, [selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode])
+  }, [selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode, updateUrlSelection])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -111,14 +151,14 @@ export function TodayScreen() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - animated width */}
+      {/* Patient Cards - animated width (responsive: 20vw, min 180px, max 280px) */}
       <motion.div
-        className="flex flex-col relative flex-shrink-0"
-        initial={{ width: SIDEBAR_ANIMATION.expandedWidth }}
+        className={`flex flex-col relative flex-shrink-0 ${!isCollapsed ? PANEL_WIDTH_CLASS : ''}`}
+        initial={{ width: expandedWidth }}
         animate={{
           width: isCollapsed
             ? SIDEBAR_ANIMATION.collapsedWidth
-            : SIDEBAR_ANIMATION.expandedWidth
+            : expandedWidth
         }}
         transition={SIDEBAR_ANIMATION.transition}
       >

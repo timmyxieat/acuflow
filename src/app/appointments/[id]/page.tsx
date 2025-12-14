@@ -1,7 +1,7 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
@@ -35,6 +35,10 @@ import {
 } from '@/data/mock-data'
 import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus, Lock } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { getStatusColor } from '@/lib/constants'
+
+// CSS clamp value for consistent responsive width (20vw, min 180px, max 280px)
+const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -97,13 +101,16 @@ interface PatientHeaderProps {
   appointment: AppointmentWithRelations
 }
 
+// Avatar size class - scales with viewport (2.5vw, min 32px, max 48px)
+const AVATAR_SIZE_CLASS = 'h-[clamp(32px,2.5vw,48px)] w-[clamp(32px,2.5vw,48px)]'
+
 function PatientHeader({ appointment }: PatientHeaderProps) {
   const patient = appointment.patient
 
   if (!patient) {
     return (
-      <div className="flex h-[72px] items-center gap-3 px-2 border-b border-border">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+      <div className="flex h-[72px] items-center gap-2 px-2 border-b border-border">
+        <div className={`flex ${AVATAR_SIZE_CLASS} items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground`}>
           ?
         </div>
         <div>
@@ -118,14 +125,14 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
   const sexDisplay = patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : null
 
   return (
-    <div className="flex h-[72px] items-center gap-3 px-2 border-b border-border">
-      {/* Avatar */}
-      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+    <div className="flex h-[72px] items-center gap-2 px-2 border-b border-border">
+      {/* Avatar - scales with viewport (32px to 48px) */}
+      <div className={`flex ${AVATAR_SIZE_CLASS} flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground`}>
         {initials}
       </div>
-      <div>
-        <h2 className="text-lg font-semibold">{getPatientDisplayName(patient)}</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <h2 className="text-base font-semibold truncate">{getPatientDisplayName(patient)}</h2>
+        <p className="text-xs text-muted-foreground">
           {age} years old{sexDisplay && `, ${sexDisplay}`}
         </p>
       </div>
@@ -698,6 +705,7 @@ function getRelativeDay(date: Date): string {
 
 function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
+  const statusColor = getStatusColor(appointment.status, appointment.isSigned)
 
   // Determine action button
   const getActionButton = () => {
@@ -730,11 +738,17 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
         <div className="text-sm text-muted-foreground">{timeRange}</div>
       </div>
 
-      {/* Right: Status badge + action button */}
+      {/* Right: Status badge (colored dot + black text) + action button */}
       <div className="flex items-center gap-3">
-        <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusDisplay.bgColor} ${statusDisplay.textColor}`}>
-          {statusDisplay.label}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <div
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: statusColor }}
+          />
+          <span className="text-sm font-medium text-foreground">
+            {statusDisplay.label}
+          </span>
+        </div>
         {action && (
           <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             {action.label}
@@ -943,6 +957,7 @@ function PatientIntakeSection() {
 export default function AppointmentDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { setHeader, resetHeader } = useHeader()
   const {
     isTransitioning,
@@ -961,7 +976,25 @@ export default function AppointmentDetailPage() {
   const appointmentId = params.id as string
 
   // State for selected visit in timeline (for preview)
-  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+  const [selectedVisitId, setSelectedVisitIdState] = useState<string | null>(null)
+
+  // Update URL when preview selection changes
+  const updateUrlPreview = useCallback((visitId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (visitId) {
+      params.set('preview', visitId)
+    } else {
+      params.delete('preview')
+    }
+    const newUrl = `/appointments/${appointmentId}${params.toString() ? `?${params.toString()}` : ''}`
+    router.replace(newUrl, { scroll: false })
+  }, [searchParams, router, appointmentId])
+
+  // Wrapper to set both state and URL
+  const setSelectedVisitId = useCallback((visitId: string | null) => {
+    setSelectedVisitIdState(visitId)
+    updateUrlPreview(visitId)
+  }, [updateUrlPreview])
   // Track preview slide direction for animation
   const [previewSlideDirection, setPreviewSlideDirection] = useState<'up' | 'down' | null>(null)
 
@@ -983,6 +1016,17 @@ export default function AppointmentDetailPage() {
 
   // Refs for SOAP textareas
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
+
+  // Dynamic expanded width for panels (calculated client-side)
+  const [expandedWidth, setExpandedWidth] = useState(SIDEBAR_ANIMATION.getExpandedWidth())
+
+  // Recalculate width on window resize
+  useLayoutEffect(() => {
+    const updateWidth = () => setExpandedWidth(SIDEBAR_ANIMATION.getExpandedWidth())
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
 
   // Auto-save SOAP notes
   const { status: saveStatus, markAsSaved, flush: flushSave } = useAutoSave({
@@ -1069,14 +1113,29 @@ export default function AppointmentDetailPage() {
     }
   }, [isTransitioning, completeTransition])
 
-  // Auto-select most recent completed visit for preview on load
+  // Initialize preview selection from URL or default to most recent
   useEffect(() => {
-    if (orderedVisitIds.length > 0 && selectedVisitId === null) {
+    if (orderedVisitIds.length === 0) return
+
+    // Check URL for preview param
+    const previewFromUrl = searchParams.get('preview')
+
+    if (previewFromUrl && orderedVisitIds.includes(previewFromUrl)) {
+      // Valid preview in URL - use it (don't update URL again)
+      setSelectedVisitIdState(previewFromUrl)
+      setFocusedVisitIndex(orderedVisitIds.indexOf(previewFromUrl))
+    } else if (selectedVisitId === null) {
+      // No URL param or invalid - default to most recent
       // orderedVisitIds is already sorted (most recent first from getPatientVisitHistory)
-      setSelectedVisitId(orderedVisitIds[0])
+      const defaultVisitId = orderedVisitIds[0]
+      setSelectedVisitIdState(defaultVisitId)
       setFocusedVisitIndex(0)
+      // Update URL with the default
+      updateUrlPreview(defaultVisitId)
     }
-  }, [orderedVisitIds, selectedVisitId])
+  // Only run on mount or when visits change, not when searchParams changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedVisitIds, appointmentId])
 
   // Handle keyboard shortcuts - Two-zone navigation (SOAP ↔ Visit History)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -1305,14 +1364,14 @@ export default function AppointmentDetailPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - collapsible, animate width */}
+      {/* Patient Cards - collapsible, animate width (responsive: 20vw, min 180px, max 280px) */}
       <motion.div
-        className="flex flex-col relative flex-shrink-0"
-        initial={shouldAnimateSidebar ? { width: SIDEBAR_ANIMATION.expandedWidth } : false}
+        className={`flex flex-col relative flex-shrink-0 ${!isPatientCardsCollapsed ? PANEL_WIDTH_CLASS : ''}`}
+        initial={shouldAnimateSidebar ? { width: expandedWidth } : false}
         animate={{
           width: isPatientCardsCollapsed
             ? SIDEBAR_ANIMATION.collapsedWidth
-            : SIDEBAR_ANIMATION.expandedWidth
+            : expandedWidth
         }}
         transition={SIDEBAR_ANIMATION.transition}
       >
@@ -1345,12 +1404,12 @@ export default function AppointmentDetailPage() {
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Middle Panel - Patient Info & Visit Timeline */}
+        {/* Middle Panel - Patient Info & Visit Timeline (responsive: 20vw, min 180px, max 280px) */}
         {/* Static on fresh load and same-patient transitions, animated on patient switch */}
         <AnimatePresence mode="wait" initial={true}>
           <motion.div
             key={middlePanelKey}
-            className="flex w-[200px] flex-col border-r border-border bg-card"
+            className={`flex flex-col border-r border-border bg-card ${PANEL_WIDTH_CLASS}`}
             initial={{
               // Horizontal slide from right for 'today' transitions
               x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
@@ -1372,8 +1431,8 @@ export default function AppointmentDetailPage() {
             {/* Patient Header - always static within this panel */}
             <PatientHeader appointment={appointment} />
 
-            {/* Visit Timeline - Scrollable */}
-            <ScrollableArea className="flex-1 py-4" deps={[appointmentId]}>
+            {/* Visit Timeline - Scrollable (matches PatientCards spacing) */}
+            <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
               {appointment.patient && (
                 <VisitTimeline
                   patientId={appointment.patient.id}

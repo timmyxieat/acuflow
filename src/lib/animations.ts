@@ -4,8 +4,16 @@
 export const EASE_OUT = [0.4, 0, 0.2, 1] as const
 
 // Sidebar (PatientCards) animation config
+// Width scales with viewport: 20vw, min 180px, max 280px
 export const SIDEBAR_ANIMATION = {
-  expandedWidth: 200,
+  // Dynamic width calculation (call from client-side only)
+  getExpandedWidth: () => {
+    if (typeof window === 'undefined') return 200 // SSR fallback
+    const vw20 = window.innerWidth * 0.2
+    return Math.min(Math.max(vw20, 180), 280)
+  },
+  // Static expanded width for CSS (use clamp in className instead)
+  expandedWidth: 200, // Fallback for SSR, actual width uses CSS clamp
   collapsedWidth: 'auto' as const,
   transition: {
     duration: 0.3,

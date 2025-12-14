@@ -308,22 +308,24 @@ function PatientCard({
           </div>
         )}
 
-        {/* Compact mode: Time below avatar */}
+        {/* Compact mode: Time below avatar - fixed width to prevent container fluctuation */}
         {compact && (
           <motion.div
             layoutId={`time-${appointmentId}`}
-            className="flex items-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap"
+            className="w-8 overflow-hidden"
             transition={SPRING_TRANSITION}
             suppressHydrationWarning
           >
-            {timeDisplay.icon && (
-              <timeDisplay.icon
-                className={`h-2.5 w-2.5 flex-shrink-0 ${
-                  timeDisplay.shake ? "animate-bell-shake" : ""
-                }`}
-              />
-            )}
-            <span>{timeDisplay.text}</span>
+            <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
+              {timeDisplay.icon && (
+                <timeDisplay.icon
+                  className={`h-2.5 w-2.5 flex-shrink-0 ${
+                    timeDisplay.shake ? "animate-bell-shake" : ""
+                  }`}
+                />
+              )}
+              <span>{timeDisplay.text}</span>
+            </div>
           </motion.div>
         )}
       </div>
