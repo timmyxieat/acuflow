@@ -5,7 +5,7 @@ import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
 import { SPRING_TRANSITION, FADE_SLIDE_TRANSITION } from "@/lib/animations";
-import { Timer, Bell } from "lucide-react";
+import { Timer, Bell, ChevronLeft, ChevronRight } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
   getAppointmentsByStatus,
@@ -43,6 +43,8 @@ interface PatientCardsProps {
   selectedAppointmentId?: string;
   /** Compact mode shows only avatar and time */
   compact?: boolean;
+  /** Callback to toggle compact/expanded mode */
+  onToggleCompact?: () => void;
 }
 
 interface StatusSectionProps {
@@ -340,6 +342,7 @@ export function PatientCards({
   hoveredAppointmentId,
   selectedAppointmentId,
   compact,
+  onToggleCompact,
 }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), []);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -390,8 +393,24 @@ export function PatientCards({
   return (
     <LayoutGroup>
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
+        {/* Header row with collapse/expand button */}
+        {onToggleCompact && (
+          <div className={`flex h-8 items-center px-2 flex-shrink-0 ${compact ? "justify-center" : "justify-start"}`}>
+            <button
+              onClick={onToggleCompact}
+              className="flex items-center text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
+            >
+              {compact ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )}
         <ScrollableArea
-          className="flex flex-col gap-3 py-3"
+          className="flex flex-col gap-3 pb-3"
           deps={[groupedAppointments]}
           hideScrollbar
         >

@@ -38,6 +38,7 @@ Status: `[ ]` = not done, `[x]` = done
 
 ## Patient Cards / Right Sidebar
 
+- [ ] when clicking a patient card, it doesn't have a click highlight feedback for the sake of the animation
 - [X] Persistent patient cards panel (left of calendar)
 - [X] Collapse/expand toggle for cards
 - [X] Compact mode (avatar + time only when collapsed)
