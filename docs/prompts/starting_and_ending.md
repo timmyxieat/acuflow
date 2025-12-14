@@ -31,16 +31,19 @@ You're running low on context. Before this session ends:
 
 ---
 
-## Ending a Meta Session 
+## Ending a Meta Session
 
 Use this when the session focused on project organization, documentation restructuring, tooling changes, etc. rather than feature development.
 
+**Important:** Replace `{VERSION}` below with the actual current version number before sending. Check the latest handoff doc in `docs/handoffs/` to find the current version (e.g., if latest is `1.19_soap_sections.md`, use `1.19`).
+
 ```
-You're running low on context. Before this session ends:
+This session is ending. Before this session ends:
 
 1. Commit and push all current changes with a descriptive commit message
 2. Create a handoff doc at `docs/handoffs/meta/` using the format:
-   - Filename: `{current_version}_1_{description}.md` (e.g., `1.16_1_claude_md_restructure.md`)
+   - Filename: `{VERSION}_N_{description}.md` 
+   - N is a sequence number (1, 2, 3...) for multiple meta handoffs in the same version
    - The version number ties it to the current feature development timeline
 
    Include in the handoff:
@@ -58,7 +61,9 @@ You're running low on context. Before this session ends:
 
 ## When to Use Which Ending
 
-| Session Type        | Handoff Location                             | Example                     |
-| ------------------- | -------------------------------------------- | --------------------------- |
-| Feature development | `docs/handoffs/1.XX_feature_name.md`       | Building SOAP note UI       |
-| Meta/maintenance    | `docs/handoffs/meta/1.XX_1_description.md` | Restructuring documentation |
+| Session Type        | Handoff Location                                  | Example                     |
+| ------------------- | ------------------------------------------------- | --------------------------- |
+| Feature development | `docs/handoffs/{VERSION}_feature_name.md`       | `1.19_soap_sections.md`   |
+| Meta/maintenance    | `docs/handoffs/meta/{VERSION}_N_description.md` | `1.19_1_status_colors.md` |
+
+**How to find the current version:** Look at the latest handoff doc in `docs/handoffs/` (not meta). The number before the underscore is the version.

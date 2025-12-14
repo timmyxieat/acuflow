@@ -97,7 +97,6 @@ function StatusSection({
               initial={FADE_SLIDE_TRANSITION.initial}
               animate={FADE_SLIDE_TRANSITION.animate}
               exit={FADE_SLIDE_TRANSITION.exit}
-              transition={FADE_SLIDE_TRANSITION.transition}
               className="whitespace-nowrap"
             >
               {title}
@@ -283,14 +282,13 @@ function PatientCard({
         {/* Expanded mode: Name + Time stacked vertically */}
         {!compact && (
           <div className="min-w-0 flex-1 flex flex-col justify-center">
-            {/* Name - fades + slides from right */}
+            {/* Name - fades + slides from right (delayed on expand) */}
             <AnimatePresence mode="popLayout">
               <motion.div
                 key="name"
                 initial={FADE_SLIDE_TRANSITION.initial}
                 animate={FADE_SLIDE_TRANSITION.animate}
                 exit={FADE_SLIDE_TRANSITION.exit}
-                transition={FADE_SLIDE_TRANSITION.transition}
               >
                 <div className="truncate text-sm font-medium">{displayName}</div>
               </motion.div>

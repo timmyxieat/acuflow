@@ -48,12 +48,95 @@ export const SPRING_TRANSITION = {
 }
 
 // Fade + slide transition for text elements (names, status titles)
+// Delay on enter lets layout animation start first, then text fades in
+// Exit is immediate so text disappears while layout collapses
 export const FADE_SLIDE_TRANSITION = {
-  initial: { opacity: 0, x: 16 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: 16 },
-  transition: {
-    duration: 0.2,
-    ease: 'easeOut' as const,
+  initial: { opacity: 0, x: -16 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: {
+      duration: 0.2,
+      ease: 'easeOut' as const,
+      delay: 0.1, // Wait for layout to settle before fading in
+    },
+  },
+  exit: {
+    opacity: 0,
+    x: -16,
+    transition: {
+      duration: 0.15,
+      ease: 'easeIn' as const,
+      // No delay on exit - disappear immediately
+    },
+  },
+}
+
+// Card selection animations (divider line and label)
+// Slide down from top when card becomes selected
+export const CARD_SELECTION_ANIMATION = {
+  // Divider line
+  divider: {
+    initial: { opacity: 0, scaleX: 0 },
+    animate: {
+      opacity: 1,
+      scaleX: 1,
+      transition: { duration: 0.2, ease: EASE_OUT },
+    },
+    exit: {
+      opacity: 0,
+      scaleX: 0,
+      transition: { duration: 0.15, ease: 'easeIn' as const },
+    },
+  },
+  // Label text (slight delay after divider)
+  label: {
+    initial: { opacity: 0, y: -8 },
+    animate: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.2, ease: EASE_OUT, delay: 0.08 },
+    },
+    exit: {
+      opacity: 0,
+      y: -8,
+      transition: { duration: 0.12, ease: 'easeIn' as const },
+    },
+  },
+}
+
+// SOAP preview content animation
+// Slide down with fade, supports stagger via custom delay
+export const SOAP_PREVIEW_ANIMATION = {
+  initial: { opacity: 0, y: -12 },
+  animate: (staggerIndex: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.25,
+      ease: EASE_OUT,
+      delay: staggerIndex * 0.05, // Stagger each section by 50ms
+    },
+  }),
+  exit: {
+    opacity: 0,
+    y: -8,
+    transition: { duration: 0.15, ease: 'easeIn' as const },
+  },
+}
+
+// Button pop animation (fade + scale)
+// Subtle pop to draw attention when button appears
+export const BUTTON_POP_ANIMATION = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.2, ease: EASE_OUT },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    transition: { duration: 0.15, ease: 'easeIn' as const },
   },
 }
