@@ -1250,6 +1250,110 @@ function getPastDate(daysAgo: number, hours: number, minutes: number = 0): Date 
   return date;
 }
 
+function getFutureDate(daysAhead: number, hours: number, minutes: number = 0): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
+// =============================================================================
+// MOCK FUTURE APPOINTMENTS (for scheduled visits section)
+// =============================================================================
+
+export const mockFutureAppointments: Appointment[] = [
+  // Emily Johnson (patient_001) - 3 future scheduled appointments
+  {
+    id: "future_appt_e1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002", // Follow-up
+    scheduledStart: getFutureDate(7, 11),
+    scheduledEnd: getFutureDate(7, 12),
+    status: AppointmentStatus.SCHEDULED,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: null,
+    startedAt: null,
+    needleInsertionAt: null,
+    needleRemovalAt: null,
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "future_appt_e2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002", // Follow-up
+    scheduledStart: getFutureDate(14, 11),
+    scheduledEnd: getFutureDate(14, 12),
+    status: AppointmentStatus.SCHEDULED,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: null,
+    startedAt: null,
+    needleInsertionAt: null,
+    needleRemovalAt: null,
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "future_appt_e3",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_001",
+    appointmentTypeId: "appt_type_002", // Follow-up
+    scheduledStart: getFutureDate(21, 11),
+    scheduledEnd: getFutureDate(21, 12),
+    status: AppointmentStatus.SCHEDULED,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: null,
+    startedAt: null,
+    needleInsertionAt: null,
+    needleRemovalAt: null,
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  // Jennifer Lee (patient_003) - 1 future appointment
+  {
+    id: "future_appt_j1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_003",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getFutureDate(10, 14),
+    scheduledEnd: getFutureDate(10, 15),
+    status: AppointmentStatus.SCHEDULED,
+    isLate: false,
+    isSigned: false,
+    checkedInAt: null,
+    startedAt: null,
+    needleInsertionAt: null,
+    needleRemovalAt: null,
+    completedAt: null,
+    treatmentDurationMinutes: null,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+];
+
 export const mockPastAppointments: Appointment[] = [
   // Emily Johnson - 4 past visits (frequent patient)
   {
@@ -1971,6 +2075,7 @@ export const mockVisits: Visit[] = [
 // =============================================================================
 
 export function getEnrichedAppointments(): AppointmentWithRelations[] {
+  // Only return today's appointments (used for Today screen)
   return mockAppointments.map((appt) => ({
     ...appt,
     patient: mockPatients.find((p) => p.id === appt.patientId),
@@ -1980,6 +2085,32 @@ export function getEnrichedAppointments(): AppointmentWithRelations[] {
     ),
     conditions: mockConditions.filter((c) => c.patientId === appt.patientId),
   }));
+}
+
+/**
+ * Get a single appointment by ID from all sources (today + future)
+ * Used when navigating to a specific appointment
+ */
+export function getAppointmentById(appointmentId: string): AppointmentWithRelations | null {
+  // Search in today's appointments first
+  let appt = mockAppointments.find((a) => a.id === appointmentId);
+
+  // If not found, search in future appointments
+  if (!appt) {
+    appt = mockFutureAppointments.find((a) => a.id === appointmentId);
+  }
+
+  if (!appt) return null;
+
+  return {
+    ...appt,
+    patient: mockPatients.find((p) => p.id === appt.patientId),
+    practitioner: mockPractitioners.find((pr) => pr.id === appt.practitionerId),
+    appointmentType: mockAppointmentTypes.find(
+      (at) => at.id === appt.appointmentTypeId
+    ),
+    conditions: mockConditions.filter((c) => c.patientId === appt.patientId),
+  };
 }
 
 // =============================================================================
@@ -2304,4 +2435,74 @@ export function getVisitById(visitId: string): VisitWithAppointment | null {
     },
     chiefComplaint,
   };
+}
+
+/**
+ * Scheduled appointment with appointment type for display
+ */
+export interface ScheduledAppointmentWithType {
+  id: string;
+  patientId: string;
+  scheduledStart: Date;
+  scheduledEnd: Date;
+  status: AppointmentStatus;
+  appointmentType?: AppointmentType;
+  isFuture: boolean; // True if scheduled for a future date (not today)
+}
+
+/**
+ * Get all scheduled appointments for a patient (today + future)
+ * Excludes completed/cancelled/no-show appointments
+ * Returns sorted by date ascending (nearest first)
+ */
+export function getPatientScheduledAppointments(
+  patientId: string,
+  currentAppointmentId?: string
+): ScheduledAppointmentWithType[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Get today's appointments for this patient (from mockAppointments)
+  const todayAppointments = mockAppointments.filter((appt) => {
+    if (appt.patientId !== patientId) return false;
+    // Include all non-completed/cancelled statuses, plus the current appointment regardless of status
+    const isCurrentAppt = appt.id === currentAppointmentId;
+    const isActiveStatus =
+      appt.status === AppointmentStatus.SCHEDULED ||
+      appt.status === AppointmentStatus.CHECKED_IN ||
+      appt.status === AppointmentStatus.IN_PROGRESS;
+    return isCurrentAppt || isActiveStatus;
+  });
+
+  // Get future appointments for this patient
+  const futureAppointments = mockFutureAppointments.filter(
+    (appt) => appt.patientId === patientId
+  );
+
+  // Combine and enrich with appointment type
+  const allAppointments = [...todayAppointments, ...futureAppointments].map((appt) => {
+    const apptDate = new Date(appt.scheduledStart);
+    apptDate.setHours(0, 0, 0, 0);
+    const isFuture = apptDate.getTime() >= tomorrow.getTime();
+
+    return {
+      id: appt.id,
+      patientId: appt.patientId,
+      scheduledStart: appt.scheduledStart,
+      scheduledEnd: appt.scheduledEnd,
+      status: appt.status,
+      appointmentType: mockAppointmentTypes.find(
+        (at) => at.id === appt.appointmentTypeId
+      ),
+      isFuture,
+    };
+  });
+
+  // Sort by date ascending (nearest first)
+  return allAppointments.sort(
+    (a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime()
+  );
 }

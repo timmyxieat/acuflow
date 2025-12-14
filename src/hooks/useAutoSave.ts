@@ -50,21 +50,35 @@ export function useAutoSave<T>({
   // Track "saved" display timer
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Use ref for onSave to avoid recreating save callback when onSave changes
+  // This is critical - inline onSave functions would otherwise reset the debounce timer every render
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
+
+  // Use ref for data to access latest in save callback without recreating it
+  const dataRef = useRef(data)
+  dataRef.current = data
+
   // Serialize data for comparison
   const serializedData = JSON.stringify(data)
+  const serializedDataRef = useRef(serializedData)
+  serializedDataRef.current = serializedData
 
-  // Save function
+  // Save function - uses refs so it doesn't need to be recreated
   const save = useCallback(async () => {
+    const currentSerialized = serializedDataRef.current
+    const currentData = dataRef.current
+
     // Skip if data hasn't changed
-    if (serializedData === lastSavedDataRef.current) {
+    if (currentSerialized === lastSavedDataRef.current) {
       return
     }
 
     setStatus('saving')
 
     try {
-      await onSave(data)
-      lastSavedDataRef.current = serializedData
+      await onSaveRef.current(currentData)
+      lastSavedDataRef.current = currentSerialized
       setStatus('saved')
 
       // Reset to idle after delay
@@ -78,17 +92,21 @@ export function useAutoSave<T>({
       console.error('[useAutoSave] Save failed:', error)
       setStatus('error')
     }
-  }, [data, serializedData, onSave, savedDisplayMs])
+  }, [savedDisplayMs])
+
+  // Function to mark data as already saved (e.g., when loading from storage)
+  // Can pass data directly to avoid timing issues with state updates
+  const markAsSaved = useCallback((dataOverride?: T) => {
+    if (dataOverride !== undefined) {
+      lastSavedDataRef.current = JSON.stringify(dataOverride)
+    } else {
+      lastSavedDataRef.current = serializedDataRef.current
+    }
+  }, [])
 
   // Debounced effect - triggers save after delay
   useEffect(() => {
     if (!enabled) return
-
-    // Skip if this is the initial render with empty data
-    const isEmpty = serializedData === JSON.stringify({ subjective: '', objective: '', assessment: '', plan: '' })
-    if (isEmpty && lastSavedDataRef.current === null) {
-      return
-    }
 
     // Skip if data hasn't changed from last save
     if (serializedData === lastSavedDataRef.current) {
@@ -125,5 +143,5 @@ export function useAutoSave<T>({
     }
   }, [])
 
-  return { status }
+  return { status, markAsSaved }
 }

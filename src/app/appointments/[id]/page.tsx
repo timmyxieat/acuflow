@@ -8,21 +8,24 @@ import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { useAutoSave } from '@/hooks/useAutoSave'
-import { saveVisitSOAP } from '@/lib/api/visits'
+import { saveVisitSOAP, loadVisitSOAP } from '@/lib/api/visits'
 import { formatTime } from '@/lib/dev-time'
 import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import {
   getEnrichedAppointments,
+  getAppointmentById,
   getAppointmentsByStatus,
   getPatientDisplayName,
   calculateAge,
   getStatusDisplay,
   getPatientVisitHistory,
+  getPatientScheduledAppointments,
   getVisitById,
   type AppointmentWithRelations,
   type VisitWithAppointment,
+  type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp } from 'lucide-react'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -127,8 +130,10 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
 interface VisitTimelineProps {
   patientId: string
+  currentAppointmentId: string
   selectedVisitId: string | null
   onSelectVisit: (visitId: string | null, index: number) => void
+  onSelectScheduledAppointment?: (appointmentId: string) => void
   hoveredVisitId?: string | null
   onHoverVisit?: (visitId: string | null) => void
   // Focus state for keyboard navigation
@@ -242,45 +247,207 @@ function VisitCard({
   )
 }
 
-function VisitTimeline({ patientId, selectedVisitId, onSelectVisit, hoveredVisitId, onHoverVisit, isZoneFocused, focusedIndex }: VisitTimelineProps) {
-  const visitHistory = getPatientVisitHistory(patientId)
+// Card for scheduled appointments (today's and future)
+function ScheduledVisitCard({
+  appointment,
+  isCurrentAppointment,
+  onClick,
+}: {
+  appointment: ScheduledAppointmentWithType
+  isCurrentAppointment: boolean
+  onClick?: () => void
+}) {
+  const appointmentType = appointment.appointmentType
+  const visitDate = new Date(appointment.scheduledStart)
 
-  // Empty state for new patients
-  if (visitHistory.length === 0) {
+  // Get the icon component for this appointment type
+  const IconComponent = appointmentType?.id
+    ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
+    : Calendar
+
+  // Format the date for scheduled appointments
+  const formatScheduledDate = (date: Date): string => {
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    const isSameDay = (d1: Date, d2: Date) =>
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear()
+
+    if (isSameDay(date, today)) {
+      return 'Today'
+    }
+    if (isSameDay(date, tomorrow)) {
+      return 'Tomorrow'
+    }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // For today's appointment (currently viewing), show permanently selected state
+  if (isCurrentAppointment) {
     return (
-      <div className="flex flex-col gap-3">
-        <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Visit History
-        </h3>
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            First visit for this patient
-          </p>
-          <p className="text-xs text-muted-foreground/70 mt-1">
-            Past visits will appear here
-          </p>
+      <div className="w-full text-left rounded-lg border border-primary bg-primary/5 ring-1 ring-primary/20 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <IconComponent className="h-4 w-4 text-primary/60 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-medium text-primary">
+                {formatScheduledDate(visitDate)}
+              </span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {appointmentType?.name || 'Appointment'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-primary/20">
+          <span className="text-[10px] font-medium text-primary uppercase tracking-wider">
+            Currently editing
+          </span>
         </div>
       </div>
     )
   }
 
+  // For future appointments, show dashed border and muted styling
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        Visit History
-      </h3>
-      <div className="flex flex-col gap-2">
-        {visitHistory.map((visit, index) => (
-          <VisitCard
-            key={visit.id}
-            visit={visit}
-            isSelected={selectedVisitId === visit.id}
-            isHovered={hoveredVisitId === visit.id}
-            isFocused={isZoneFocused && focusedIndex === index}
-            onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)}
-            onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-          />
-        ))}
+    <button
+      onClick={onClick}
+      className="w-full text-left rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 transition-all hover:border-muted-foreground/50 hover:bg-muted/30"
+    >
+      <div className="flex items-start justify-between gap-2 opacity-70">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium text-muted-foreground">
+              {formatScheduledDate(visitDate)}
+            </span>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">
+              {appointmentType?.name || 'Scheduled'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSelectVisit, onSelectScheduledAppointment, hoveredVisitId, onHoverVisit, isZoneFocused, focusedIndex }: VisitTimelineProps) {
+  const visitHistory = getPatientVisitHistory(patientId)
+  const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
+
+  // Separate appointments into categories
+  const currentAppt = scheduledAppointments.find(a => a.id === currentAppointmentId)
+  // Future appointments (excluding current) - these are collapsible
+  const futureAppointments = scheduledAppointments.filter(a => a.isFuture && a.id !== currentAppointmentId)
+  // Today's appointments (excluding current) - for when viewing a future appointment
+  const todayAppointments = scheduledAppointments.filter(a => !a.isFuture && a.id !== currentAppointmentId)
+
+  // State for expanding/collapsing future appointments
+  const [showFutureAppointments, setShowFutureAppointments] = useState(false)
+
+  // Handler for clicking on a scheduled appointment
+  const handleScheduledAppointmentClick = (appointmentId: string) => {
+    if (onSelectScheduledAppointment) {
+      onSelectScheduledAppointment(appointmentId)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Scheduled Visits Section */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Scheduled Visits
+          </h3>
+          {/* Expand/Collapse button for future appointments */}
+          {futureAppointments.length > 0 && (
+            <button
+              onClick={() => setShowFutureAppointments(!showFutureAppointments)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showFutureAppointments ? (
+                <>
+                  <ChevronUp className="h-3 w-3" />
+                  <span>Collapse</span>
+                </>
+              ) : (
+                <>
+                  <span>+{futureAppointments.length} more</span>
+                  <ChevronDown className="h-3 w-3" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {/* Future appointments (collapsed by default) - shown in reverse order so nearest is at bottom */}
+          {showFutureAppointments && [...futureAppointments].reverse().map((appointment) => (
+            <ScheduledVisitCard
+              key={appointment.id}
+              appointment={appointment}
+              isCurrentAppointment={false}
+              onClick={() => handleScheduledAppointmentClick(appointment.id)}
+            />
+          ))}
+
+          {/* Today's appointments (when viewing a future appointment) */}
+          {todayAppointments.map((appointment) => (
+            <ScheduledVisitCard
+              key={appointment.id}
+              appointment={appointment}
+              isCurrentAppointment={false}
+              onClick={() => handleScheduledAppointmentClick(appointment.id)}
+            />
+          ))}
+
+          {/* Current appointment (always visible) */}
+          {currentAppt && (
+            <ScheduledVisitCard
+              appointment={currentAppt}
+              isCurrentAppointment={true}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border" />
+
+      {/* Visit History Section */}
+      <div className="flex flex-col gap-3">
+        <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Visit History
+        </h3>
+
+        {visitHistory.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              First visit for this patient
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Past visits will appear here
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {visitHistory.map((visit, index) => (
+              <VisitCard
+                key={visit.id}
+                visit={visit}
+                isSelected={selectedVisitId === visit.id}
+                isHovered={hoveredVisitId === visit.id}
+                isFocused={isZoneFocused && focusedIndex === index}
+                onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)}
+                onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -575,20 +742,38 @@ export default function AppointmentDetailPage() {
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
 
   // Auto-save SOAP notes
-  const { status: saveStatus } = useAutoSave({
+  const { status: saveStatus, markAsSaved } = useAutoSave({
     data: soapData,
     onSave: async (data) => {
       await saveVisitSOAP({ appointmentId, soap: data })
     },
   })
 
+  // Load saved SOAP data from localStorage on mount or when appointment changes
+  useEffect(() => {
+    const saved = loadVisitSOAP(appointmentId)
+    if (saved) {
+      setSoapData(saved)
+      markAsSaved(saved) // Mark loaded data as already saved
+    } else {
+      // Reset to empty if no saved data (for new appointments)
+      const empty = {
+        subjective: '',
+        objective: '',
+        assessment: '',
+        plan: '',
+      }
+      setSoapData(empty)
+      markAsSaved(empty) // Mark empty as saved to prevent initial save
+    }
+  }, [appointmentId, markAsSaved])
+
   // Hover state with keyboard nav awareness
   const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
   const [, setHoveredVisitId, effectiveHoveredVisitId] = useHoverWithKeyboardNav<string>()
 
-  // Find the appointment from mock data
-  const appointments = getEnrichedAppointments()
-  const appointment = appointments.find((a) => a.id === appointmentId)
+  // Find the appointment from mock data (searches today + future appointments)
+  const appointment = getAppointmentById(appointmentId)
 
   // Get flat ordered list of all appointments (same order as PatientCards)
   const orderedAppointmentIds = useMemo(() => {
@@ -819,8 +1004,10 @@ export default function AppointmentDetailPage() {
     }
   }
 
-  // Only animate sidebar width when coming from Today screen
+  // Only animate sidebar width when coming from Today screen (not when switching scheduled visits)
   const shouldAnimateSidebar = transitionSource === 'today'
+  // For scheduled transitions, we don't need the exit animation on the patient panel
+  const isScheduledTransition = transitionSource === 'scheduled'
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -845,52 +1032,81 @@ export default function AppointmentDetailPage() {
       {/* Vertical divider */}
       <div className="w-px bg-border" />
 
-      {/* Main content - slides in from right from Today, vertical slide between appointments */}
+      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
+        {/* Middle Panel - Patient Info & Visit Timeline */}
+        {/* This section is animated on 'today' transition, static on 'scheduled' */}
         <AnimatePresence mode="wait" initial={true}>
           <motion.div
-            key={appointmentId}
-            className="flex flex-1"
+            key={transitionSource === 'scheduled' ? 'patient-panel-static' : appointmentId}
+            className="flex w-[300px] flex-col border-r border-border bg-card"
             initial={{
-              // From Today: slide from right, between appointments: vertical slide
               x: transitionSource === 'today' ? 100 : 0,
-              y: transitionSource === 'appointment'
-                ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                : 0,
-              opacity: 0,
+              opacity: transitionSource === 'today' ? 0 : 1,
             }}
-            animate={{ x: 0, y: 0, opacity: 1 }}
+            animate={{ x: 0, opacity: 1 }}
             exit={{
-              y: transitionSource === 'appointment'
-                ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                : 0,
-              opacity: 0,
+              opacity: transitionSource === 'today' ? 0 : 1,
             }}
             transition={SIDEBAR_ANIMATION.transition}
           >
-            {/* Middle Panel - Patient Info & Visit Timeline */}
-            <div className="flex w-[300px] flex-col border-r border-border bg-card">
-              {/* Patient Header */}
-              <PatientHeader appointment={appointment} />
+            {/* Patient Header - always static within this panel */}
+            <PatientHeader appointment={appointment} />
 
-              {/* Visit Timeline - Scrollable */}
-              <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
-                {appointment.patient && (
-                  <VisitTimeline
-                    patientId={appointment.patient.id}
-                    selectedVisitId={selectedVisitId}
-                    onSelectVisit={handleSelectVisit}
-                    hoveredVisitId={effectiveHoveredVisitId}
-                    onHoverVisit={setHoveredVisitId}
-                    isZoneFocused={focusZone === 'visits'}
-                    focusedIndex={focusedVisitIndex}
-                  />
-                )}
-              </ScrollableArea>
-            </div>
+            {/* Visit Timeline - Scrollable */}
+            <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
+              {appointment.patient && (
+                <VisitTimeline
+                  patientId={appointment.patient.id}
+                  currentAppointmentId={appointmentId}
+                  selectedVisitId={selectedVisitId}
+                  onSelectVisit={handleSelectVisit}
+                  onSelectScheduledAppointment={(apptId) => {
+                    // Determine direction based on appointment dates
+                    const currentApptDate = new Date(appointment.scheduledStart)
+                    const targetAppt = getAppointmentById(apptId)
+                    if (targetAppt) {
+                      const targetApptDate = new Date(targetAppt.scheduledStart)
+                      const direction = targetApptDate > currentApptDate ? 'down' : 'up'
+                      setSlideDirection(direction)
+                    }
+                    // Set transition source to 'scheduled' for different animation
+                    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled')
+                    router.push(`/appointments/${apptId}`)
+                  }}
+                  hoveredVisitId={effectiveHoveredVisitId}
+                  onHoverVisit={setHoveredVisitId}
+                  isZoneFocused={focusZone === 'visits'}
+                  focusedIndex={focusedVisitIndex}
+                />
+              )}
+            </ScrollableArea>
+          </motion.div>
+        </AnimatePresence>
 
-            {/* Right Panel - Appointment Details & SOAP */}
-            <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        {/* Right Panel - Appointment Details & SOAP */}
+        {/* This section always animates: horizontal from Today, vertical between appointments/scheduled */}
+        <div className="flex flex-1 flex-col overflow-hidden bg-background">
+          <AnimatePresence mode="wait" initial={true}>
+            <motion.div
+              key={appointmentId}
+              className="flex flex-1 flex-col overflow-hidden"
+              initial={{
+                x: transitionSource === 'today' ? 100 : 0,
+                y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                  ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+                  : 0,
+                opacity: 0,
+              }}
+              animate={{ x: 0, y: 0, opacity: 1 }}
+              exit={{
+                y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                  ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+                  : 0,
+                opacity: 0,
+              }}
+              transition={SIDEBAR_ANIMATION.transition}
+            >
               {/* Appointment Header */}
               <AppointmentHeader appointment={appointment} />
 
@@ -918,9 +1134,9 @@ export default function AppointmentDetailPage() {
                   />
                 </div>
               </ScrollableArea>
-            </div>
-          </motion.div>
-        </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   )
