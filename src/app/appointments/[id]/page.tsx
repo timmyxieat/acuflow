@@ -16,6 +16,7 @@ import {
   CARD_SELECTION_ANIMATION,
   SOAP_PREVIEW_ANIMATION,
   BUTTON_POP_ANIMATION,
+  SPRING_TRANSITION,
 } from '@/lib/animations'
 import {
   getEnrichedAppointments,
@@ -136,6 +137,21 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 // Visit Timeline (Left Panel)
 // =============================================================================
 
+// =============================================================================
+// Timeline Section Colors
+// =============================================================================
+
+const TIMELINE_COLORS = {
+  today: '#3b82f6',      // Blue - current appointment
+  upcoming: '#94a3b8',   // Muted slate - future appointments
+  unsigned: '#f59e0b',   // Amber - needs signature
+  history: '#94a3b8',    // Slate - signed past visits
+}
+
+// =============================================================================
+// Visit Timeline Props & Helpers
+// =============================================================================
+
 interface VisitTimelineProps {
   patientId: string
   currentAppointmentId: string
@@ -149,293 +165,274 @@ interface VisitTimelineProps {
   focusedIndex?: number
 }
 
-function formatVisitDate(date: Date): string {
+// Format date for timeline cards
+function formatTimelineDate(date: Date, isCurrentAppointment?: boolean): string {
+  if (isCurrentAppointment) return 'Today'
+
   const now = new Date()
   const visitDate = new Date(date)
 
+  // Check if today
+  const isToday = now.toDateString() === visitDate.toDateString()
+  if (isToday) return 'Today'
+
+  // Check if tomorrow
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (tomorrow.toDateString() === visitDate.toDateString()) return 'Tomorrow'
+
   // Check if same year
   const isSameYear = now.getFullYear() === visitDate.getFullYear()
-
   if (isSameYear) {
     return visitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
   return visitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function VisitCard({
-  visit,
+// =============================================================================
+// Timeline Section Component (mirrors PatientCards StatusSection)
+// =============================================================================
+
+interface TimelineSectionProps {
+  title: string
+  color: string
+  count: number
+  dashed?: boolean
+  children: React.ReactNode
+}
+
+function TimelineSection({ title, color, count, children }: TimelineSectionProps) {
+  if (count === 0) return null
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Section header - dot + title + count */}
+      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground pl-2">
+        <div
+          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: color }}
+        />
+        <span className="whitespace-nowrap">{title}</span>
+        <span>({count})</span>
+      </div>
+
+      {/* Cards container - cards have their own left borders */}
+      <div className="flex flex-col">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// Timeline Card Component (unified card for all timeline items)
+// =============================================================================
+
+interface TimelineCardProps {
+  id: string
+  date: Date
+  appointmentTypeId?: string
+  chiefComplaint?: string | null
+  isCurrentAppointment?: boolean
+  isUnsigned?: boolean
+  isSelected?: boolean
+  isHovered?: boolean
+  isFocused?: boolean
+  onClick?: () => void
+  onHover?: (isHovered: boolean) => void
+  color: string
+}
+
+// Fixed card height for consistency
+const TIMELINE_CARD_HEIGHT = 'h-[52px]'
+
+function TimelineCard({
+  id,
+  date,
+  appointmentTypeId,
+  chiefComplaint,
+  isCurrentAppointment,
+  isUnsigned,
   isSelected,
   isHovered,
   isFocused,
   onClick,
   onHover,
-}: {
-  visit: VisitWithAppointment
-  isSelected: boolean
-  isHovered?: boolean
-  isFocused?: boolean
-  onClick: () => void
-  onHover?: (isHovered: boolean) => void
-}) {
-  const appointmentType = visit.appointment?.appointmentType
-  const isSigned = visit.appointment?.isSigned ?? true
-  const visitDate = visit.appointment?.scheduledStart
-    ? new Date(visit.appointment.scheduledStart)
-    : new Date(visit.createdAt)
-
-  // Get the icon component for this appointment type (same pattern as Timeline)
-  const IconComponent = appointmentType?.id
-    ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
+  color,
+}: TimelineCardProps) {
+  // Get appointment type icon
+  const IconComponent = appointmentTypeId
+    ? APPOINTMENT_TYPE_ICONS[appointmentTypeId] || Calendar
     : Calendar
 
-  // Build className based on selection and focus states
-  // Focus = keyboard navigation indicator (distinct ring)
-  // Selected = viewing this visit's content (background + border)
-  const getCardClassName = () => {
-    const base = 'w-full text-left rounded-lg border p-3 transition-all'
-
-    if (isSelected && isFocused) {
-      // Selected + Focused: both states combined (muted ring + keyboard focus indicator)
-      return `${base} border-transparent bg-transparent ring-2 ring-inset ring-muted-foreground/40`
-    }
+  // Selection indicator style
+  const getSelectionStyle = () => {
     if (isSelected) {
-      // Selected only: previewing this visit (muted outline, no fill)
-      return `${base} border-transparent bg-transparent ring-2 ring-inset ring-muted-foreground/40`
+      return {
+        backgroundColor: `${color}25`,
+        boxShadow: `inset 3px 0 0 0 ${color}`,
+      }
     }
-    if (isFocused) {
-      // Focused only: keyboard nav is here
-      return `${base} border-primary ring-2 ring-inset ring-primary/50 bg-card`
-    }
-    if (isHovered) {
-      return `${base} border-muted-foreground/20 bg-muted/50`
-    }
-    return `${base} border-border bg-card`
+    return {}
   }
 
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => onHover?.(true)}
-      onMouseLeave={() => onHover?.(false)}
-      className={getCardClassName()}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          {/* Appointment type icon - simple style like Timeline */}
-          <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            {/* Date */}
-            <span className="text-sm font-medium text-foreground">
-              {formatVisitDate(visitDate)}
+  // Hover background for non-touch devices (CSS handles @media hover)
+  const hoverBgColor = `${color}15`
+
+  // Card content - fixed height, edge-to-edge
+  const cardContent = (
+    <>
+      {/* Hover background - CSS-only */}
+      {!isSelected && !isCurrentAppointment && (
+        <div
+          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+          style={{ backgroundColor: hoverBgColor }}
+        />
+      )}
+
+      {/* Selection indicator - morphs between cards */}
+      {isSelected && (
+        <motion.div
+          layoutId="timeline-selection-indicator"
+          className="absolute inset-0 pointer-events-none"
+          style={getSelectionStyle()}
+          transition={SPRING_TRANSITION}
+        />
+      )}
+
+      {/* Card content - fixed height */}
+      <div className={`relative z-10 flex items-center justify-between gap-2 pl-3 pr-2 ${TIMELINE_CARD_HEIGHT}`}>
+        <div className="flex-1 min-w-0 flex flex-col justify-center">
+          {/* Line 1: Date only */}
+          <span className={`text-sm font-medium ${isCurrentAppointment ? 'text-blue-600' : 'text-foreground'}`}>
+            {formatTimelineDate(date, isCurrentAppointment)}
+          </span>
+          {/* Line 2: Chief complaint (always show placeholder if empty for consistent height) */}
+          <p className="text-xs text-muted-foreground truncate">
+            {chiefComplaint || '\u00A0'}
+          </p>
+        </div>
+
+        {/* Right side icon */}
+        <div className="flex-shrink-0">
+          {isCurrentAppointment && (
+            <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">
+              Editing
             </span>
-            {/* Chief complaint */}
-            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-              {visit.chiefComplaint || 'No chief complaint recorded'}
-            </p>
-          </div>
-        </div>
-        {/* Signed indicator */}
-        {isSigned && (
-          <div className="flex-shrink-0 mt-0.5">
-            <div className="h-4 w-4 rounded-full bg-green-100 flex items-center justify-center">
-              <Check className="h-2.5 w-2.5 text-green-600" />
+          )}
+          {isUnsigned && !isCurrentAppointment && (
+            <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center">
+              <Minus className="h-2.5 w-2.5 text-amber-600" />
             </div>
-          </div>
-        )}
+          )}
+          {!isCurrentAppointment && !isUnsigned && (
+            <IconComponent className="h-4 w-4 text-muted-foreground/60" />
+          )}
+        </div>
       </div>
-      {/* Selection indicator with animation - centered, smooth height */}
-      <AnimatePresence>
-        {isSelected && (
-          <motion.div
-            className="mt-2 pt-2 overflow-hidden text-center"
-            initial={CARD_SELECTION_ANIMATION.container.initial}
-            animate={CARD_SELECTION_ANIMATION.container.animate}
-            exit={CARD_SELECTION_ANIMATION.container.exit}
-          >
-            <motion.div
-              className="border-t border-muted-foreground/20 origin-center"
-              initial={CARD_SELECTION_ANIMATION.divider.initial}
-              animate={CARD_SELECTION_ANIMATION.divider.animate}
-              exit={CARD_SELECTION_ANIMATION.divider.exit}
-            />
-            <motion.span
-              className="block mt-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
-              initial={CARD_SELECTION_ANIMATION.label.initial}
-              animate={CARD_SELECTION_ANIMATION.label.animate}
-              exit={CARD_SELECTION_ANIMATION.label.exit}
-            >
-              Previewing
-            </motion.span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </button>
+    </>
   )
-}
 
-// Card for scheduled appointments (today's and future)
-function ScheduledVisitCard({
-  appointment,
-  isCurrentAppointment,
-  onClick,
-}: {
-  appointment: ScheduledAppointmentWithType
-  isCurrentAppointment: boolean
-  onClick?: () => void
-}) {
-  const appointmentType = appointment.appointmentType
-  const visitDate = new Date(appointment.scheduledStart)
-
-  // Check signing status
-  const hasSoapContent = hasSOAPContent(appointment.id)
-  const isSigned = appointment.isSigned
-
-  // Get the icon component for this appointment type
-  const IconComponent = appointmentType?.id
-    ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
-    : Calendar
-
-  // Render signing status indicator (16x16 / h-4 w-4 to match VisitCard)
-  const renderSigningIndicator = () => {
-    if (isSigned) {
-      // Signed: green checkmark in circle
-      return (
-        <div className="h-4 w-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-          <Check className="h-2.5 w-2.5 text-green-600" />
-        </div>
-      )
-    }
-    if (hasSoapContent) {
-      // Has content but unsigned: amber minus icon
-      return (
-        <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-          <Minus className="h-2.5 w-2.5 text-amber-600" />
-        </div>
-      )
-    }
-    // No content: no indicator
-    return null
-  }
-
-  // Format the date for scheduled appointments
-  const formatScheduledDate = (date: Date): string => {
-    const today = new Date()
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
-    const isSameDay = (d1: Date, d2: Date) =>
-      d1.getDate() === d2.getDate() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getFullYear() === d2.getFullYear()
-
-    if (isSameDay(date, today)) {
-      return 'Today'
-    }
-    if (isSameDay(date, tomorrow)) {
-      return 'Tomorrow'
-    }
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-
-  // For current appointment (editing), show blue "in progress" styling
+  // Current appointment is not clickable
   if (isCurrentAppointment) {
     return (
-      <div className="w-full text-left rounded-lg border border-blue-500 bg-blue-50 p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-2 flex-1 min-w-0">
-            <IconComponent className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm font-medium text-blue-600">
-                {formatScheduledDate(visitDate)}
-              </span>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {appointmentType?.name || 'Appointment'}
-              </p>
-            </div>
-          </div>
-          {renderSigningIndicator()}
-        </div>
-        {/* Selection indicator with animation - centered */}
-        <div className="mt-2 pt-2 overflow-hidden text-center">
-          <motion.div
-            className="border-t border-blue-200 origin-center"
-            initial={CARD_SELECTION_ANIMATION.divider.initial}
-            animate={CARD_SELECTION_ANIMATION.divider.animate}
-          />
-          <motion.span
-            className="block mt-2 text-[10px] font-medium text-blue-600 uppercase tracking-wider"
-            initial={CARD_SELECTION_ANIMATION.label.initial}
-            animate={CARD_SELECTION_ANIMATION.label.animate}
-          >
-            Editing
-          </motion.span>
-        </div>
+      <div
+        className="relative"
+        style={{ boxShadow: `inset 3px 0 0 0 ${color}` }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: `${color}20` }}
+        />
+        {cardContent}
       </div>
     )
   }
 
-  // For future appointments, show dashed border and muted styling
+  // All other cards are buttons
   return (
-    <button
+    <motion.button
       onClick={onClick}
-      className="w-full text-left rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 transition-all hover:border-muted-foreground/50 hover:bg-muted/30"
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
+      className="group relative w-full text-left"
+      style={{ boxShadow: isSelected ? undefined : `inset 3px 0 0 0 ${color}40` }}
     >
-      <div className="flex items-start justify-between gap-2 opacity-70">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <IconComponent className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <span className="text-sm font-medium text-muted-foreground">
-              {formatScheduledDate(visitDate)}
-            </span>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">
-              {appointmentType?.name || 'Scheduled'}
-            </p>
-          </div>
-        </div>
-        {renderSigningIndicator()}
-      </div>
-    </button>
+      {cardContent}
+    </motion.button>
   )
 }
+
+// =============================================================================
+// Visit Timeline Component (redesigned to mirror PatientCards)
+// =============================================================================
 
 function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSelectVisit, onSelectScheduledAppointment, hoveredVisitId, onHoverVisit, isZoneFocused, focusedIndex }: VisitTimelineProps) {
   const { showFutureAppointments, setShowFutureAppointments } = useTransition()
   const visitHistory = getPatientVisitHistory(patientId)
   const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
 
-  // Sort all appointments chronologically (farthest date first, nearest at bottom)
-  const sortedAppointments = [...scheduledAppointments].sort((a, b) => {
-    return new Date(b.scheduledStart).getTime() - new Date(a.scheduledStart).getTime()
-  })
+  // Find the current appointment
+  const currentAppointment = scheduledAppointments.find(a => a.id === currentAppointmentId)
 
-  // Count collapsible future appointments (future && not current) for the expand/collapse button
-  const collapsibleCount = sortedAppointments.filter(a => a.isFuture && a.id !== currentAppointmentId).length
+  // Separate upcoming (future, not current) appointments
+  const upcomingAppointments = scheduledAppointments
+    .filter(a => a.isFuture && a.id !== currentAppointmentId)
+    .sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
 
-  // Handler for clicking on a scheduled appointment
+  // Separate unsigned visits (past, not signed) and signed history
+  const unsignedVisits = visitHistory.filter(v => !v.appointment?.isSigned)
+  const signedVisits = visitHistory.filter(v => v.appointment?.isSigned)
+
+  // Count for expand/collapse
+  const upcomingCount = upcomingAppointments.length
+
+  // Handler for clicking a scheduled appointment (navigates to it)
   const handleScheduledAppointmentClick = (appointmentId: string) => {
     if (onSelectScheduledAppointment) {
       onSelectScheduledAppointment(appointmentId)
     }
   }
 
-  // Determine if an appointment should be visible
-  const isAppointmentVisible = (appointment: ScheduledAppointmentWithType) => {
-    // Always show today's appointments and the current appointment
-    if (!appointment.isFuture || appointment.id === currentAppointmentId) return true
-    // Show other future appointments only when expanded
-    return showFutureAppointments
+  // Track index for keyboard navigation across all selectable items
+  // Selectable items: unsigned visits + signed visits (history)
+  const getGlobalIndex = (section: 'unsigned' | 'history', localIndex: number): number => {
+    if (section === 'unsigned') return localIndex
+    return unsignedVisits.length + localIndex
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Scheduled Visits Section */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between px-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Scheduled Visits
-          </h3>
-          {/* Expand/Collapse button for future appointments */}
-          {collapsibleCount > 0 && (
+      {/* Today Section - Current appointment being edited */}
+      {currentAppointment && (
+        <TimelineSection
+          title="Today"
+          color={TIMELINE_COLORS.today}
+          count={1}
+        >
+          <TimelineCard
+            id={currentAppointment.id}
+            date={new Date(currentAppointment.scheduledStart)}
+            appointmentTypeId={currentAppointment.appointmentType?.id}
+            isCurrentAppointment={true}
+            color={TIMELINE_COLORS.today}
+          />
+        </TimelineSection>
+      )}
+
+      {/* Upcoming Section - Future scheduled appointments */}
+      {upcomingCount > 0 && (
+        <div className="flex flex-col gap-2">
+          {/* Section header with expand/collapse */}
+          <div className="flex items-center justify-between pl-2">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <div
+                className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: TIMELINE_COLORS.upcoming }}
+              />
+              <span className="whitespace-nowrap">Upcoming</span>
+              <span>({upcomingCount})</span>
+            </div>
             <button
               onClick={() => setShowFutureAppointments(!showFutureAppointments)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -447,61 +444,106 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                 </>
               ) : (
                 <>
-                  <span>+{collapsibleCount} more</span>
+                  <span>Show</span>
                   <ChevronDown className="h-3 w-3" />
                 </>
               )}
             </button>
-          )}
-        </div>
+          </div>
 
-        <div className="flex flex-col gap-2">
-          {/* Single chronological list - visibility controlled by isAppointmentVisible */}
-          {sortedAppointments.filter(isAppointmentVisible).map((appointment) => (
-            <ScheduledVisitCard
-              key={appointment.id}
-              appointment={appointment}
-              isCurrentAppointment={appointment.id === currentAppointmentId}
-              onClick={appointment.id !== currentAppointmentId ? () => handleScheduledAppointmentClick(appointment.id) : undefined}
+          {/* Collapsible upcoming cards */}
+          <AnimatePresence>
+            {showFutureAppointments && (
+              <motion.div
+                className="flex flex-col overflow-hidden"
+                style={{ borderLeft: `3px dashed ${TIMELINE_COLORS.upcoming}40` }}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {upcomingAppointments.map((appointment) => (
+                  <TimelineCard
+                    key={appointment.id}
+                    id={appointment.id}
+                    date={new Date(appointment.scheduledStart)}
+                    appointmentTypeId={appointment.appointmentType?.id}
+                    onClick={() => handleScheduledAppointmentClick(appointment.id)}
+                    color={TIMELINE_COLORS.upcoming}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Unsigned Section - Past visits needing signature */}
+      {unsignedVisits.length > 0 && (
+        <TimelineSection
+          title="Unsigned"
+          color={TIMELINE_COLORS.unsigned}
+          count={unsignedVisits.length}
+        >
+          {unsignedVisits.map((visit, index) => (
+            <TimelineCard
+              key={visit.id}
+              id={visit.id}
+              date={visit.appointment?.scheduledStart
+                ? new Date(visit.appointment.scheduledStart)
+                : new Date(visit.createdAt)}
+              appointmentTypeId={visit.appointment?.appointmentType?.id}
+              chiefComplaint={visit.chiefComplaint}
+              isUnsigned={true}
+              isSelected={selectedVisitId === visit.id}
+              isHovered={hoveredVisitId === visit.id}
+              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('unsigned', index)}
+              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('unsigned', index))}
+              onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
+              color={TIMELINE_COLORS.unsigned}
             />
           ))}
+        </TimelineSection>
+      )}
+
+      {/* History Section - Signed past visits */}
+      {signedVisits.length > 0 && (
+        <TimelineSection
+          title="History"
+          color={TIMELINE_COLORS.history}
+          count={signedVisits.length}
+        >
+          {signedVisits.map((visit, index) => (
+            <TimelineCard
+              key={visit.id}
+              id={visit.id}
+              date={visit.appointment?.scheduledStart
+                ? new Date(visit.appointment.scheduledStart)
+                : new Date(visit.createdAt)}
+              appointmentTypeId={visit.appointment?.appointmentType?.id}
+              chiefComplaint={visit.chiefComplaint}
+              isSelected={selectedVisitId === visit.id}
+              isHovered={hoveredVisitId === visit.id}
+              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('history', index)}
+              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('history', index))}
+              onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
+              color={TIMELINE_COLORS.history}
+            />
+          ))}
+        </TimelineSection>
+      )}
+
+      {/* Empty state - first visit */}
+      {visitHistory.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            First visit for this patient
+          </p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            Past visits will appear here
+          </p>
         </div>
-      </div>
-
-      {/* Divider */}
-      <div className="border-t border-border" />
-
-      {/* Visit History Section */}
-      <div className="flex flex-col gap-3">
-        <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Visit History
-        </h3>
-
-        {visitHistory.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              First visit for this patient
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Past visits will appear here
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {visitHistory.map((visit, index) => (
-              <VisitCard
-                key={visit.id}
-                visit={visit}
-                isSelected={selectedVisitId === visit.id}
-                isHovered={hoveredVisitId === visit.id}
-                isFocused={isZoneFocused && focusedIndex === index}
-                onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)}
-                onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
