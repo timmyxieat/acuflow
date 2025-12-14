@@ -33,7 +33,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus, Lock } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { getStatusColor } from '@/lib/constants'
 
@@ -101,8 +101,10 @@ interface PatientHeaderProps {
   appointment: AppointmentWithRelations
 }
 
-// Avatar size class - scales with viewport (2.5vw, min 32px, max 48px)
-const AVATAR_SIZE_CLASS = 'h-[clamp(32px,2.5vw,48px)] w-[clamp(32px,2.5vw,48px)]'
+// Avatar size class - scales in sync with panel width at same viewport breakpoints
+// Panel: clamp(180px, 20vw, 280px) scales between 900px-1400px viewport
+// Avatar: 3.5vw gives ~32px at 900px and ~49px at 1400px, clamped to 32-48px range
+const AVATAR_SIZE_CLASS = 'h-[clamp(32px,3.5vw,48px)] w-[clamp(32px,3.5vw,48px)]'
 
 function PatientHeader({ appointment }: PatientHeaderProps) {
   const patient = appointment.patient
@@ -1092,6 +1094,7 @@ export default function AppointmentDetailPage() {
     if (appointment) {
       setHeader({
         showBackButton: true,
+        currentPatientId: appointment.patient?.id,
       })
     }
 
@@ -1158,7 +1161,9 @@ export default function AppointmentDetailPage() {
         setSelectedVisitId(null)
         return
       }
-      router.push('/')
+      // Navigate back with patient selection preserved
+      const patientId = appointment?.patient?.id
+      router.push(patientId ? `/?patient=${patientId}` : '/')
       return
     }
 
@@ -1310,8 +1315,10 @@ export default function AppointmentDetailPage() {
   const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations, rect?: DOMRect) => {
     if (clickedAppointment.id === appointmentId) {
       // Clicking the already-selected card: deselect and go back to Today
+      // Preserve patient selection in URL
       setSelectedAppointmentId(null)
-      router.push('/')
+      const patientId = clickedAppointment.patient?.id
+      router.push(patientId ? `/?patient=${patientId}` : '/')
     } else {
       // Calculate slide direction based on position in list
       const currIndex = orderedAppointmentIds.indexOf(appointmentId)
@@ -1382,21 +1389,9 @@ export default function AppointmentDetailPage() {
             hoveredAppointmentId={effectiveHoveredAppointmentId}
             selectedAppointmentId={selectedAppointmentIdForCards}
             compact={isPatientCardsCollapsed}
+            onToggleCompact={() => setPatientCardsCollapsed(!isPatientCardsCollapsed)}
           />
         </div>
-
-        {/* Collapse/Expand toggle button */}
-        <button
-          onClick={() => setPatientCardsCollapsed(!isPatientCardsCollapsed)}
-          className="absolute top-1/2 -right-3 z-10 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-sidebar border border-border shadow-sm hover:bg-muted transition-colors"
-          aria-label={isPatientCardsCollapsed ? 'Expand patient cards' : 'Collapse patient cards'}
-        >
-          {isPatientCardsCollapsed ? (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
       </motion.div>
 
       {/* Vertical divider */}

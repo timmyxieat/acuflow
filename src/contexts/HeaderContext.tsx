@@ -8,6 +8,8 @@ interface HeaderContent {
   subtitle?: string
   // For detail pages (appointment, patient, etc.)
   showBackButton?: boolean
+  // Patient ID for back navigation (to restore selection)
+  currentPatientId?: string
 }
 
 interface HeaderContextType {

@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useLayoutEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { SIDEBAR_ANIMATION } from '@/lib/animations'
-import { getAppointmentsByStatus, type AppointmentWithRelations } from '@/data/mock-data'
+import { getAppointmentsByStatus, getPatientTodayAppointmentId, type AppointmentWithRelations } from '@/data/mock-data'
 
 // CSS clamp value for consistent responsive width
 const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
@@ -38,28 +37,35 @@ export function TodayScreen() {
     return () => window.removeEventListener('resize', updateWidth)
   }, [])
 
-  // Read selection from URL query param on mount
+  // Read patient selection from URL query param
+  // This runs when URL changes (e.g., navigating back from appointment detail)
   useEffect(() => {
-    const selectedFromUrl = searchParams.get('selected')
-    if (selectedFromUrl && !selectedAppointmentId) {
-      setSelectedAppointmentId(selectedFromUrl)
+    const patientFromUrl = searchParams.get('patient')
+    if (patientFromUrl) {
+      // Find appointment for this patient
+      const targetAppointmentId = getPatientTodayAppointmentId(patientFromUrl)
+      if (targetAppointmentId && targetAppointmentId !== selectedAppointmentId) {
+        // Only update if the target differs from current selection
+        setSelectedAppointmentId(targetAppointmentId)
+      }
     }
   }, [searchParams, selectedAppointmentId, setSelectedAppointmentId])
 
   // Update URL when selection changes (for keyboard navigation)
-  const updateUrlSelection = useCallback((appointmentId: string | null) => {
+  // Uses patient ID for persistence across navigation
+  const updateUrlSelection = useCallback((appointmentId: string | null, patientId?: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (appointmentId) {
-      params.set('selected', appointmentId)
+    if (patientId) {
+      params.set('patient', patientId)
     } else {
-      params.delete('selected')
+      params.delete('patient')
     }
     const newUrl = params.toString() ? `?${params.toString()}` : '/'
     router.replace(newUrl, { scroll: false })
   }, [searchParams, router])
 
-  // Get flat ordered list of all appointment IDs (same order as PatientCards)
-  const orderedAppointmentIds = useMemo(() => {
+  // Get flat ordered list of all appointments (same order as PatientCards)
+  const orderedAppointments = useMemo(() => {
     const grouped = getAppointmentsByStatus()
     return [
       ...grouped.inProgress,
@@ -67,8 +73,24 @@ export function TodayScreen() {
       ...grouped.scheduled,
       ...grouped.unsigned,
       ...grouped.completed,
-    ].map(a => a.id)
+    ]
   }, [])
+
+  // Get flat ordered list of all appointment IDs (same order as PatientCards)
+  const orderedAppointmentIds = useMemo(() => {
+    return orderedAppointments.map(a => a.id)
+  }, [orderedAppointments])
+
+  // Map appointment ID to patient ID for URL updates
+  const appointmentToPatientId = useMemo(() => {
+    const map = new Map<string, string>()
+    orderedAppointments.forEach(a => {
+      if (a.patient?.id) {
+        map.set(a.id, a.patient.id)
+      }
+    })
+    return map
+  }, [orderedAppointments])
 
   // Single click navigates directly to appointment with transition
   const handleAppointmentClick = (appointment: AppointmentWithRelations, rect?: DOMRect) => {
@@ -93,7 +115,7 @@ export function TodayScreen() {
     // ESC: deselect the card and stay on Today
     if (event.key === 'Escape' && selectedAppointmentId) {
       setSelectedAppointmentId(null)
-      updateUrlSelection(null)
+      updateUrlSelection(null, undefined)
     }
     // Enter: if card selected, go to appointment; if no card, just select the last one
     if (event.key === 'Enter') {
@@ -103,7 +125,8 @@ export function TodayScreen() {
       } else if (lastSelectedAppointmentId) {
         // No card selected: just highlight the last selected card (don't navigate)
         setSelectedAppointmentId(lastSelectedAppointmentId)
-        updateUrlSelection(lastSelectedAppointmentId)
+        const patientId = appointmentToPatientId.get(lastSelectedAppointmentId)
+        updateUrlSelection(lastSelectedAppointmentId, patientId)
       }
     }
     // Arrow keys: navigate between cards
@@ -119,7 +142,8 @@ export function TodayScreen() {
         const startId = lastSelectedAppointmentId ||
           (event.key === 'ArrowDown' ? orderedAppointmentIds[0] : orderedAppointmentIds[orderedAppointmentIds.length - 1])
         setSelectedAppointmentId(startId)
-        updateUrlSelection(startId)
+        const patientId = appointmentToPatientId.get(startId)
+        updateUrlSelection(startId, patientId)
         return
       }
 
@@ -140,9 +164,10 @@ export function TodayScreen() {
 
       const newId = orderedAppointmentIds[newIndex]
       setSelectedAppointmentId(newId)
-      updateUrlSelection(newId)
+      const patientId = appointmentToPatientId.get(newId)
+      updateUrlSelection(newId, patientId)
     }
-  }, [selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode, updateUrlSelection])
+  }, [selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode, updateUrlSelection, appointmentToPatientId])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -169,21 +194,9 @@ export function TodayScreen() {
             hoveredAppointmentId={effectiveHoveredId}
             selectedAppointmentId={selectedAppointmentId ?? undefined}
             compact={isCollapsed}
+            onToggleCompact={toggleCollapsed}
           />
         </div>
-
-        {/* Collapse/Expand toggle button */}
-        <button
-          onClick={toggleCollapsed}
-          className="absolute top-1/2 -right-3 z-10 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-sidebar border border-border shadow-sm hover:bg-muted transition-colors"
-          aria-label={isCollapsed ? 'Expand patient cards' : 'Collapse patient cards'}
-        >
-          {isCollapsed ? (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
       </motion.div>
 
       {/* Vertical divider */}

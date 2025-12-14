@@ -92,7 +92,14 @@ export function Topbar() {
         {header.showBackButton ? (
           <>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                // Navigate back to Today with patient selection preserved
+                if (header.currentPatientId) {
+                  router.push(`/?patient=${header.currentPatientId}`)
+                } else {
+                  router.push('/')
+                }
+              }}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
