@@ -86,7 +86,7 @@ export function Topbar() {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-sidebar px-6">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-sidebar px-2">
       {/* Page title area - contextual based on route */}
       <div className="flex items-center gap-4">
         {header.showBackButton ? (

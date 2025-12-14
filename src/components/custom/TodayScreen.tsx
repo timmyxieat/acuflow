@@ -77,17 +77,27 @@ export function TodayScreen() {
       // Enter keyboard nav mode (disables hover highlighting)
       setKeyboardNavMode(true)
 
-      const currentIndex = selectedAppointmentId
-        ? orderedAppointmentIds.indexOf(selectedAppointmentId)
-        : -1
+      // If nothing selected, start from lastSelected or first/last
+      if (!selectedAppointmentId) {
+        const startId = lastSelectedAppointmentId ||
+          (event.key === 'ArrowDown' ? orderedAppointmentIds[0] : orderedAppointmentIds[orderedAppointmentIds.length - 1])
+        setSelectedAppointmentId(startId)
+        return
+      }
+
+      const currentIndex = orderedAppointmentIds.indexOf(selectedAppointmentId)
 
       let newIndex: number
       if (event.key === 'ArrowDown') {
-        // Move down, or start at first if none selected
-        newIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, orderedAppointmentIds.length - 1)
+        // Wrap to first if at end
+        newIndex = currentIndex >= orderedAppointmentIds.length - 1
+          ? 0
+          : currentIndex + 1
       } else {
-        // Move up, or start at last if none selected
-        newIndex = currentIndex === -1 ? orderedAppointmentIds.length - 1 : Math.max(currentIndex - 1, 0)
+        // Wrap to last if at beginning
+        newIndex = currentIndex <= 0
+          ? orderedAppointmentIds.length - 1
+          : currentIndex - 1
       }
 
       setSelectedAppointmentId(orderedAppointmentIds[newIndex])

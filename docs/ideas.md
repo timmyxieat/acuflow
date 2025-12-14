@@ -1,66 +1,99 @@
 # Ideas & Future Features
 
-## Core Idea of App
+<!--
+## For AI Agents
+
+When working on this project:
+1. Check this file before implementing features to see if they're already planned
+2. Mark items `[x]` when fully implemented
+3. Add new ideas under the appropriate section with `[ ]`
+4. When completing work, update this file as part of your final commit
+5. Move completed items to the bottom of their section
+
+Status: `[ ]` = not done, `[x]` = done
+-->
+
+---
+
+## Core Vision
 
 - All about navigation (and flow)
-- Tie to a mission to unify all acupuncturists
-  - Release a Lead Magnet micro application
-  - A dream to unify all acupuncturists, aware of all the different techniques, but not limited by them
-    - They focus on the branch, but they forgot the root
-  - Map of Japan with different clans - battling each other
-  - 
+- Mission: Unify acupuncturists across different techniques
+  - Lead Magnet micro application idea
+  - "They focus on the branch, but forgot the root"
 
-## General
+---
 
-- show cursor:pointer for clickable items
+## General UI
+
+- [ ] Show `cursor: pointer` for all clickable items
+
+---
 
 ## Sidenav
 
-- Today nav item has an expand that expands the in progress appointments to quickly show them
+- [ ] Today nav item expands to show in-progress appointments inline
 
-## Right Sidebar Idea
+---
 
-- OR persistent secondary navigation move cards left of the calendar
-  - have it collapse and toggle between patient appointments
-- have a collapsed version of patient cards on the right
-- clicking on a patient - column persists - opens up SOAP
+## Patient Cards / Right Sidebar
+
+- [X] Persistent patient cards panel (left of calendar)
+- [X] Collapse/expand toggle for cards
+- [X] Compact mode (avatar + time only when collapsed)
+- [X] Clicking patient opens SOAP / appointment detail
+- [X] Selection highlighting with status-color indicator
+
+---
 
 ## Today Screen
 
-- Press Esc to unselect appointment
-- Double click/long press to open appointment detail
-  - Figure out for iPad navigation - probably add a second button or touch target
-- Figure out scrolling with iPad - not working right now (prob tailwind scrollbar)
-- Feedback
-  - Increase size of the appointment detail overlay OR transition to modal
-  - OR **On the PatientCard it "expands the card"**
-  - take off shadow? somehow make it look like 2 solid entities
-    (maybe down arrow instead of shadow)
-  - If we keep it vertically stacked, move the selected patient so it's visible
-  - Open Full Record hard to reach
+- [ ] iPad navigation — needs second button or touch target for long-press alternative
+- [ ] iPad scrolling issues (tailwind scrollbar)
+- [ ] "Open Full Record" — make more accessible
+- [ ] Remove shadow / try down arrow visual instead
+- [X] Press Esc to unselect appointment
+- [X] Double-click to open appointment detail
+- [X] PatientCard "expands" on selection (collapse/expand implemented)
+- [X] Selected patient scrolls into view
+- [X] Keyboard navigation (arrow keys, Enter, Esc)
+- [X] when pressing up or down arrow when no PatientCards are selected, it should start highlighting from the previously selected appointment
+- [X] pressing down arrow on the last patientcard should go to the first. Presing the up arrow on the first patientcard should go to the last.
+
+---
 
 ## Search
 
-- Show patient results
-- Appointments (2 at most):
-  - The upcoming appointment — shown first if today
-  - Last visit appointment — shown first otherwise
-- Quick access to Today's patients - In Progress
+- [ ] Show upcoming + last visit appointments in results
+- [ ] Quick access chip: "Today's In Progress" patients
+- [X] Patient search (name, phone, email)
+- [X] Date-based appointment search
+
+---
 
 ## Patient Intake
 
-- Patient fills out intake questions before appointment
-- Practitioner can highlight text anywhere in intake for emphasis
-- Highlighted items persist as "flagged"
-- When intake section is collapsed, highlighted excerpts remain visible (truncated with ellipsis)
-- Example: `"Allergies: *Penicillin* since 5 years ago..."` → highlight "Penicillin"
+- [ ] Patient fills out intake questions before appointment
+- [ ] Practitioner highlights text for emphasis
+- [ ] Highlighted items persist as "flagged"
+- [ ] Collapsed section shows highlighted excerpts (truncated)
+- [ ] Example: `"Allergies: *Penicillin*..."` with highlight
+
+---
 
 ## SOAP Note UX
 
-- **Focus mode:** On iPad, only one SOAP section expanded at a time — tap header to expand/collapse. Keeps focus tight on limited screen space.
+- [ ] **Focus mode (iPad):** One section expanded at a time, tap header to toggle
+- [ ] Add 3rd toggle unit
+- [X] Basic SOAP sections (Subjective, Objective, Assessment, Plan)
+- [X] Visit timeline with "Use past treatment" copy feature
+
+---
 
 ## Treatment Timer
 
-- Timer for managing how long patients are on treatment table
-- Ties in with syringe icon and timer display on Today screen
-- Separate from appointment countdown (which shows time until end of scheduled slot)
+- [X] Needle retention timer (20-min default)
+- [X] MM:SS countdown display on PatientCards
+- [X] Bell animation when timer completes
+- [X] Separate from appointment slot countdown
+- [X] Works in both expanded and compact card modes

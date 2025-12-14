@@ -1,12 +1,14 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
+import { useAutoSave } from '@/hooks/useAutoSave'
+import { saveVisitSOAP } from '@/lib/api/visits'
 import { formatTime } from '@/lib/dev-time'
 import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import {
@@ -16,6 +18,7 @@ import {
   calculateAge,
   getStatusDisplay,
   getPatientVisitHistory,
+  getVisitById,
   type AppointmentWithRelations,
   type VisitWithAppointment,
 } from '@/data/mock-data'
@@ -87,7 +90,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
   if (!patient) {
     return (
-      <div className="flex h-[72px] items-center gap-3 px-4 border-b border-border">
+      <div className="flex h-[72px] items-center gap-3 px-2 border-b border-border">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
           ?
         </div>
@@ -103,7 +106,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
   const sexDisplay = patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : null
 
   return (
-    <div className="flex h-[72px] items-center gap-3 px-4 border-b border-border">
+    <div className="flex h-[72px] items-center gap-3 px-2 border-b border-border">
       {/* Avatar */}
       <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
         {initials}
@@ -125,9 +128,12 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 interface VisitTimelineProps {
   patientId: string
   selectedVisitId: string | null
-  onSelectVisit: (visitId: string | null) => void
+  onSelectVisit: (visitId: string | null, index: number) => void
   hoveredVisitId?: string | null
   onHoverVisit?: (visitId: string | null) => void
+  // Focus state for keyboard navigation
+  isZoneFocused?: boolean
+  focusedIndex?: number
 }
 
 function formatVisitDate(date: Date): string {
@@ -147,12 +153,14 @@ function VisitCard({
   visit,
   isSelected,
   isHovered,
+  isFocused,
   onClick,
   onHover,
 }: {
   visit: VisitWithAppointment
   isSelected: boolean
   isHovered?: boolean
+  isFocused?: boolean
   onClick: () => void
   onHover?: (isHovered: boolean) => void
 }) {
@@ -167,20 +175,36 @@ function VisitCard({
     ? APPOINTMENT_TYPE_ICONS[appointmentType.id] || Calendar
     : Calendar
 
+  // Build className based on selection and focus states
+  // Focus = keyboard navigation indicator (distinct ring)
+  // Selected = viewing this visit's content (background + border)
+  const getCardClassName = () => {
+    const base = 'w-full text-left rounded-lg border p-3 transition-all'
+
+    if (isSelected && isFocused) {
+      // Selected + Focused: both states combined
+      return `${base} border-primary bg-primary/5 ring-2 ring-inset ring-primary/50`
+    }
+    if (isSelected) {
+      // Selected only: viewing this visit
+      return `${base} border-primary bg-primary/5 ring-1 ring-primary/20`
+    }
+    if (isFocused) {
+      // Focused only: keyboard nav is here
+      return `${base} border-primary ring-2 ring-inset ring-primary/50 bg-card`
+    }
+    if (isHovered) {
+      return `${base} border-muted-foreground/20 bg-muted/50`
+    }
+    return `${base} border-border bg-card`
+  }
+
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className={`
-        w-full text-left rounded-lg border p-3 transition-all
-        ${isSelected
-          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-          : isHovered
-            ? 'border-muted-foreground/20 bg-muted/50'
-            : 'border-border bg-card'
-        }
-      `}
+      className={getCardClassName()}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -218,14 +242,14 @@ function VisitCard({
   )
 }
 
-function VisitTimeline({ patientId, selectedVisitId, onSelectVisit, hoveredVisitId, onHoverVisit }: VisitTimelineProps) {
+function VisitTimeline({ patientId, selectedVisitId, onSelectVisit, hoveredVisitId, onHoverVisit, isZoneFocused, focusedIndex }: VisitTimelineProps) {
   const visitHistory = getPatientVisitHistory(patientId)
 
   // Empty state for new patients
   if (visitHistory.length === 0) {
     return (
-      <div className="flex flex-col gap-3 px-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      <div className="flex flex-col gap-3">
+        <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Visit History
         </h3>
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
@@ -241,18 +265,19 @@ function VisitTimeline({ patientId, selectedVisitId, onSelectVisit, hoveredVisit
   }
 
   return (
-    <div className="flex flex-col gap-3 px-4">
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+    <div className="flex flex-col gap-3">
+      <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         Visit History
       </h3>
       <div className="flex flex-col gap-2">
-        {visitHistory.map((visit) => (
+        {visitHistory.map((visit, index) => (
           <VisitCard
             key={visit.id}
             visit={visit}
             isSelected={selectedVisitId === visit.id}
             isHovered={hoveredVisitId === visit.id}
-            onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id)}
+            isFocused={isZoneFocused && focusedIndex === index}
+            onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)}
             onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
           />
         ))}
@@ -321,7 +346,7 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
   return (
-    <div className="flex h-[72px] items-center justify-between border-b border-border px-6">
+    <div className="flex h-[72px] items-center justify-between border-b border-border px-2">
       {/* Left: Date + time in a column */}
       <div className="flex flex-col">
         <div className="flex items-baseline gap-2">
@@ -347,27 +372,141 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
 }
 
 // =============================================================================
-// SOAP Sections (Right Panel) - Placeholder
+// SOAP Sections (Right Panel)
 // =============================================================================
 
-function SOAPSections() {
-  const sections = [
+type SOAPKey = 'subjective' | 'objective' | 'assessment' | 'plan'
+
+interface SOAPData {
+  subjective: string
+  objective: string
+  assessment: string
+  plan: string
+}
+
+interface SOAPSectionsProps {
+  selectedVisitId: string | null
+  soapData: SOAPData
+  onSoapChange: (key: SOAPKey, value: string) => void
+  onUsePastTreatment?: () => void
+  // Focus state for keyboard navigation
+  isZoneFocused: boolean
+  focusedIndex: number
+  isEditing: boolean
+  textareaRefs: React.MutableRefObject<(HTMLTextAreaElement | null)[]>
+  onTextareaFocus: (index: number) => void
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error'
+}
+
+function SOAPSections({
+  selectedVisitId,
+  soapData,
+  onSoapChange,
+  onUsePastTreatment,
+  isZoneFocused,
+  focusedIndex,
+  isEditing,
+  textareaRefs,
+  onTextareaFocus,
+  saveStatus,
+}: SOAPSectionsProps) {
+  // Get the selected past visit for preview
+  const selectedVisit = selectedVisitId ? getVisitById(selectedVisitId) : null
+
+  // Extract raw text from visit SOAP fields
+  const getVisitSoapContent = (key: SOAPKey): string | null => {
+    if (!selectedVisit) return null
+    const field = selectedVisit[key] as { raw?: string } | null
+    return field?.raw || null
+  }
+
+  const sections: { key: SOAPKey; label: string }[] = [
     { key: 'subjective', label: 'Subjective' },
     { key: 'objective', label: 'Objective' },
     { key: 'assessment', label: 'Assessment' },
     { key: 'plan', label: 'Plan' },
   ]
 
+  // Render save status indicator
+  const renderSaveStatus = () => {
+    switch (saveStatus) {
+      case 'saving':
+        return (
+          <span className="text-xs text-muted-foreground animate-pulse">
+            Saving...
+          </span>
+        )
+      case 'saved':
+        return (
+          <span className="text-xs text-green-600 flex items-center gap-1">
+            <Check className="h-3 w-3" />
+            Saved
+          </span>
+        )
+      case 'error':
+        return (
+          <span className="text-xs text-destructive">
+            Save failed
+          </span>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      {sections.map((section) => (
-        <div key={section.key} className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">{section.label}</h3>
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-            {section.label} content will appear here
+    <div className="flex flex-col gap-4">
+      {/* SOAP Header with save status */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          SOAP Note
+        </h3>
+        {renderSaveStatus()}
+      </div>
+
+      {sections.map((section, index) => {
+        const previewContent = getVisitSoapContent(section.key)
+        const isPlan = section.key === 'plan'
+        const isFocused = isZoneFocused && focusedIndex === index && !isEditing
+
+        return (
+          <div key={section.key} className="flex flex-col gap-2">
+            {/* Section header with optional action button */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">{section.label}</h3>
+              {isPlan && selectedVisit && onUsePastTreatment && (
+                <button
+                  onClick={onUsePastTreatment}
+                  className="text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                >
+                  Use past treatment
+                </button>
+              )}
+            </div>
+
+            {/* Textarea for current note - auto-expands with content */}
+            {/* Focus states: keyboard nav focus (ring-primary/50) vs typing focus (ring-primary/20) */}
+            <textarea
+              ref={(el) => { textareaRefs.current[index] = el }}
+              value={soapData[section.key]}
+              onChange={(e) => onSoapChange(section.key, e.target.value)}
+              onFocus={() => onTextareaFocus(index)}
+              placeholder={`Enter ${section.label.toLowerCase()} notes...`}
+              className={`w-full rounded-lg border bg-background p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20 focus:border-primary transition-colors field-sizing-content ${
+                isFocused ? 'border-primary ring-2 ring-inset ring-primary/50' : 'border-border'
+              }`}
+              rows={2}
+            />
+
+            {/* Compact preview from selected past visit - inline styling, no header */}
+            {previewContent && (
+              <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
+                {previewContent}
+              </p>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -415,6 +554,33 @@ export default function AppointmentDetailPage() {
 
   // State for selected visit in timeline (for preview)
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+
+  // State for SOAP note content
+  const [soapData, setSoapData] = useState<SOAPData>({
+    subjective: '',
+    objective: '',
+    assessment: '',
+    plan: '',
+  })
+
+  // Two-zone keyboard navigation state
+  type FocusZone = 'soap' | 'visits'
+  const [focusZone, setFocusZone] = useState<FocusZone>('soap')
+  const [focusedSoapIndex, setFocusedSoapIndex] = useState(0) // 0=S, 1=O, 2=A, 3=P
+  const [focusedVisitIndex, setFocusedVisitIndex] = useState(0)
+  const [isEditingField, setIsEditingField] = useState(false)
+  const soapFieldKeys: SOAPKey[] = ['subjective', 'objective', 'assessment', 'plan']
+
+  // Refs for SOAP textareas
+  const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
+
+  // Auto-save SOAP notes
+  const { status: saveStatus } = useAutoSave({
+    data: soapData,
+    onSave: async (data) => {
+      await saveVisitSOAP({ appointmentId, soap: data })
+    },
+  })
 
   // Hover state with keyboard nav awareness
   const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
@@ -468,7 +634,7 @@ export default function AppointmentDetailPage() {
     }
   }, [isTransitioning, completeTransition])
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts - Two-zone navigation (SOAP ↔ Visit History)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     // Check if user is typing in an input/textarea
     const activeElement = document.activeElement
@@ -476,71 +642,140 @@ export default function AppointmentDetailPage() {
       activeElement instanceof HTMLTextAreaElement ||
       activeElement?.getAttribute('contenteditable') === 'true'
 
-    // ESC: if visit is selected, deselect it; otherwise go back to Today
+    // ESC: if editing, exit edit mode and stay in SOAP zone
+    // If not editing and in visits zone with selection, deselect
+    // Otherwise go back to Today
     if (event.key === 'Escape') {
-      if (selectedVisitId) {
+      if (isTyping && activeElement instanceof HTMLElement) {
+        activeElement.blur()
+        setIsEditingField(false)
+        return
+      }
+      if (focusZone === 'visits' && selectedVisitId) {
         setSelectedVisitId(null)
-      } else {
-        router.push('/')
+        return
+      }
+      router.push('/')
+      return
+    }
+
+    // Enter key
+    if (event.key === 'Enter' && !isTyping) {
+      event.preventDefault()
+      setKeyboardNavMode(true)
+
+      if (focusZone === 'soap') {
+        // Enter edit mode for the focused SOAP field
+        const textarea = soapTextareaRefs.current[focusedSoapIndex]
+        if (textarea) {
+          textarea.focus()
+          setIsEditingField(true)
+        }
+      } else if (focusZone === 'visits' && orderedVisitIds.length > 0) {
+        // Toggle visit selection
+        const visitId = orderedVisitIds[focusedVisitIndex]
+        if (selectedVisitId === visitId) {
+          setSelectedVisitId(null)
+        } else {
+          setSelectedVisitId(visitId)
+        }
       }
       return
     }
 
     // Arrow keys (only when not typing)
-    if (!isTyping && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
-      event.preventDefault()
-
-      // Enter keyboard nav mode (disables hover highlighting)
+    if (!isTyping) {
       setKeyboardNavMode(true)
 
-      // If a visit is selected, navigate between visits
-      if (selectedVisitId && orderedVisitIds.length > 0) {
-        const currentIndex = orderedVisitIds.indexOf(selectedVisitId)
-        if (currentIndex === -1) return
+      // Up/Down: navigate within current zone
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
 
-        let newIndex: number
-        if (event.key === 'ArrowDown') {
-          newIndex = Math.min(currentIndex + 1, orderedVisitIds.length - 1)
-        } else {
-          newIndex = Math.max(currentIndex - 1, 0)
-        }
-
-        if (newIndex !== currentIndex) {
-          setSelectedVisitId(orderedVisitIds[newIndex])
+        if (focusZone === 'soap') {
+          // Navigate between SOAP fields
+          const newIndex = event.key === 'ArrowDown'
+            ? Math.min(focusedSoapIndex + 1, 3)
+            : Math.max(focusedSoapIndex - 1, 0)
+          setFocusedSoapIndex(newIndex)
+        } else if (focusZone === 'visits' && orderedVisitIds.length > 0) {
+          // Navigate between visits
+          const newIndex = event.key === 'ArrowDown'
+            ? Math.min(focusedVisitIndex + 1, orderedVisitIds.length - 1)
+            : Math.max(focusedVisitIndex - 1, 0)
+          setFocusedVisitIndex(newIndex)
         }
         return
       }
 
-      // Otherwise, navigate between appointments (patient cards)
-      const currentIndex = orderedAppointmentIds.indexOf(appointmentId)
-      if (currentIndex === -1) return
-
-      let newIndex: number
-      if (event.key === 'ArrowDown') {
-        newIndex = Math.min(currentIndex + 1, orderedAppointmentIds.length - 1)
-      } else {
-        newIndex = Math.max(currentIndex - 1, 0)
+      // Left: switch to visits zone (if visits exist)
+      if (event.key === 'ArrowLeft' && focusZone === 'soap' && orderedVisitIds.length > 0) {
+        event.preventDefault()
+        setFocusZone('visits')
+        return
       }
 
-      // Only navigate if actually changing
-      if (newIndex !== currentIndex) {
-        const newAppointmentId = orderedAppointmentIds[newIndex]
-        setSlideDirection(newIndex > currentIndex ? 'down' : 'up')
-        startTransition(document.body.getBoundingClientRect(), 'appointment')
-        router.push(`/appointments/${newAppointmentId}`)
+      // Right: switch to SOAP zone
+      if (event.key === 'ArrowRight' && focusZone === 'visits') {
+        event.preventDefault()
+        setFocusZone('soap')
+        return
+      }
+
+      // Character typing in SOAP zone - auto-focus into textarea
+      if (focusZone === 'soap' && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const textarea = soapTextareaRefs.current[focusedSoapIndex]
+        if (textarea) {
+          textarea.focus()
+          // Move cursor to end of existing content
+          textarea.selectionStart = textarea.selectionEnd = textarea.value.length
+          setIsEditingField(true)
+          // Don't prevent default - let the character type
+        }
       }
     }
-  }, [router, appointmentId, orderedAppointmentIds, orderedVisitIds, selectedVisitId, setSlideDirection, startTransition, setKeyboardNavMode])
+  }, [router, focusZone, focusedSoapIndex, focusedVisitIndex, orderedVisitIds, selectedVisitId, setKeyboardNavMode])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  // Handle visit selection from timeline
-  const handleSelectVisit = (visitId: string | null) => {
+  // Handle visit selection from timeline (also sets navigation focus)
+  const handleSelectVisit = (visitId: string | null, index: number) => {
     setSelectedVisitId(visitId)
+    setFocusZone('visits')
+    setFocusedVisitIndex(index)
   }
+
+  // Handle SOAP field changes
+  const handleSoapChange = useCallback((key: SOAPKey, value: string) => {
+    setSoapData(prev => ({ ...prev, [key]: value }))
+  }, [])
+
+  // Handle textarea focus (when user clicks into a SOAP field)
+  const handleTextareaFocus = useCallback((index: number) => {
+    setFocusedSoapIndex(index)
+    setFocusZone('soap')
+    setIsEditingField(true)
+  }, [])
+
+  // Handle "Use past treatment" button - copy plan from selected visit
+  const handleUsePastTreatment = useCallback(() => {
+    if (!selectedVisitId) return
+    const visit = getVisitById(selectedVisitId)
+    if (!visit) return
+
+    const planField = visit.plan as { raw?: string } | null
+    const planContent = planField?.raw || ''
+
+    if (planContent) {
+      // Append to existing plan or replace if empty
+      setSoapData(prev => ({
+        ...prev,
+        plan: prev.plan ? `${prev.plan}\n\n--- From past visit ---\n${planContent}` : planContent,
+      }))
+    }
+  }, [selectedVisitId])
 
   if (!appointment) {
     return (
@@ -639,7 +874,7 @@ export default function AppointmentDetailPage() {
               <PatientHeader appointment={appointment} />
 
               {/* Visit Timeline - Scrollable */}
-              <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointmentId]}>
+              <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
                 {appointment.patient && (
                   <VisitTimeline
                     patientId={appointment.patient.id}
@@ -647,6 +882,8 @@ export default function AppointmentDetailPage() {
                     onSelectVisit={handleSelectVisit}
                     hoveredVisitId={effectiveHoveredVisitId}
                     onHoverVisit={setHoveredVisitId}
+                    isZoneFocused={focusZone === 'visits'}
+                    focusedIndex={focusedVisitIndex}
                   />
                 )}
               </ScrollableArea>
@@ -658,13 +895,27 @@ export default function AppointmentDetailPage() {
               <AppointmentHeader appointment={appointment} />
 
               {/* Scrollable Content */}
-              <ScrollableArea className="flex-1 py-6 pl-6 pr-4" deps={[appointmentId]}>
-                <div className="flex flex-col gap-8">
+              <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
+                <div className="flex flex-col gap-4">
                   {/* Patient Intake (Collapsible) */}
                   <PatientIntakeSection />
 
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
                   {/* SOAP Sections */}
-                  <SOAPSections />
+                  <SOAPSections
+                    selectedVisitId={selectedVisitId}
+                    soapData={soapData}
+                    onSoapChange={handleSoapChange}
+                    onUsePastTreatment={handleUsePastTreatment}
+                    isZoneFocused={focusZone === 'soap'}
+                    focusedIndex={focusedSoapIndex}
+                    isEditing={isEditingField}
+                    textareaRefs={soapTextareaRefs}
+                    onTextareaFocus={handleTextareaFocus}
+                    saveStatus={saveStatus}
+                  />
                 </div>
               </ScrollableArea>
             </div>
