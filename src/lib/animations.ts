@@ -75,6 +75,20 @@ export const FADE_SLIDE_TRANSITION = {
 // Card selection animations (divider line and label)
 // Slide down from top when card becomes selected
 export const CARD_SELECTION_ANIMATION = {
+  // Container that wraps the selection indicator - animates height
+  container: {
+    initial: { height: 0, opacity: 0 },
+    animate: {
+      height: 'auto',
+      opacity: 1,
+      transition: { duration: 0.2, ease: EASE_OUT },
+    },
+    exit: {
+      height: 0,
+      opacity: 0,
+      transition: { duration: 0.15, ease: 'easeIn' as const },
+    },
+  },
   // Divider line
   divider: {
     initial: { opacity: 0, scaleX: 0 },
@@ -106,8 +120,30 @@ export const CARD_SELECTION_ANIMATION = {
 }
 
 // SOAP preview content animation
-// Slide down with fade, supports stagger via custom delay
+// Animates height for smooth expand/collapse, with staggered content fade
 export const SOAP_PREVIEW_ANIMATION = {
+  // Container that animates height
+  container: {
+    initial: { height: 0, opacity: 0 },
+    animate: (staggerIndex: number) => ({
+      height: 'auto',
+      opacity: 1,
+      transition: {
+        height: { duration: 0.2, ease: EASE_OUT },
+        opacity: { duration: 0.2, ease: EASE_OUT },
+        delay: staggerIndex * 0.05, // Stagger each section by 50ms
+      },
+    }),
+    exit: {
+      height: 0,
+      opacity: 0,
+      transition: {
+        height: { duration: 0.15, ease: 'easeIn' as const },
+        opacity: { duration: 0.1, ease: 'easeIn' as const },
+      },
+    },
+  },
+  // Legacy - keeping for backwards compatibility if used elsewhere
   initial: { opacity: 0, y: -12 },
   animate: (staggerIndex: number) => ({
     opacity: 1,

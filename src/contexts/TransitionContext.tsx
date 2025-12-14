@@ -22,11 +22,13 @@ interface TransitionContextType {
   isKeyboardNavMode: boolean
   showFutureAppointments: boolean
   transitionPatientId: string | null
+  isPatientCardsCollapsed: boolean
   startTransition: (rect: DOMRect, source: TransitionSource, patientId?: string) => void
   setSlideDirection: (direction: SlideDirection) => void
   setSelectedAppointmentId: (id: string | null) => void
   setKeyboardNavMode: (active: boolean) => void
   setShowFutureAppointments: (show: boolean) => void
+  setPatientCardsCollapsed: (collapsed: boolean) => void
   completeTransition: () => void
 }
 
@@ -42,6 +44,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [isKeyboardNavMode, setIsKeyboardNavMode] = useState(false)
   const [showFutureAppointments, setShowFutureAppointments] = useState(false)
   const [transitionPatientId, setTransitionPatientId] = useState<string | null>(null)
+  const [isPatientCardsCollapsed, setPatientCardsCollapsed] = useState(true) // Start collapsed on appointment detail
 
   // Global mouse move listener to exit keyboard nav mode
   useEffect(() => {
@@ -80,6 +83,10 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const startTransition = useCallback((rect: DOMRect, source: TransitionSource, patientId?: string) => {
+    // Clear any lingering transition state first to prevent double animations
+    setIsTransitioning(false)
+
+    // Then set up the new transition
     setOrigin({
       x: rect.x,
       y: rect.y,
@@ -109,11 +116,13 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         isKeyboardNavMode,
         showFutureAppointments,
         transitionPatientId,
+        isPatientCardsCollapsed,
         startTransition,
         setSlideDirection,
         setSelectedAppointmentId,
         setKeyboardNavMode,
         setShowFutureAppointments,
+        setPatientCardsCollapsed,
         completeTransition,
       }}
     >

@@ -1,6 +1,6 @@
 # Session Management Prompts
 
-## Starting a New Session
+## Starting a Feature Session
 
 ```
 Read these files to understand the project:
@@ -9,6 +9,27 @@ Read these files to understand the project:
 3. `prisma/schema.prisma` - data model
 
 Then be ready to program. I'll tell you what to work on.
+```
+
+---
+
+## Starting a Meta Session
+
+Use this for sessions focused on organization, documentation, prompt engineering, tooling, or high-level work that isn't specific to a feature.
+
+```
+This is a meta session (not feature development). Get oriented:
+
+1. Run `git status` and `git diff --stat` to see current uncommitted changes
+2. Run `git log --oneline -10` to see recent commits
+3. Read `.claude.md` for project context
+4. Read the latest handoff in `docs/handoffs/` to know the current version
+
+You are an expert prompt engineer. When I need to delegate tasks to other AI agents, help me write clear, actionable prompts.
+
+When asked for design options or UX suggestions, you are an experienced UX designer with 30 years of experience.
+
+Then be ready for organizational/documentation work. I'll tell you what to focus on.
 ```
 
 ---
@@ -59,11 +80,20 @@ This session is ending. Before this session ends:
 
 ---
 
-## When to Use Which Ending
+## When to Use Which Prompt
 
-| Session Type        | Handoff Location                                  | Example                     |
-| ------------------- | ------------------------------------------------- | --------------------------- |
-| Feature development | `docs/handoffs/{VERSION}_feature_name.md`       | `1.19_soap_sections.md`   |
-| Meta/maintenance    | `docs/handoffs/meta/{VERSION}_N_description.md` | `1.19_1_status_colors.md` |
+### Starting
+
+| Session Type        | Focus                                              |
+| ------------------- | -------------------------------------------------- |
+| Feature session     | Read handoffs, understand codebase, ready to build |
+| Meta session        | Check git state, recent commits, ready for org work |
+
+### Ending
+
+| Session Type        | Handoff Location                                    | Example                     |
+| ------------------- | --------------------------------------------------- | --------------------------- |
+| Feature development | `docs/handoffs/{VERSION}_feature_name.md`           | `1.19_soap_sections.md`     |
+| Meta/maintenance    | `docs/handoffs/meta/{VERSION}_N_description.md`     | `1.19_1_status_colors.md`   |
 
 **How to find the current version:** Look at the latest handoff doc in `docs/handoffs/` (not meta). The number before the underscore is the version.

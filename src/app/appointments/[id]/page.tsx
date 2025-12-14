@@ -32,7 +32,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus } from 'lucide-react'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -195,11 +195,11 @@ function VisitCard({
 
     if (isSelected && isFocused) {
       // Selected + Focused: both states combined (muted ring + keyboard focus indicator)
-      return `${base} border-transparent bg-transparent ring-2 ring-muted-foreground/40`
+      return `${base} border-transparent bg-transparent ring-2 ring-inset ring-muted-foreground/40`
     }
     if (isSelected) {
       // Selected only: previewing this visit (muted outline, no fill)
-      return `${base} border-transparent bg-transparent ring-2 ring-muted-foreground/40`
+      return `${base} border-transparent bg-transparent ring-2 ring-inset ring-muted-foreground/40`
     }
     if (isFocused) {
       // Focused only: keyboard nav is here
@@ -242,10 +242,15 @@ function VisitCard({
           </div>
         )}
       </div>
-      {/* Selection indicator with animation - centered */}
+      {/* Selection indicator with animation - centered, smooth height */}
       <AnimatePresence>
         {isSelected && (
-          <div className="mt-2 pt-2 overflow-hidden text-center">
+          <motion.div
+            className="mt-2 pt-2 overflow-hidden text-center"
+            initial={CARD_SELECTION_ANIMATION.container.initial}
+            animate={CARD_SELECTION_ANIMATION.container.animate}
+            exit={CARD_SELECTION_ANIMATION.container.exit}
+          >
             <motion.div
               className="border-t border-muted-foreground/20 origin-center"
               initial={CARD_SELECTION_ANIMATION.divider.initial}
@@ -260,7 +265,7 @@ function VisitCard({
             >
               Previewing
             </motion.span>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </button>
@@ -717,18 +722,20 @@ function SOAPSections({
               rows={2}
             />
 
-            {/* Compact preview from selected past visit - inline styling, no header */}
+            {/* Compact preview from selected past visit - smooth height animation */}
             <AnimatePresence mode="wait">
               {previewContent && (
-                <motion.p
+                <motion.div
                   key={`${selectedVisitId}-${section.key}`}
-                  className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2"
-                  initial={SOAP_PREVIEW_ANIMATION.initial}
-                  animate={SOAP_PREVIEW_ANIMATION.animate(index)}
-                  exit={SOAP_PREVIEW_ANIMATION.exit}
+                  className="overflow-hidden"
+                  initial={SOAP_PREVIEW_ANIMATION.container.initial}
+                  animate={SOAP_PREVIEW_ANIMATION.container.animate(index)}
+                  exit={SOAP_PREVIEW_ANIMATION.container.exit}
                 >
-                  {previewContent}
-                </motion.p>
+                  <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
+                    {previewContent}
+                  </p>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
@@ -776,6 +783,8 @@ export default function AppointmentDetailPage() {
     setSelectedAppointmentId,
     isKeyboardNavMode,
     setKeyboardNavMode,
+    isPatientCardsCollapsed,
+    setPatientCardsCollapsed,
     completeTransition,
   } = useTransition()
   const appointmentId = params.id as string
@@ -1066,24 +1075,56 @@ export default function AppointmentDetailPage() {
       }
 
       if (rect) {
-        startTransition(rect, 'appointment')
+        // Pass current patient ID to detect same vs different patient transitions
+        startTransition(rect, 'appointment', appointment?.patient?.id)
       }
       router.push(`/appointments/${clickedAppointment.id}`)
     }
   }
 
   // Only animate sidebar width when coming from Today screen (not when switching scheduled visits)
-  const shouldAnimateSidebar = transitionSource === 'today'
-  // For scheduled transitions, we don't need the exit animation on the patient panel
-  const isScheduledTransition = transitionSource === 'scheduled'
+  const shouldAnimateSidebar = transitionSource === 'today' && isTransitioning
+
+  // Determine if Middle Panel should animate (patient-level transitions)
+  // Animate when:
+  // 1. Coming from Today screen (with active transition)
+  // 2. Switching patients via PatientCards ('appointment' transition)
+  // 3. Switching to different patient via scheduled visit navigation
+  // Do NOT animate when:
+  // - Fresh page load (no active transition)
+  // - Same-patient scheduled visit navigation
+  const shouldAnimateMiddlePanel = isTransitioning && (
+    // Coming from Today screen
+    transitionSource === 'today' ||
+    // Switching patients via PatientCards
+    transitionSource === 'appointment' ||
+    // Switching to different patient via scheduled visit
+    (transitionSource === 'scheduled' && transitionPatientId !== null && transitionPatientId !== appointment?.patient?.id)
+  )
+
+  // Stable key for Middle Panel that doesn't depend on isTransitioning
+  // This prevents the key from changing when completeTransition() runs
+  const isSamePatientNavigation = transitionSource === 'scheduled' &&
+    transitionPatientId !== null &&
+    transitionPatientId === appointment?.patient?.id
+
+  // For same-patient navigation, use patient-based key (stable across appointments)
+  // For different-patient or Today transitions, use appointment-based key (triggers animation)
+  const middlePanelKey = isSamePatientNavigation
+    ? `patient-${appointment?.patient?.id}`
+    : appointmentId
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - compact mode, only animate width when coming from Today */}
+      {/* Patient Cards - collapsible, animate width */}
       <motion.div
-        className="flex flex-col flex-shrink-0"
+        className="flex flex-col relative flex-shrink-0"
         initial={shouldAnimateSidebar ? { width: SIDEBAR_ANIMATION.expandedWidth } : false}
-        animate={{ width: SIDEBAR_ANIMATION.collapsedWidth }}
+        animate={{
+          width: isPatientCardsCollapsed
+            ? SIDEBAR_ANIMATION.collapsedWidth
+            : SIDEBAR_ANIMATION.expandedWidth
+        }}
         transition={SIDEBAR_ANIMATION.transition}
       >
         <div className="h-full">
@@ -1092,9 +1133,22 @@ export default function AppointmentDetailPage() {
             onAppointmentHover={setHoveredAppointmentId}
             hoveredAppointmentId={effectiveHoveredAppointmentId}
             selectedAppointmentId={selectedAppointmentIdForCards}
-            compact
+            compact={isPatientCardsCollapsed}
           />
         </div>
+
+        {/* Collapse/Expand toggle button */}
+        <button
+          onClick={() => setPatientCardsCollapsed(!isPatientCardsCollapsed)}
+          className="absolute top-1/2 -right-3 z-10 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-sidebar border border-border shadow-sm hover:bg-muted transition-colors"
+          aria-label={isPatientCardsCollapsed ? 'Expand patient cards' : 'Collapse patient cards'}
+        >
+          {isPatientCardsCollapsed ? (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
       </motion.div>
 
       {/* Vertical divider */}
@@ -1103,21 +1157,26 @@ export default function AppointmentDetailPage() {
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Middle Panel - Patient Info & Visit Timeline */}
-        {/* Static on same-patient 'scheduled' transitions, animated otherwise */}
+        {/* Static on fresh load and same-patient transitions, animated on patient switch */}
         <AnimatePresence mode="wait" initial={true}>
           <motion.div
-            key={transitionSource === 'scheduled' && transitionPatientId === appointment?.patient?.id
-              ? 'patient-panel-static'
-              : appointmentId}
+            key={middlePanelKey}
             className="flex w-[300px] flex-col border-r border-border bg-card"
             initial={{
-              // Animate in from right for 'today' or different-patient 'scheduled' transitions
-              x: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 100 : 0,
-              opacity: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 0 : 1,
+              // Horizontal slide from right for 'today' transitions
+              x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
+              // Vertical slide for patient-switching transitions
+              y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+                : 0,
+              opacity: shouldAnimateMiddlePanel ? 0 : 1,
             }}
-            animate={{ x: 0, opacity: 1 }}
+            animate={{ x: 0, y: 0, opacity: 1 }}
             exit={{
-              opacity: transitionSource === 'today' || (transitionSource === 'scheduled' && transitionPatientId !== appointment?.patient?.id) ? 0 : 1,
+              y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+                : 0,
+              opacity: shouldAnimateMiddlePanel ? 0 : 1,
             }}
             transition={SIDEBAR_ANIMATION.transition}
           >

@@ -237,7 +237,6 @@ function PatientCard({
   // Unified layout - elements animate between compact and full positions
   return (
     <motion.button
-      layout="position"
       data-appointment-id={appointmentId}
       onClick={(e) => onClick?.(e.currentTarget.getBoundingClientRect())}
       onDoubleClick={onDoubleClick}
@@ -248,8 +247,8 @@ function PatientCard({
           ? `flex flex-col items-start justify-center gap-1 ${CARD_HEIGHT}`
           : `w-full text-left flex items-center ${CARD_HEIGHT}`
       }`}
-      style={getHoverStyles()}
-      transition={SPRING_TRANSITION}
+      animate={getHoverStyles()}
+      transition={{ duration: 0.15 }}
     >
       {/* Selection indicator - shared layoutId so it animates between cards */}
       {isSelected && (
@@ -354,6 +353,7 @@ export function PatientCards({
   }, []);
 
   // Scroll to selected appointment card when selection changes (only if not visible)
+  // Use longer timeout to let selection indicator's layoutId animation settle
   useEffect(() => {
     if (selectedAppointmentId && containerRef.current) {
       const timeoutId = setTimeout(() => {
@@ -376,13 +376,14 @@ export function PatientCards({
           // Only scroll if not fully visible
           if (!isFullyVisible) {
             // Use "nearest" to minimize movement - just enough to make it visible
+            // Use "auto" behavior to avoid competing with layoutId animation
             cardElement.scrollIntoView({
-              behavior: "smooth",
+              behavior: "auto",
               block: "nearest",
             });
           }
         }
-      }, 100);
+      }, 350); // Wait for selection indicator animation to complete
       return () => clearTimeout(timeoutId);
     }
   }, [selectedAppointmentId]);
