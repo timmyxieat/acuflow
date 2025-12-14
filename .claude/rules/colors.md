@@ -26,16 +26,16 @@ These are **independent**. A "Follow-up Treatment" can be "Scheduled", "In Progr
 
 ---
 
-## Current Implementation (Confusing)
+## Current Implementation
 
 | Location | What's colored | Colors used |
 |----------|----------------|-------------|
 | Timeline blocks | Appointment Type | Indigo, Emerald, Amber |
-| Patient Cards sections | Status | Blue, Green, Gray, Amber, Slate |
+| Patient Cards sections | Status | Blue, Green, Slate, Amber |
 | Preview dot | Appointment Type | Indigo, Emerald, Amber |
-| Preview badge | Status | Blue, Green, Gray, Amber, Slate |
+| Preview badge | Status | Blue, Green, Slate, Amber |
 
-**Problem**: Amber is used for BOTH "Brief Follow-up" type AND "Unsigned" status. This is confusing.
+**Note:** Amber is used for both "Brief Follow-up" type and "Unsigned" status. See Open Question section below.
 
 ---
 
@@ -48,92 +48,28 @@ Follow-up Treatment:  #10b981 (Emerald)
 Brief Follow-up:      #f59e0b (Amber)
 ```
 
-### Status Colors (from mock-data.ts getStatusDisplay)
+### Status Colors (from constants.ts and mock-data.ts)
 ```
-Scheduled:    bg-slate-100    text-slate-700    (Gray)
-Checked In:   bg-green-100    text-green-700    (Green)
-In Progress:  bg-blue-100     text-blue-700     (Blue)
-Unsigned:     bg-amber-100    text-amber-700    (Amber) ← CONFLICTS with Brief Follow-up
-Completed:    bg-slate-100    text-slate-600    (Gray)
-Cancelled:    bg-red-100      text-red-700      (Red)
-No Show:      bg-orange-100   text-orange-700   (Orange)
+Scheduled:    bg-slate-100    text-slate-600    #94a3b8 (Slate) ← No action needed
+Checked In:   bg-green-100    text-green-700    #22c55e (Green)
+In Progress:  bg-blue-100     text-blue-700     #3b82f6 (Blue)
+Unsigned:     bg-amber-100    text-amber-700    #f59e0b (Amber) - needs signature
+Completed:    bg-slate-100    text-slate-600    #94a3b8 (Slate) ← No action needed
+Cancelled:    bg-red-100      text-red-700      #ef4444 (Red)
+No Show:      bg-red-100      text-red-700      #ef4444 (Red)
 ```
+
+**Design decision:** Scheduled and Completed share the same slate color because both are "no action needed" states. Colors are reserved for states requiring attention.
 
 ---
 
-## Questions to Resolve
+## Open Question: Appointment Type Colors
 
-1. **Do we even need appointment type colors?**
-   - Most EHRs don't color-code by type
-   - Type is shown as text anyway
-
-2. **What matters more on the timeline?**
-   - Knowing it's a "Follow-up" vs "Initial"? (type)
-   - Knowing it's "In Progress" vs "Scheduled"? (status)
-
-3. **Should timeline blocks be colored at all?**
-   - Could be neutral/white with just text
-   - Status could be shown as a small badge instead
-
----
-
-## Proposed Options
-
-### Option A: Type on Timeline, Status on Cards (Current but fix conflicts)
-- Timeline: Appointment type colors (but pick non-conflicting colors)
-- Patient Cards: Status colors
-- Preview: Both (type dot + status badge)
-
-**New Type Colors (avoid amber):**
+Appointment types currently use these colors on the Timeline:
 ```
 Initial Consultation: #6366f1 (Indigo)
 Follow-up Treatment:  #10b981 (Emerald)
-Brief Follow-up:      #8b5cf6 (Violet) ← Changed from Amber
+Brief Follow-up:      #f59e0b (Amber)
 ```
 
-### Option B: Status Everywhere
-- Timeline: Status colors
-- Patient Cards: Status colors
-- Preview: Status only
-
-**Pros**: Consistent, always know workflow state
-**Cons**: Lose visual distinction of appointment types
-
-### Option C: Neutral Timeline, Status on Cards
-- Timeline: Light gray/neutral backgrounds
-- Patient Cards: Status colors
-- Preview: Status badge only
-
-**Pros**: Clean, no color confusion
-**Cons**: Timeline less visually interesting
-
-### Option D: Type Colors with Status Indicators
-- Timeline: Type colors for background
-- Timeline: Small status icon/badge overlay
-- Patient Cards: Status colors
-- Preview: Both
-
-**Pros**: Shows both pieces of info
-**Cons**: More visual complexity
-
----
-
-## Recommendation
-
-**Option C (Neutral Timeline)** is cleanest:
-- Users scan the patient cards by status anyway
-- Timeline is for seeing time blocks, not status
-- Removes all color confusion
-
-Or **Option A with fixed colors** if type distinction on timeline is important.
-
----
-
-## Decision Needed
-
-Which option should we implement?
-
-- [ ] Option A: Keep type colors on timeline, fix conflicts
-- [ ] Option B: Status colors everywhere
-- [ ] Option C: Neutral timeline, status on cards only
-- [ ] Option D: Type background + status indicator overlay
+**Note:** Brief Follow-up uses Amber, which also used for Unsigned status. This may cause confusion if both are visible together. Consider changing Brief Follow-up to Violet (`#8b5cf6`) if this becomes an issue.

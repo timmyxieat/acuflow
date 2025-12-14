@@ -11,7 +11,7 @@ import { AppointmentStatus } from '@/generated/prisma/browser'
 export const STATUS_COLORS: Record<string, string> = {
   [AppointmentStatus.IN_PROGRESS]: '#3b82f6', // blue-500
   [AppointmentStatus.CHECKED_IN]: '#22c55e', // green-500
-  [AppointmentStatus.SCHEDULED]: '#eab308', // yellow-500
+  [AppointmentStatus.SCHEDULED]: '#94a3b8', // slate-400 (same as completed - no action needed)
   [AppointmentStatus.COMPLETED]: '#94a3b8', // slate-400
   [AppointmentStatus.CANCELLED]: '#ef4444', // red-500
   [AppointmentStatus.NO_SHOW]: '#ef4444', // red-500
@@ -35,7 +35,7 @@ export function getStatusColor(status: AppointmentStatus, isSigned?: boolean): s
 export const STATUS_TEXT_COLORS: Record<string, string> = {
   [AppointmentStatus.IN_PROGRESS]: 'text-blue-600',
   [AppointmentStatus.CHECKED_IN]: 'text-green-600',
-  [AppointmentStatus.SCHEDULED]: 'text-yellow-600',
+  [AppointmentStatus.SCHEDULED]: 'text-muted-foreground', // same as completed - no action needed
   [AppointmentStatus.COMPLETED]: 'text-muted-foreground',
   [AppointmentStatus.CANCELLED]: 'text-red-600',
   [AppointmentStatus.NO_SHOW]: 'text-red-600',

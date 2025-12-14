@@ -2276,9 +2276,9 @@ export function getStatusDisplay(
     },
     [AppointmentStatus.SCHEDULED]: {
       label: "Scheduled",
-      color: "gray",
-      bgColor: "bg-gray-100",
-      textColor: "text-gray-700",
+      color: "slate",
+      bgColor: "bg-slate-100",
+      textColor: "text-slate-600",
     },
     [AppointmentStatus.COMPLETED]: {
       label: "Completed",
