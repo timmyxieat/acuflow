@@ -33,7 +33,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus, Lock } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
@@ -138,14 +138,16 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 // =============================================================================
 
 // =============================================================================
-// Timeline Section Colors
+// Timeline Section Colors (matches PatientCards status colors)
 // =============================================================================
 
 const TIMELINE_COLORS = {
-  today: '#3b82f6',      // Blue - current appointment
-  upcoming: '#94a3b8',   // Muted slate - future appointments
+  scheduled: '#94a3b8',  // Slate - future appointments not yet started
+  checkedIn: '#22c55e',  // Green - patient arrived, waiting
+  inProgress: '#3b82f6', // Blue - currently being treated
   unsigned: '#f59e0b',   // Amber - needs signature
-  history: '#94a3b8',    // Slate - signed past visits
+  completed: '#94a3b8',  // Slate - signed and done
+  editing: '#3b82f6',    // Blue - currently editing this appointment
 }
 
 // =============================================================================
@@ -233,6 +235,7 @@ interface TimelineCardProps {
   chiefComplaint?: string | null
   isEditing?: boolean  // True when this card's appointment matches URL's appointmentId
   isUnsigned?: boolean
+  isLocked?: boolean   // True when this future appointment is not the next available
   isSelected?: boolean
   isHovered?: boolean
   isFocused?: boolean
@@ -251,6 +254,7 @@ function TimelineCard({
   chiefComplaint,
   isEditing,
   isUnsigned,
+  isLocked,
   isSelected,
   isHovered,
   isFocused,
@@ -280,8 +284,8 @@ function TimelineCard({
   // Card content - fixed height, edge-to-edge
   const cardContent = (
     <>
-      {/* Hover background - CSS-only */}
-      {!isSelected && !isEditing && (
+      {/* Hover background - CSS-only (not for locked cards) */}
+      {!isSelected && !isEditing && !isLocked && (
         <div
           className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
           style={{ backgroundColor: hoverBgColor }}
@@ -302,11 +306,15 @@ function TimelineCard({
       <div className={`relative z-10 flex items-center justify-between gap-2 pl-3 pr-2 ${TIMELINE_CARD_HEIGHT}`}>
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           {/* Line 1: Date only */}
-          <span className={`text-sm font-medium ${isEditing ? 'text-blue-600' : 'text-foreground'}`}>
+          <span className={`text-sm font-medium ${
+            isEditing ? 'text-blue-600' :
+            isLocked ? 'text-muted-foreground/50' :
+            'text-foreground'
+          }`}>
             {formatTimelineDate(date)}
           </span>
           {/* Line 2: Chief complaint (always show placeholder if empty for consistent height) */}
-          <p className="text-xs text-muted-foreground truncate">
+          <p className={`text-xs truncate ${isLocked ? 'text-muted-foreground/40' : 'text-muted-foreground'}`}>
             {chiefComplaint || '\u00A0'}
           </p>
         </div>
@@ -318,12 +326,24 @@ function TimelineCard({
               Editing
             </span>
           )}
-          {isUnsigned && !isEditing && (
+          {isLocked && !isEditing && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="h-4 w-4 flex items-center justify-center">
+                  <Lock className="h-3 w-3 text-muted-foreground/40" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p className="text-xs">Complete earlier appointments first</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isUnsigned && !isEditing && !isLocked && (
             <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center">
               <Minus className="h-2.5 w-2.5 text-amber-600" />
             </div>
           )}
-          {!isEditing && !isUnsigned && (
+          {!isEditing && !isUnsigned && !isLocked && (
             <IconComponent className="h-4 w-4 text-muted-foreground/60" />
           )}
         </div>
@@ -342,6 +362,18 @@ function TimelineCard({
           className="absolute inset-0"
           style={{ backgroundColor: `${color}20` }}
         />
+        {cardContent}
+      </div>
+    )
+  }
+
+  // Locked cards are displayed as divs (not clickable)
+  if (isLocked) {
+    return (
+      <div
+        className="relative cursor-not-allowed"
+        style={{ boxShadow: `inset 3px 0 0 0 ${color}20` }}
+      >
         {cardContent}
       </div>
     )
@@ -370,34 +402,50 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
   const visitHistory = getPatientVisitHistory(patientId)
   const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
 
-  // Find today's appointment (based on date, not URL)
-  const todayAppointment = scheduledAppointments.find(a => {
-    const apptDate = new Date(a.scheduledStart)
-    const today = new Date()
-    return apptDate.toDateString() === today.toDateString()
-  })
+  // Group scheduled appointments by status
+  // "Scheduled" includes both today's SCHEDULED appointments AND future (isFuture) appointments
+  const scheduledStatusAppts = scheduledAppointments.filter(a =>
+    a.status === 'SCHEDULED'
+  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
 
-  // Separate upcoming (future) appointments - includes ALL future appointments
-  const upcomingAppointments = scheduledAppointments
-    .filter(a => a.isFuture)
-    .sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+  const checkedInAppts = scheduledAppointments.filter(a =>
+    a.status === 'CHECKED_IN'
+  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
 
-  // Separate unsigned visits (past, not signed) and signed history
+  const inProgressAppts = scheduledAppointments.filter(a =>
+    a.status === 'IN_PROGRESS'
+  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+
+  // Separate unsigned visits (past, not signed) and signed history (completed)
   const unsignedVisits = visitHistory.filter(v => !v.appointment?.isSigned)
-  const signedVisits = visitHistory.filter(v => v.appointment?.isSigned)
+  const completedVisits = visitHistory.filter(v => v.appointment?.isSigned)
 
-  // Count for expand/collapse
-  const upcomingCount = upcomingAppointments.length
+  // Check if today has any active appointments (Scheduled, Checked In, or In Progress)
+  // If so, all future appointments should be locked
+  const todayAppointments = scheduledAppointments.filter(a => !a.isFuture)
+  const hasActiveTodayAppointment = todayAppointments.some(a =>
+    a.status === 'SCHEDULED' ||
+    a.status === 'CHECKED_IN' ||
+    a.status === 'IN_PROGRESS'
+  )
 
-  // Check if the currently editing appointment is in the upcoming list
-  const isEditingUpcoming = upcomingAppointments.some(a => a.id === currentAppointmentId)
+  // Determine the "next available" future appointment (closest future date)
+  // If today has active appointments, all future ones are locked
+  // Otherwise, the closest future appointment is editable
+  const futureScheduledAppts = scheduledStatusAppts.filter(a => a.isFuture)
+  const nextAvailableFutureId = hasActiveTodayAppointment
+    ? null  // All future appointments locked when today has active
+    : (futureScheduledAppts.length > 0 ? futureScheduledAppts[0].id : null)
 
-  // Auto-expand upcoming section if we're editing a future appointment
+  // Check if we're editing a future appointment (for auto-expand)
+  const isEditingScheduled = scheduledStatusAppts.some(a => a.id === currentAppointmentId)
+
+  // Auto-expand scheduled section if we're editing a scheduled appointment
   useEffect(() => {
-    if (isEditingUpcoming && !showFutureAppointments) {
+    if (isEditingScheduled && !showFutureAppointments) {
       setShowFutureAppointments(true)
     }
-  }, [isEditingUpcoming, showFutureAppointments, setShowFutureAppointments])
+  }, [isEditingScheduled, showFutureAppointments, setShowFutureAppointments])
 
   // Handler for clicking a scheduled appointment (navigates to it)
   const handleScheduledAppointmentClick = (appointmentId: string) => {
@@ -407,97 +455,142 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
   }
 
   // Track index for keyboard navigation across all selectable items
-  // Selectable items: unsigned visits + signed visits (history)
-  const getGlobalIndex = (section: 'unsigned' | 'history', localIndex: number): number => {
+  // Selectable items: unsigned visits + completed visits
+  const getGlobalIndex = (section: 'unsigned' | 'completed', localIndex: number): number => {
     if (section === 'unsigned') return localIndex
     return unsignedVisits.length + localIndex
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Today Section - Today's appointment (may or may not be the one being edited) */}
-      {todayAppointment && (
-        <TimelineSection
-          title="Today"
-          color={TIMELINE_COLORS.today}
-          count={1}
-        >
-          <TimelineCard
-            id={todayAppointment.id}
-            date={new Date(todayAppointment.scheduledStart)}
-            appointmentTypeId={todayAppointment.appointmentType?.id}
-            isEditing={todayAppointment.id === currentAppointmentId}
-            onClick={todayAppointment.id !== currentAppointmentId
-              ? () => handleScheduledAppointmentClick(todayAppointment.id)
-              : undefined}
-            color={TIMELINE_COLORS.today}
-          />
-        </TimelineSection>
-      )}
+  // Determine if an appointment is locked (future but not next available)
+  const isAppointmentLocked = (appointment: ScheduledAppointmentWithType): boolean => {
+    // Only future appointments can be locked
+    if (!appointment.isFuture) return false
+    // The currently editing appointment is never locked
+    if (appointment.id === currentAppointmentId) return false
+    // Lock if it's not the next available future appointment
+    return appointment.id !== nextAvailableFutureId
+  }
 
-      {/* Upcoming Section - Future scheduled appointments */}
-      {upcomingCount > 0 && (
+  // Count scheduled appointments for section header
+  const scheduledCount = scheduledStatusAppts.length
+
+  // When collapsed, show unlocked appointments (today's + next available future)
+  // Locked appointments are hidden when collapsed
+  const unlockedScheduledAppts = scheduledStatusAppts.filter(a => !isAppointmentLocked(a))
+  const lockedScheduledAppts = scheduledStatusAppts.filter(a => isAppointmentLocked(a))
+  const lockedCount = lockedScheduledAppts.length
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* 1. Scheduled Section - Future appointments not yet started */}
+      {scheduledCount > 0 && (
         <div className="flex flex-col gap-2">
           {/* Section header with expand/collapse */}
           <div className="flex items-center justify-between pl-2">
             <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               <div
                 className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: TIMELINE_COLORS.upcoming }}
+                style={{ backgroundColor: TIMELINE_COLORS.scheduled }}
               />
-              <span className="whitespace-nowrap">Upcoming</span>
-              <span>({upcomingCount})</span>
+              <span className="whitespace-nowrap">Scheduled</span>
+              <span>({scheduledCount})</span>
             </div>
-            <button
-              onClick={() => setShowFutureAppointments(!showFutureAppointments)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {showFutureAppointments ? (
-                <>
-                  <ChevronUp className="h-3 w-3" />
-                  <span>Collapse</span>
-                </>
-              ) : (
-                <>
-                  <span>Show</span>
-                  <ChevronDown className="h-3 w-3" />
-                </>
-              )}
-            </button>
+            {lockedCount > 0 && (
+              <button
+                onClick={() => setShowFutureAppointments(!showFutureAppointments)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showFutureAppointments ? (
+                  <>
+                    <ChevronUp className="h-3 w-3" />
+                    <span>Collapse</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Show all</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
-          {/* Collapsible upcoming cards */}
-          <AnimatePresence>
-            {showFutureAppointments && (
-              <motion.div
-                className="flex flex-col overflow-hidden"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                {upcomingAppointments.map((appointment) => (
-                  <TimelineCard
-                    key={appointment.id}
-                    id={appointment.id}
-                    date={new Date(appointment.scheduledStart)}
-                    appointmentTypeId={appointment.appointmentType?.id}
-                    isEditing={appointment.id === currentAppointmentId}
-                    onClick={appointment.id !== currentAppointmentId
-                      ? () => handleScheduledAppointmentClick(appointment.id)
-                      : undefined}
-                    color={appointment.id === currentAppointmentId
-                      ? TIMELINE_COLORS.today  // Blue when editing
-                      : TIMELINE_COLORS.upcoming}
-                  />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Scheduled cards - when collapsed, show unlocked; when expanded, show all */}
+          <div className="flex flex-col">
+            {(showFutureAppointments ? scheduledStatusAppts : unlockedScheduledAppts).map((appointment) => {
+              const isLocked = isAppointmentLocked(appointment)
+              const isEditing = appointment.id === currentAppointmentId
+              return (
+                <TimelineCard
+                  key={appointment.id}
+                  id={appointment.id}
+                  date={new Date(appointment.scheduledStart)}
+                  appointmentTypeId={appointment.appointmentType?.id}
+                  isEditing={isEditing}
+                  isLocked={isLocked}
+                  onClick={!isEditing && !isLocked
+                    ? () => handleScheduledAppointmentClick(appointment.id)
+                    : undefined}
+                  color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.scheduled}
+                />
+              )
+            })}
+          </div>
+
         </div>
       )}
 
-      {/* Unsigned Section - Past visits needing signature */}
+      {/* 2. Checked In Section - Patient has arrived, waiting */}
+      {checkedInAppts.length > 0 && (
+        <TimelineSection
+          title="Checked In"
+          color={TIMELINE_COLORS.checkedIn}
+          count={checkedInAppts.length}
+        >
+          {checkedInAppts.map((appointment) => (
+            <TimelineCard
+              key={appointment.id}
+              id={appointment.id}
+              date={new Date(appointment.scheduledStart)}
+              appointmentTypeId={appointment.appointmentType?.id}
+              isEditing={appointment.id === currentAppointmentId}
+              onClick={appointment.id !== currentAppointmentId
+                ? () => handleScheduledAppointmentClick(appointment.id)
+                : undefined}
+              color={appointment.id === currentAppointmentId
+                ? TIMELINE_COLORS.editing
+                : TIMELINE_COLORS.checkedIn}
+            />
+          ))}
+        </TimelineSection>
+      )}
+
+      {/* 3. In Progress Section - Currently being treated */}
+      {inProgressAppts.length > 0 && (
+        <TimelineSection
+          title="In Progress"
+          color={TIMELINE_COLORS.inProgress}
+          count={inProgressAppts.length}
+        >
+          {inProgressAppts.map((appointment) => (
+            <TimelineCard
+              key={appointment.id}
+              id={appointment.id}
+              date={new Date(appointment.scheduledStart)}
+              appointmentTypeId={appointment.appointmentType?.id}
+              isEditing={appointment.id === currentAppointmentId}
+              onClick={appointment.id !== currentAppointmentId
+                ? () => handleScheduledAppointmentClick(appointment.id)
+                : undefined}
+              color={appointment.id === currentAppointmentId
+                ? TIMELINE_COLORS.editing
+                : TIMELINE_COLORS.inProgress}
+            />
+          ))}
+        </TimelineSection>
+      )}
+
+      {/* 4. Unsigned Section - Completed but needs signature */}
       {unsignedVisits.length > 0 && (
         <TimelineSection
           title="Unsigned"
@@ -525,14 +618,14 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
         </TimelineSection>
       )}
 
-      {/* History Section - Signed past visits */}
-      {signedVisits.length > 0 && (
+      {/* 5. Completed Section - Signed and done */}
+      {completedVisits.length > 0 && (
         <TimelineSection
-          title="History"
-          color={TIMELINE_COLORS.history}
-          count={signedVisits.length}
+          title="Completed"
+          color={TIMELINE_COLORS.completed}
+          count={completedVisits.length}
         >
-          {signedVisits.map((visit, index) => (
+          {completedVisits.map((visit, index) => (
             <TimelineCard
               key={visit.id}
               id={visit.id}
@@ -543,17 +636,17 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
               chiefComplaint={visit.chiefComplaint}
               isSelected={selectedVisitId === visit.id}
               isHovered={hoveredVisitId === visit.id}
-              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('history', index)}
-              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('history', index))}
+              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('completed', index)}
+              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('completed', index))}
               onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-              color={TIMELINE_COLORS.history}
+              color={TIMELINE_COLORS.completed}
             />
           ))}
         </TimelineSection>
       )}
 
       {/* Empty state - first visit */}
-      {visitHistory.length === 0 && (
+      {visitHistory.length === 0 && scheduledAppointments.length === 0 && (
         <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
           <p className="text-sm text-muted-foreground">
             First visit for this patient
@@ -677,6 +770,8 @@ interface SOAPSectionsProps {
   textareaRefs: React.MutableRefObject<(HTMLTextAreaElement | null)[]>
   onTextareaFocus: (index: number) => void
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
+  // Preview animation direction
+  previewSlideDirection: 'up' | 'down' | null
 }
 
 function SOAPSections({
@@ -690,6 +785,7 @@ function SOAPSections({
   textareaRefs,
   onTextareaFocus,
   saveStatus,
+  previewSlideDirection,
 }: SOAPSectionsProps) {
   // Get the selected past visit for preview
   const selectedVisit = selectedVisitId ? getVisitById(selectedVisitId) : null
@@ -784,22 +880,35 @@ function SOAPSections({
               rows={2}
             />
 
-            {/* Compact preview from selected past visit - smooth height animation */}
-            <AnimatePresence mode="wait">
-              {previewContent && (
-                <motion.div
-                  key={`${selectedVisitId}-${section.key}`}
-                  className="overflow-hidden"
-                  initial={SOAP_PREVIEW_ANIMATION.container.initial}
-                  animate={SOAP_PREVIEW_ANIMATION.container.animate(index)}
-                  exit={SOAP_PREVIEW_ANIMATION.container.exit}
-                >
-                  <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
-                    {previewContent}
-                  </p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Compact preview from selected past visit - crossfade with stable height */}
+            <div className="relative">
+              <AnimatePresence mode="popLayout">
+                {previewContent && (
+                  <motion.div
+                    key={`${selectedVisitId}-${section.key}`}
+                    layout
+                    initial={{
+                      y: previewSlideDirection === 'up' ? -20 : 20,
+                      opacity: 0,
+                    }}
+                    animate={{
+                      y: 0,
+                      opacity: 1,
+                      transition: { duration: 0.2, delay: index * 0.03 },
+                    }}
+                    exit={{
+                      y: previewSlideDirection === 'up' ? 20 : -20,
+                      opacity: 0,
+                      transition: { duration: 0.15 },
+                    }}
+                  >
+                    <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
+                      {previewContent}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         )
       })}
@@ -853,6 +962,8 @@ export default function AppointmentDetailPage() {
 
   // State for selected visit in timeline (for preview)
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+  // Track preview slide direction for animation
+  const [previewSlideDirection, setPreviewSlideDirection] = useState<'up' | 'down' | null>(null)
 
   // State for SOAP note content
   const [soapData, setSoapData] = useState<SOAPData>({
@@ -957,6 +1068,15 @@ export default function AppointmentDetailPage() {
       return () => clearTimeout(timer)
     }
   }, [isTransitioning, completeTransition])
+
+  // Auto-select most recent completed visit for preview on load
+  useEffect(() => {
+    if (orderedVisitIds.length > 0 && selectedVisitId === null) {
+      // orderedVisitIds is already sorted (most recent first from getPatientVisitHistory)
+      setSelectedVisitId(orderedVisitIds[0])
+      setFocusedVisitIndex(0)
+    }
+  }, [orderedVisitIds, selectedVisitId])
 
   // Handle keyboard shortcuts - Two-zone navigation (SOAP ↔ Visit History)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -1066,6 +1186,13 @@ export default function AppointmentDetailPage() {
 
   // Handle visit selection from timeline (also sets navigation focus)
   const handleSelectVisit = (visitId: string | null, index: number) => {
+    // Determine slide direction based on old vs new index
+    const oldIndex = selectedVisitId ? orderedVisitIds.indexOf(selectedVisitId) : -1
+    if (oldIndex !== -1 && visitId !== null) {
+      // newIndex > oldIndex means clicking below → slide up
+      // newIndex < oldIndex means clicking above → slide down
+      setPreviewSlideDirection(index > oldIndex ? 'up' : 'down')
+    }
     setSelectedVisitId(visitId)
     setFocusZone('visits')
     setFocusedVisitIndex(index)
@@ -1223,7 +1350,7 @@ export default function AppointmentDetailPage() {
         <AnimatePresence mode="wait" initial={true}>
           <motion.div
             key={middlePanelKey}
-            className="flex w-[300px] flex-col border-r border-border bg-card"
+            className="flex w-[200px] flex-col border-r border-border bg-card"
             initial={{
               // Horizontal slide from right for 'today' transitions
               x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
@@ -1325,6 +1452,7 @@ export default function AppointmentDetailPage() {
                     textareaRefs={soapTextareaRefs}
                     onTextareaFocus={handleTextareaFocus}
                     saveStatus={saveStatus}
+                    previewSlideDirection={previewSlideDirection}
                   />
                 </div>
               </ScrollableArea>
