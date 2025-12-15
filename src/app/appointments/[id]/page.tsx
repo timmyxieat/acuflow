@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScrollableArea, PatientCards } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
@@ -992,6 +992,30 @@ export default function AppointmentDetailPage() {
     router.replace(newUrl, { scroll: false })
   }, [searchParams, router, appointmentId])
 
+  // Read collapse state from URL on mount and sync to context
+  useEffect(() => {
+    const collapsedFromUrl = searchParams.get('cards')
+    if (collapsedFromUrl === 'expanded') {
+      setPatientCardsCollapsed(false)
+    } else if (collapsedFromUrl === 'collapsed') {
+      setPatientCardsCollapsed(true)
+    }
+    // Only run on mount (when appointmentId changes)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentId])
+
+  // Update URL when collapse state changes
+  const handleToggleCollapse = useCallback(() => {
+    const newCollapsed = !isPatientCardsCollapsed
+    setPatientCardsCollapsed(newCollapsed)
+
+    // Update URL
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('cards', newCollapsed ? 'collapsed' : 'expanded')
+    const newUrl = `/appointments/${appointmentId}${params.toString() ? `?${params.toString()}` : ''}`
+    router.replace(newUrl, { scroll: false })
+  }, [isPatientCardsCollapsed, setPatientCardsCollapsed, searchParams, router, appointmentId])
+
   // Wrapper to set both state and URL
   const setSelectedVisitId = useCallback((visitId: string | null) => {
     setSelectedVisitIdState(visitId)
@@ -1019,15 +1043,12 @@ export default function AppointmentDetailPage() {
   // Refs for SOAP textareas
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
 
-  // Dynamic expanded width for panels (calculated client-side)
-  const [expandedWidth, setExpandedWidth] = useState(SIDEBAR_ANIMATION.getExpandedWidth())
-
-  // Recalculate width on window resize
-  useLayoutEffect(() => {
-    const updateWidth = () => setExpandedWidth(SIDEBAR_ANIMATION.getExpandedWidth())
-    updateWidth()
-    window.addEventListener('resize', updateWidth)
-    return () => window.removeEventListener('resize', updateWidth)
+  // Track if component has initialized (for skipping animation on mount)
+  const [hasInitialized, setHasInitialized] = useState(false)
+  useEffect(() => {
+    // Small delay to ensure URL-based state is applied before enabling animations
+    const timer = setTimeout(() => setHasInitialized(true), 50)
+    return () => clearTimeout(timer)
   }, [])
 
   // Auto-save SOAP notes
@@ -1371,16 +1392,15 @@ export default function AppointmentDetailPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - collapsible, animate width (responsive: 20vw, min 180px, max 280px) */}
-      <motion.div
-        className={`flex flex-col relative flex-shrink-0 ${!isPatientCardsCollapsed ? PANEL_WIDTH_CLASS : ''}`}
-        initial={shouldAnimateSidebar ? { width: expandedWidth } : false}
-        animate={{
-          width: isPatientCardsCollapsed
-            ? SIDEBAR_ANIMATION.collapsedWidth
-            : expandedWidth
+      {/* Patient Cards - CSS handles expanded width, animation only after initial mount */}
+      <div
+        className={`flex flex-col relative flex-shrink-0 transition-[width] ease-out ${
+          isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
+        }`}
+        style={{
+          width: isPatientCardsCollapsed ? SIDEBAR_ANIMATION.collapsedWidth : undefined,
+          transitionDuration: hasInitialized ? '300ms' : '0ms',
         }}
-        transition={SIDEBAR_ANIMATION.transition}
       >
         <div className="h-full">
           <PatientCards
@@ -1389,10 +1409,10 @@ export default function AppointmentDetailPage() {
             hoveredAppointmentId={effectiveHoveredAppointmentId}
             selectedAppointmentId={selectedAppointmentIdForCards}
             compact={isPatientCardsCollapsed}
-            onToggleCompact={() => setPatientCardsCollapsed(!isPatientCardsCollapsed)}
+            onToggleCompact={handleToggleCollapse}
           />
         </div>
-      </motion.div>
+      </div>
 
       {/* Vertical divider */}
       <div className="w-px bg-border" />

@@ -275,8 +275,9 @@ function PatientCard({
             {/* Time - below name */}
             <motion.div
               layoutId={`time-${appointmentId}`}
+              layout="position"
               className="flex items-center gap-1 text-[11px] text-muted-foreground"
-              transition={SPRING_TRANSITION}
+              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
               suppressHydrationWarning
             >
               {timeDisplay.icon && (
@@ -295,8 +296,9 @@ function PatientCard({
         {compact && (
           <motion.div
             layoutId={`time-${appointmentId}`}
+            layout="position"
             className="w-8 overflow-hidden"
-            transition={SPRING_TRANSITION}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             suppressHydrationWarning
           >
             <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
@@ -376,10 +378,12 @@ export function PatientCards({
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
-          <div className={`flex items-center flex-shrink-0 ${compact ? "justify-center" : "justify-start"}`}>
+          <div className="flex items-center flex-shrink-0">
             <button
               onClick={onToggleCompact}
-              className="flex h-12 w-12 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              className={`flex h-12 items-center text-muted-foreground hover:text-foreground transition-colors ${
+                compact ? "w-12 justify-center" : "w-full justify-start pl-3"
+              }`}
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
               {compact ? (

@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { Search, X, User, Calendar, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatTime } from '@/lib/dev-time'
 import { useHeader } from '@/contexts/HeaderContext'
+import { useTransition } from '@/contexts/TransitionContext'
+import { CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import {
   searchPatients,
   getAppointmentsForDate,
@@ -26,6 +29,7 @@ interface SearchResult {
 export function Topbar() {
   const router = useRouter()
   const { header, previousTitle } = useHeader()
+  const { startTransition, isTransitioning, transitionSource } = useTransition()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchMode, setSearchMode] = useState<SearchMode>('patient')
   const [query, setQuery] = useState('')
@@ -88,11 +92,13 @@ export function Topbar() {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-sidebar px-3">
       {/* Page title area - contextual based on route */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-baseline gap-4">
         {header.showBackButton ? (
           <>
             <button
               onClick={() => {
+                // Trigger back animation
+                startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back')
                 // Navigate back to Today with patient selection preserved
                 if (header.currentPatientId) {
                   router.push(`/?patient=${header.currentPatientId}`)
@@ -100,14 +106,19 @@ export function Topbar() {
                   router.push('/')
                 }
               }}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="flex h-14 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Today</span>
             </button>
           </>
         ) : (
-          <>
+          <motion.div
+            className="flex items-baseline gap-4"
+            initial={isTransitioning && transitionSource === 'back' ? { x: -50, opacity: 0 } : false}
+            animate={{ x: 0, opacity: 1 }}
+            transition={CONTENT_SLIDE_ANIMATION.transition}
+          >
             <h1 className="text-xl font-semibold">{header.title || 'Today'}</h1>
             <span className="text-sm text-muted-foreground">
               {header.subtitle || new Date().toLocaleDateString('en-US', {
@@ -116,7 +127,7 @@ export function Topbar() {
                 day: 'numeric',
               })}
             </span>
-          </>
+          </motion.div>
         )}
       </div>
 

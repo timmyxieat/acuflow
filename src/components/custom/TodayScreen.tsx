@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useLayoutEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
-import { SIDEBAR_ANIMATION } from '@/lib/animations'
+import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import { getAppointmentsByStatus, getPatientTodayAppointmentId, type AppointmentWithRelations } from '@/data/mock-data'
 
 // CSS clamp value for consistent responsive width
@@ -22,20 +22,12 @@ export function TodayScreen() {
     setSelectedAppointmentId,
     lastSelectedAppointmentId,
     setKeyboardNavMode,
+    isTransitioning,
+    transitionSource,
+    completeTransition,
   } = useTransition()
   const [, setHoveredAppointmentId, effectiveHoveredId] = useHoverWithKeyboardNav<string>()
   const [isCollapsed, setIsCollapsed] = useState(false)
-
-  // Dynamic expanded width (calculated client-side)
-  const [expandedWidth, setExpandedWidth] = useState(SIDEBAR_ANIMATION.getExpandedWidth())
-
-  // Recalculate width on window resize
-  useLayoutEffect(() => {
-    const updateWidth = () => setExpandedWidth(SIDEBAR_ANIMATION.getExpandedWidth())
-    updateWidth()
-    window.addEventListener('resize', updateWidth)
-    return () => window.removeEventListener('resize', updateWidth)
-  }, [])
 
   // Read patient selection from URL query param
   // This runs when URL changes (e.g., navigating back from appointment detail)
@@ -174,18 +166,27 @@ export function TodayScreen() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // Complete transition after back animation
+  useEffect(() => {
+    if (isTransitioning && transitionSource === 'back') {
+      const timer = setTimeout(() => {
+        completeTransition()
+      }, 400) // Match animation duration
+      return () => clearTimeout(timer)
+    }
+  }, [isTransitioning, transitionSource, completeTransition])
+
+  // Determine if we should animate (coming back from appointment)
+  const shouldAnimateBack = isTransitioning && transitionSource === 'back'
+
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - animated width (responsive: 20vw, min 180px, max 280px) */}
-      <motion.div
-        className={`flex flex-col relative flex-shrink-0 ${!isCollapsed ? PANEL_WIDTH_CLASS : ''}`}
-        initial={{ width: expandedWidth }}
-        animate={{
-          width: isCollapsed
-            ? SIDEBAR_ANIMATION.collapsedWidth
-            : expandedWidth
-        }}
-        transition={SIDEBAR_ANIMATION.transition}
+      {/* Patient Cards - CSS handles expanded width, Framer handles collapse animation */}
+      <div
+        className={`flex flex-col relative flex-shrink-0 transition-[width] duration-300 ease-out ${
+          isCollapsed ? '' : PANEL_WIDTH_CLASS
+        }`}
+        style={isCollapsed ? { width: SIDEBAR_ANIMATION.collapsedWidth } : undefined}
       >
         <div className="h-full overflow-hidden">
           <PatientCards
@@ -197,19 +198,25 @@ export function TodayScreen() {
             onToggleCompact={toggleCollapsed}
           />
         </div>
-      </motion.div>
+      </div>
 
       {/* Vertical divider */}
       <div className="w-px bg-border" />
 
-      {/* Timeline - always visible */}
-      <div className="flex-1">
+      {/* Timeline - animate on back navigation */}
+      <motion.div
+        className="flex-1"
+        initial={shouldAnimateBack ? { x: -100, opacity: 0 } : false}
+        animate={{ x: 0, opacity: 1 }}
+        transition={CONTENT_SLIDE_ANIMATION.transition}
+      >
         <Timeline
           onAppointmentClick={handleAppointmentClick}
           onAppointmentHover={handleAppointmentHover}
           hoveredAppointmentId={effectiveHoveredId}
+          selectedAppointmentId={selectedAppointmentId ?? undefined}
         />
-      </div>
+      </motion.div>
     </div>
   )
 }

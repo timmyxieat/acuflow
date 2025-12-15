@@ -9,7 +9,7 @@ interface TransitionOrigin {
   height: number
 }
 
-type TransitionSource = 'today' | 'appointment' | 'scheduled'
+type TransitionSource = 'today' | 'appointment' | 'scheduled' | 'back'
 type SlideDirection = 'up' | 'down' | null
 
 interface TransitionContextType {
