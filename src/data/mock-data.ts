@@ -2128,9 +2128,20 @@ export function getPatientTodayAppointmentId(patientId: string): string | null {
 
 /**
  * Get appointments grouped by status for the Today screen
+ * Unsigned and completed are sorted reverse chronologically (most recent first)
  */
 export function getAppointmentsByStatus() {
   const enriched = getEnrichedAppointments();
+
+  // Sort by completedAt descending (most recent first)
+  const sortByCompletedAtDesc = (
+    a: AppointmentWithRelations,
+    b: AppointmentWithRelations
+  ) => {
+    const aTime = a.completedAt?.getTime() ?? 0;
+    const bTime = b.completedAt?.getTime() ?? 0;
+    return bTime - aTime;
+  };
 
   return {
     inProgress: enriched.filter(
@@ -2140,12 +2151,12 @@ export function getAppointmentsByStatus() {
       (a) => a.status === AppointmentStatus.CHECKED_IN
     ),
     scheduled: enriched.filter((a) => a.status === AppointmentStatus.SCHEDULED),
-    unsigned: enriched.filter(
-      (a) => a.status === AppointmentStatus.COMPLETED && !a.isSigned
-    ),
-    completed: enriched.filter(
-      (a) => a.status === AppointmentStatus.COMPLETED && a.isSigned
-    ),
+    unsigned: enriched
+      .filter((a) => a.status === AppointmentStatus.COMPLETED && !a.isSigned)
+      .sort(sortByCompletedAtDesc),
+    completed: enriched
+      .filter((a) => a.status === AppointmentStatus.COMPLETED && a.isSigned)
+      .sort(sortByCompletedAtDesc),
     cancelled: enriched.filter(
       (a) =>
         a.status === AppointmentStatus.CANCELLED ||
