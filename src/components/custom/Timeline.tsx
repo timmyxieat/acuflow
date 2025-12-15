@@ -22,9 +22,8 @@ const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: s
 
 // Timeline configuration
 const MIN_HOUR_HEIGHT = 150 // minimum pixels per hour
-const START_HOUR = 8 // 8 AM
-const END_HOUR = 18 // 6 PM
-const TOTAL_HOURS = END_HOUR - START_HOUR
+const DEFAULT_START_HOUR = 8 // 8 AM - business hours start
+const DEFAULT_END_HOUR = 18 // 6 PM - business hours end
 const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
@@ -123,12 +122,49 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
   const [scrollPosition, setScrollPosition] = useState<ScrollPosition>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 })
 
-  // Calculate dynamic hour height based on container size
+  const appointments = useMemo(() => {
+    return getEnrichedAppointments().filter(
+      (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.NO_SHOW
+    )
+  }, [])
+
+  // Calculate dynamic start/end hours based on appointments
+  // Extends beyond business hours if appointments exist outside that range
+  const { startHour, endHour, totalHours } = useMemo(() => {
+    let minHour = DEFAULT_START_HOUR
+    let maxHour = DEFAULT_END_HOUR
+
+    for (const appt of appointments) {
+      const apptStartHour = appt.scheduledStart.getHours()
+      const apptEndHour = appt.scheduledEnd.getHours()
+      const apptEndMinutes = appt.scheduledEnd.getMinutes()
+
+      // Extend start if appointment begins earlier
+      if (apptStartHour < minHour) {
+        minHour = apptStartHour
+      }
+
+      // Extend end if appointment ends later
+      // If there are minutes, we need the next full hour
+      const effectiveEndHour = apptEndMinutes > 0 ? apptEndHour + 1 : apptEndHour
+      if (effectiveEndHour > maxHour) {
+        maxHour = effectiveEndHour
+      }
+    }
+
+    return {
+      startHour: minHour,
+      endHour: maxHour,
+      totalHours: maxHour - minHour,
+    }
+  }, [appointments])
+
+  // Calculate dynamic hour height based on container size and total hours
   useEffect(() => {
     const updateHeight = () => {
-      if (wrapperRef.current) {
+      if (wrapperRef.current && totalHours > 0) {
         const availableHeight = wrapperRef.current.clientHeight
-        const calculatedHeight = availableHeight / TOTAL_HOURS
+        const calculatedHeight = availableHeight / totalHours
         setHourHeight(Math.max(calculatedHeight, MIN_HOUR_HEIGHT))
       }
     }
@@ -136,45 +172,38 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
     updateHeight()
     window.addEventListener('resize', updateHeight)
     return () => window.removeEventListener('resize', updateHeight)
-  }, [])
-
-  const appointments = useMemo(() => {
-    return getEnrichedAppointments().filter(
-      (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.NO_SHOW
-    )
-  }, [])
+  }, [totalHours])
 
   // Calculate column assignments for overlapping appointments
   const columnAssignments = useMemo(() => assignColumns(appointments), [appointments])
 
-  // Generate hour labels (8 AM through 6 PM = 10 hour slots + end label)
+  // Generate hour labels based on dynamic range
   const hours = useMemo(() => {
     const result = []
-    for (let h = START_HOUR; h < END_HOUR; h++) {
+    for (let h = startHour; h < endHour; h++) {
       const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h
       const ampm = h >= 12 ? 'PM' : 'AM'
       result.push({ hour: h, label: `${hour12} ${ampm}` })
     }
     return result
-  }, [])
+  }, [startHour, endHour])
 
-  // End hour label (6 PM)
+  // End hour label (dynamic based on appointments)
   const endHourLabel = useMemo(() => {
-    const endHour = END_HOUR as number
     const hour12 = endHour > 12 ? endHour - 12 : endHour === 0 ? 12 : endHour
     const ampm = endHour >= 12 ? 'PM' : 'AM'
     return `${hour12} ${ampm}`
-  }, [])
+  }, [endHour])
 
   // Calculate position and height for an appointment
   const getAppointmentStyle = (appointment: AppointmentWithRelations) => {
-    const startHour = appointment.scheduledStart.getHours()
-    const startMinutes = appointment.scheduledStart.getMinutes()
-    const endHour = appointment.scheduledEnd.getHours()
-    const endMinutes = appointment.scheduledEnd.getMinutes()
+    const apptStartHour = appointment.scheduledStart.getHours()
+    const apptStartMinutes = appointment.scheduledStart.getMinutes()
+    const apptEndHour = appointment.scheduledEnd.getHours()
+    const apptEndMinutes = appointment.scheduledEnd.getMinutes()
 
-    const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
-    const endOffset = (endHour - START_HOUR) + (endMinutes / 60)
+    const startOffset = (apptStartHour - startHour) + (apptStartMinutes / 60)
+    const endOffset = (apptEndHour - startHour) + (apptEndMinutes / 60)
     const duration = endOffset - startOffset
 
     // Get column info for overlapping appointments
@@ -225,8 +254,8 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
   const now = getDevDate()
   const currentHour = now.getHours()
   const currentMinutes = now.getMinutes()
-  const currentTimeOffset = (currentHour - START_HOUR) + (currentMinutes / 60)
-  const showCurrentTime = currentHour >= START_HOUR && currentHour < END_HOUR
+  const currentTimeOffset = (currentHour - startHour) + (currentMinutes / 60)
+  const showCurrentTime = currentHour >= startHour && currentHour < endHour
 
   // Handle scroll position updates from ScrollableArea
   const handleScroll = (position: ScrollPosition) => {
@@ -250,15 +279,15 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
   const indicatorOffScreen = useMemo(() => {
     if (!indicatorAppointment) return null
 
-    const startHour = indicatorAppointment.scheduledStart.getHours()
-    const startMinutes = indicatorAppointment.scheduledStart.getMinutes()
-    const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
-    const appointmentTop = TOP_PADDING + startOffset * hourHeight
+    const apptStartHour = indicatorAppointment.scheduledStart.getHours()
+    const apptStartMinutes = indicatorAppointment.scheduledStart.getMinutes()
+    const apptStartOffset = (apptStartHour - startHour) + (apptStartMinutes / 60)
+    const appointmentTop = TOP_PADDING + apptStartOffset * hourHeight
 
-    const endHour = indicatorAppointment.scheduledEnd.getHours()
-    const endMinutes = indicatorAppointment.scheduledEnd.getMinutes()
-    const endOffset = (endHour - START_HOUR) + (endMinutes / 60)
-    const appointmentBottom = TOP_PADDING + endOffset * hourHeight
+    const apptEndHour = indicatorAppointment.scheduledEnd.getHours()
+    const apptEndMinutes = indicatorAppointment.scheduledEnd.getMinutes()
+    const apptEndOffset = (apptEndHour - startHour) + (apptEndMinutes / 60)
+    const appointmentBottom = TOP_PADDING + apptEndOffset * hourHeight
 
     const viewportTop = scrollPosition.scrollTop
     const viewportBottom = scrollPosition.scrollTop + scrollPosition.clientHeight
@@ -272,7 +301,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
       return 'below'
     }
     return null
-  }, [indicatorAppointment, hourHeight, scrollPosition])
+  }, [indicatorAppointment, hourHeight, scrollPosition, startHour])
 
   // Get status color for indicator appointment
   const indicatorStatusColor = indicatorAppointment
@@ -286,10 +315,10 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
   const scrollToIndicator = () => {
     if (!indicatorAppointment || !scrollableRef.current) return
 
-    const startHour = indicatorAppointment.scheduledStart.getHours()
-    const startMinutes = indicatorAppointment.scheduledStart.getMinutes()
-    const startOffset = (startHour - START_HOUR) + (startMinutes / 60)
-    const appointmentTop = TOP_PADDING + startOffset * hourHeight
+    const apptStartHour = indicatorAppointment.scheduledStart.getHours()
+    const apptStartMinutes = indicatorAppointment.scheduledStart.getMinutes()
+    const apptStartOffset = (apptStartHour - startHour) + (apptStartMinutes / 60)
+    const appointmentTop = TOP_PADDING + apptStartOffset * hourHeight
 
     scrollableRef.current.scrollTo({
       top: appointmentTop - 40, // 40px padding from top

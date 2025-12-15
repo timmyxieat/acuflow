@@ -39,6 +39,11 @@ Status: `[ ]` = not done, `[x]` = done
 ## Patient Cards / Right Sidebar
 
 - [ ] when clicking a patient card, it doesn't have a click highlight feedback for the sake of the animation
+- [ ] Date  + relative date for all middle panel visit cards
+  - [ ] Date and Time
+  - [ ] Less noisy (no CC)
+- [ ] number visits ago in preview
+- [ ] 
 - [X] Persistent patient cards panel (left of calendar)
 - [X] Collapse/expand toggle for cards
 - [X] Compact mode (avatar + time only when collapsed)
