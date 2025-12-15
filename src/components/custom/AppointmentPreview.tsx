@@ -129,7 +129,7 @@ export function AppointmentPreview({ appointment, onClose }: AppointmentPreviewP
       </div>
 
       {/* Scrollable content */}
-      <ScrollableArea className="flex flex-col gap-4 py-4 pl-4 pr-2" deps={[appointment.id]}>
+      <ScrollableArea className="flex flex-col gap-4 py-4 px-4" deps={[appointment.id]}>
         {/* Appointment Details */}
         <div className="flex flex-col gap-2">
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

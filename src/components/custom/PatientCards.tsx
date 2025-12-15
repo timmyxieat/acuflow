@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
-import { SPRING_TRANSITION, FADE_SLIDE_TRANSITION } from "@/lib/animations";
+import { SPRING_TRANSITION } from "@/lib/animations";
 import { Timer, Bell, ChevronLeft, ChevronRight } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
@@ -83,7 +83,7 @@ function StatusSection({
       {/* Section header - compact shows dot + count, full shows dot + title + count */}
       <div
         className={`flex items-center gap-1.5 text-sm font-medium text-foreground ${
-          compact ? "pl-2" : "pl-2"
+          compact ? "pl-3" : "pl-3"
         }`}
       >
         <motion.div
@@ -92,19 +92,9 @@ function StatusSection({
           style={{ backgroundColor: statusColor }}
           transition={SPRING_TRANSITION}
         />
-        <AnimatePresence mode="popLayout">
-          {!compact && (
-            <motion.span
-              key="title"
-              initial={FADE_SLIDE_TRANSITION.initial}
-              animate={FADE_SLIDE_TRANSITION.animate}
-              exit={FADE_SLIDE_TRANSITION.exit}
-              className="whitespace-nowrap"
-            >
-              {title}
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {!compact && (
+          <span className="whitespace-nowrap">{title}</span>
+        )}
         <motion.span
           layoutId={`status-count-${variant}`}
           className={compact ? "text-muted-foreground font-normal" : ""}
@@ -150,7 +140,7 @@ function PatientCard({
   onClick,
   onDoubleClick,
   onHover,
-  isHovered,
+  isHovered: _isHovered,
   isSelected,
   compact,
 }: PatientCardProps) {
@@ -233,7 +223,7 @@ function PatientCard({
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className={`group relative px-2 ${
+      className={`group relative px-3 ${
         compact
           ? `flex flex-col items-start justify-center gap-1 ${CARD_HEIGHT}`
           : `w-full text-left flex items-center ${CARD_HEIGHT}`
@@ -280,17 +270,8 @@ function PatientCard({
         {/* Expanded mode: Name + Time stacked vertically */}
         {!compact && (
           <div className="min-w-0 flex-1 flex flex-col justify-center">
-            {/* Name - fades + slides from right (delayed on expand) */}
-            <AnimatePresence mode="popLayout">
-              <motion.div
-                key="name"
-                initial={FADE_SLIDE_TRANSITION.initial}
-                animate={FADE_SLIDE_TRANSITION.animate}
-                exit={FADE_SLIDE_TRANSITION.exit}
-              >
-                <div className="truncate text-sm font-medium">{displayName}</div>
-              </motion.div>
-            </AnimatePresence>
+            {/* Name - static in expanded mode, no animation on selection */}
+            <div className="truncate text-sm font-medium">{displayName}</div>
             {/* Time - below name */}
             <motion.div
               layoutId={`time-${appointmentId}`}
@@ -395,10 +376,10 @@ export function PatientCards({
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
-          <div className={`flex h-8 items-center px-2 flex-shrink-0 ${compact ? "justify-center" : "justify-start"}`}>
+          <div className={`flex items-center flex-shrink-0 ${compact ? "justify-center" : "justify-start"}`}>
             <button
               onClick={onToggleCompact}
-              className="flex items-center text-muted-foreground hover:text-foreground transition-colors"
+              className="flex h-12 w-12 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
               {compact ? (

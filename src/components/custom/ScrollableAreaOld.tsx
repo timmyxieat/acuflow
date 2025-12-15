@@ -1,3 +1,9 @@
+/**
+ * @deprecated This component is not currently in use.
+ * Preserved for reference/comparison with the new simplified ScrollableArea component.
+ * The new ScrollableArea uses native scrolling with minimal CSS customization.
+ * This old version had JS-controlled scrollbar visibility toggling.
+ */
 'use client'
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle, ReactNode } from 'react'
@@ -21,7 +27,7 @@ interface ScrollableAreaProps {
   deps?: unknown[]
   /** Callback when scroll position changes */
   onScroll?: (position: ScrollPosition) => void
-  /** Use narrow scrollbar (4px) instead of default native width */
+  /** Hide the scrollbar while maintaining scroll functionality */
   hideScrollbar?: boolean
 }
 
@@ -29,17 +35,18 @@ interface ScrollableAreaProps {
  * A scrollable container with gradient fade indicators at top/bottom
  * when content is scrollable in that direction.
  *
- * Uses native scrolling with optional narrow scrollbar styling.
- *
- * Props:
- * - hideScrollbar: When true, uses a narrow 4px scrollbar. When false, uses native default width.
- * - Both use native scroll behavior for consistent cross-platform experience.
+ * Usage:
+ * - Pass left-only padding in className (e.g., "pl-4 py-4" not "p-4")
+ * - Scrollbar is always visible on the right edge
+ * - Use ref to access scrollTo() and getScrollPosition()
  */
-export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>(
-  function ScrollableArea({ children, className, deps = [], onScroll, hideScrollbar = false }, ref) {
+export const ScrollableAreaOld = forwardRef<ScrollableAreaRef, ScrollableAreaProps>(
+  function ScrollableAreaOld({ children, className, deps = [], onScroll, hideScrollbar = false }, ref) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const [canScrollUp, setCanScrollUp] = useState(false)
     const [canScrollDown, setCanScrollDown] = useState(false)
+    const [isScrolling, setIsScrolling] = useState(false)
+    const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Expose scrollTo and getScrollPosition via ref
     useImperativeHandle(ref, () => ({
@@ -60,6 +67,19 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
           setCanScrollUp(scrollTop > 10)
           setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10)
           onScroll?.({ scrollTop, scrollHeight, clientHeight })
+
+          // Show scrollbar on scroll
+          if (!hideScrollbar) {
+            setIsScrolling(true)
+            // Clear existing timeout
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current)
+            }
+            // Hide scrollbar after 1.5s of no scrolling
+            scrollTimeoutRef.current = setTimeout(() => {
+              setIsScrolling(false)
+            }, 1500)
+          }
         }
       }
 
@@ -74,6 +94,9 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
 
       return () => {
         clearTimeout(timeoutId)
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
         container?.removeEventListener('scroll', checkScroll)
         window.removeEventListener('resize', checkScroll)
       }
@@ -92,14 +115,19 @@ export const ScrollableArea = forwardRef<ScrollableAreaRef, ScrollableAreaProps>
           <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-400/15 to-transparent pointer-events-none z-10" />
         )}
 
-        {/* Scrollable content - native scrolling */}
+        {/* Scrollable content */}
         <div
           ref={scrollRef}
           className={cn(
-            'h-full',
-            hideScrollbar ? 'native-scroll-narrow' : 'native-scroll',
+            'h-full overflow-y-auto overflow-x-hidden overscroll-contain',
+            hideScrollbar ? 'scrollbar-none' : 'scrollbar-auto',
+            !hideScrollbar && isScrolling && 'is-scrolling',
             className
           )}
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
+          }}
         >
           {children}
         </div>

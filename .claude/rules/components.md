@@ -4,17 +4,17 @@ Standard patterns for custom components in Acuflow.
 
 ## ScrollableArea
 
-Use `ScrollableArea` for scrollable containers with consistent scrollbar styling and fade indicators.
+Use `ScrollableArea` for scrollable containers with native scrolling and fade indicators.
 
 ```typescript
 import { ScrollableArea, ScrollableAreaRef, ScrollPosition } from '@/components/custom'
 
-// Basic usage - use left-only padding (scrollbar is at right edge)
-<ScrollableArea className="pl-4 py-4" deps={[dataToWatch]}>
+// Basic usage - symmetric padding
+<ScrollableArea className="px-3 py-4" deps={[dataToWatch]}>
   {/* content */}
 </ScrollableArea>
 
-// With hidden scrollbar (for touch-first areas like PatientCards)
+// With narrow scrollbar (for touch-first areas like PatientCards)
 <ScrollableArea hideScrollbar deps={[data]}>
   {/* content */}
 </ScrollableArea>
@@ -35,13 +35,14 @@ scrollableRef.current?.scrollTo({ top: 100, behavior: 'smooth' })
 ```
 
 **Props:**
-- `hideScrollbar`: Use for touch-first areas (default: false, auto-hide after 1.5s)
+- `hideScrollbar`: When true, uses narrow 4px scrollbar (default: false, uses native width)
 - `deps`: Array that triggers re-check when data changes (like useEffect deps)
 - `onScroll`: Callback provides `{ scrollTop, scrollHeight, clientHeight }`
 - `ref`: Exposes `scrollTo()` and `getScrollPosition()` methods
 
 **Key rules:**
-- Use **left-only padding** (`pl-*` not `px-*`) since scrollbar is at right edge
+- Use **symmetric padding** (`px-3` = 12px) for consistent spacing
+- Uses native scrolling for cross-platform compatibility
 - Shows top/bottom gradient fade when content is scrollable
 
 ---

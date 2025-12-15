@@ -367,7 +367,7 @@ export function AppointmentDetail({ appointment }: AppointmentDetailProps) {
       {/* Left Panel - Patient Info & Visit Timeline */}
       <div className="flex w-[300px] flex-col border-r border-border bg-card">
         <PatientHeader appointment={appointment} />
-        <ScrollableArea className="flex-1 py-4 pl-0 pr-0" deps={[appointment.id]}>
+        <ScrollableArea className="flex-1 py-4 px-3" deps={[appointment.id]}>
           {appointment.patient && (
             <VisitTimeline
               patientId={appointment.patient.id}

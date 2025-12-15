@@ -142,6 +142,7 @@ body {
 .scrollbar-auto {
   overflow-y: scroll;
   overflow-x: hidden;
+  scrollbar-gutter: stable; /* Reserve space for scrollbar on all platforms */
   -webkit-overflow-scrolling: touch; /* Smooth momentum scrolling on iOS/iPadOS */
   touch-action: pan-y; /* Ensure vertical touch scrolling works */
 }
@@ -176,10 +177,49 @@ body {
   touch-action: pan-y; /* Ensure vertical touch scrolling works */
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+  /* Note: No scrollbar-gutter since scrollbar is hidden - no space reserved */
 }
 
 .scrollbar-none::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
+}
+
+/* =============================================================================
+   NATIVE SCROLL - New simplified scroll classes
+   Uses native scrolling behavior with minimal styling
+   ============================================================================= */
+
+/* Default native scroll - uses browser default scrollbar width */
+.native-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+/* Narrow native scroll - 4px thin scrollbar */
+.native-scroll-narrow {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin; /* Firefox - uses thin scrollbar */
+}
+
+/* WebKit (Chrome, Safari, Edge) - narrow scrollbar styling */
+.native-scroll-narrow::-webkit-scrollbar {
+  width: 4px;
+}
+
+.native-scroll-narrow::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.native-scroll-narrow::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.native-scroll-narrow::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Keyboard navigation mode - suppress hover effects when using arrow keys */

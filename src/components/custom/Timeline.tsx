@@ -182,22 +182,21 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
     const widthPercent = 100 / columnInfo.totalColumns
     const leftPercent = columnInfo.column * widthPercent
 
-    // Calculate left offset and width with 8px left edge padding and 8px gap between columns
-    // No right edge padding - scrollbar is at edge
+    // Calculate left offset and width with 12px edge padding and 8px gap between columns
     const isFirstColumn = columnInfo.column === 0
     const isLastColumn = columnInfo.column === columnInfo.totalColumns - 1
     const isSingleColumn = columnInfo.totalColumns === 1
 
-    let leftOffset = 8 // 8px left edge padding
-    let widthReduction = 8 // default: 8px left, no right edge
+    let leftOffset = 12 // 12px left edge padding
+    let widthReduction = 24 // default: 12px left + 12px right
 
     if (!isSingleColumn) {
       if (isFirstColumn) {
-        leftOffset = 8 // 8px from left edge
-        widthReduction = 12 // 8px left edge + 4px (half of 8px gap)
+        leftOffset = 12 // 12px from left edge
+        widthReduction = 16 // 12px left edge + 4px (half of 8px gap)
       } else if (isLastColumn) {
         leftOffset = 4 // 4px (half of 8px gap)
-        widthReduction = 4 // 4px gap, no right edge
+        widthReduction = 16 // 4px gap + 12px right edge
       } else {
         leftOffset = 4 // 4px (half gap from left neighbor)
         widthReduction = 8 // 4px left + 4px right (half gaps)
@@ -365,14 +364,14 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
       {/* Timeline body - using ScrollableArea for consistent scrollbar */}
       <ScrollableArea ref={scrollableRef} onScroll={handleScroll} deps={[hourHeight]}>
         <div className="relative flex min-h-full">
-          {/* Hour labels column */}
-          <div className="flex-shrink-0 border-r border-border">
+          {/* Hour labels column - fixed 48px width */}
+          <div className="w-12 flex-shrink-0 border-r border-border">
             {/* Top padding */}
             <div className="h-[13px] border-b border-border/50" />
             {hours.map(({ hour, label }) => (
               <div
                 key={hour}
-                className="border-b border-border/50 flex items-start justify-center px-2"
+                className="border-b border-border/50 flex items-start justify-center"
                 style={{ height: `${hourHeight}px` }}
               >
                 <span className="-translate-y-1/2 text-xs text-muted-foreground whitespace-nowrap">
@@ -381,7 +380,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
               </div>
             ))}
             {/* End hour label */}
-            <div className="h-[13px] flex items-start justify-center px-2">
+            <div className="h-[13px] flex items-start justify-center">
               <span className="-translate-y-1/2 text-xs text-muted-foreground whitespace-nowrap">
                 {endHourLabel}
               </span>

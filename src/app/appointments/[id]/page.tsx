@@ -111,7 +111,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
 
   if (!patient) {
     return (
-      <div className="flex h-[72px] items-center gap-2 px-2 border-b border-border">
+      <div className="flex h-[72px] items-center gap-2 px-3 border-b border-border">
         <div className={`flex ${AVATAR_SIZE_CLASS} items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground`}>
           ?
         </div>
@@ -127,7 +127,7 @@ function PatientHeader({ appointment }: PatientHeaderProps) {
   const sexDisplay = patient.sex === 'MALE' ? 'Male' : patient.sex === 'FEMALE' ? 'Female' : null
 
   return (
-    <div className="flex h-[72px] items-center gap-2 px-2 border-b border-border">
+    <div className="flex h-[72px] items-center gap-2 px-3 border-b border-border">
       {/* Avatar - scales with viewport (32px to 48px) */}
       <div className={`flex ${AVATAR_SIZE_CLASS} flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground`}>
         {initials}
@@ -216,7 +216,7 @@ function TimelineSection({ title, color, count, children }: TimelineSectionProps
   return (
     <div className="flex flex-col gap-2">
       {/* Section header - dot + title + count */}
-      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground pl-2">
+      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground pl-3">
         <div
           className="h-2.5 w-2.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: color }}
@@ -495,7 +495,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
       {scheduledCount > 0 && (
         <div className="flex flex-col gap-2">
           {/* Section header with expand/collapse */}
-          <div className="flex items-center justify-between pl-2">
+          <div className="flex items-center justify-between pl-3">
             <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               <div
                 className="h-2.5 w-2.5 rounded-full flex-shrink-0"
@@ -730,7 +730,7 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
   return (
-    <div className="flex h-[72px] items-center justify-between border-b border-border px-2">
+    <div className="flex h-[72px] items-center justify-between border-b border-border px-3">
       {/* Left: Date + time in a column */}
       <div className="flex flex-col">
         <div className="flex items-baseline gap-2">
@@ -1486,7 +1486,7 @@ export default function AppointmentDetailPage() {
               <AppointmentHeader appointment={appointment} />
 
               {/* Scrollable Content */}
-              <ScrollableArea className="flex-1 py-4 pl-2 pr-0" deps={[appointmentId]}>
+              <ScrollableArea className="flex-1 py-4 px-3" deps={[appointmentId]}>
                 <div className="flex flex-col gap-4">
                   {/* Patient Intake (Collapsible) */}
                   <PatientIntakeSection />

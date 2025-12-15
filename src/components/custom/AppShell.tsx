@@ -13,7 +13,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <TransitionProvider>
       <HeaderProvider>
-        <div className="flex h-screen w-screen overflow-hidden bg-background">
+        <div className="flex h-dvh w-dvw overflow-hidden bg-background">
           {/* Sidebar */}
           <Sidebar />
 
