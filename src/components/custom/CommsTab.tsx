@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { ScrollableArea } from './ScrollableArea'
-import { MessageSquare, Bell, Check, AlertTriangle, Send, Plus, Clock, Calendar, CalendarPlus, X } from 'lucide-react'
+import { Bell, Check, AlertTriangle, Send, Plus, Clock, X } from 'lucide-react'
 
-// Message types
+// =============================================================================
+// Type Definitions
+// =============================================================================
+
 type MessageType = 'reminder' | 'confirmation' | 'custom' | 'patient_response'
 type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed'
 
@@ -17,7 +20,7 @@ interface Message {
   isFromPatient?: boolean
 }
 
-interface AppointmentNote {
+interface PractitionerNote {
   id: string
   content: string
   createdAt: Date
@@ -25,36 +28,15 @@ interface AppointmentNote {
   isPinned?: boolean
 }
 
-interface ScheduleInfo {
-  currentAppointment: {
-    date: Date
-    startTime: Date
-    endTime: Date
-    type: string
-    duration: number
-    confirmedAt?: Date
-  }
-  followUp?: {
-    recommendedInterval: string
-    nextAvailable?: Date
-  }
-  recentVisits: Array<{
-    date: Date
-    type: string
-    status: string
-  }>
-}
-
 export type ConfirmationStatus = 'pending' | 'confirmed' | 'no_response' | 'cancelled'
 
 export interface CommsData {
   messages: Message[]
-  notes: AppointmentNote[]
+  notes: PractitionerNote[]
   confirmationStatus: ConfirmationStatus
   reminderSentAt?: Date
   confirmedAt?: Date
   unreadCount: number
-  schedule: ScheduleInfo
 }
 
 interface CommsTabProps {
@@ -63,7 +45,10 @@ interface CommsTabProps {
   patientName: string
 }
 
-// Confirmation status badge
+// =============================================================================
+// Helper Components
+// =============================================================================
+
 function ConfirmationBadge({ status }: { status: ConfirmationStatus }) {
   const config = {
     pending: { label: 'Pending', color: 'bg-amber-100 text-amber-700', icon: Clock },
@@ -82,7 +67,6 @@ function ConfirmationBadge({ status }: { status: ConfirmationStatus }) {
   )
 }
 
-// Message bubble component
 function MessageBubble({ message }: { message: Message }) {
   const isFromPatient = message.isFromPatient
 
@@ -122,10 +106,14 @@ function MessageBubble({ message }: { message: Message }) {
   )
 }
 
-// Note card component
-function NoteCard({ note }: { note: AppointmentNote }) {
+function NoteCard({ note }: { note: PractitionerNote }) {
   return (
     <div className={`rounded-lg border p-3 ${note.isPinned ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
+      {note.isPinned && (
+        <span className="text-[10px] font-medium text-primary uppercase tracking-wider mb-1 block">
+          Pinned
+        </span>
+      )}
       <p className="text-sm">{note.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
         <span>{note.createdBy}</span>
@@ -141,8 +129,12 @@ function NoteCard({ note }: { note: AppointmentNote }) {
   )
 }
 
+// =============================================================================
+// CommsTab Component
+// =============================================================================
+
 export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProps) {
-  const { messages, notes, confirmationStatus, reminderSentAt, confirmedAt, unreadCount, schedule } = commsData
+  const { messages, notes, confirmationStatus, reminderSentAt, confirmedAt, unreadCount } = commsData
   const [activeSection, setActiveSection] = useState<'messages' | 'notes'>('messages')
 
   const formatDate = (date: Date) => {
@@ -160,6 +152,13 @@ export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProp
     })
   }
 
+  // Sort notes: pinned first, then by date
+  const sortedNotes = [...notes].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1
+    if (!a.isPinned && b.isPinned) return 1
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
   return (
     <div className="flex flex-col h-full">
       {/* Header with status */}
@@ -168,7 +167,7 @@ export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProp
         <ConfirmationBadge status={confirmationStatus} />
       </div>
 
-      {/* Section toggle */}
+      {/* Section toggle - Messages vs Notes */}
       <div className="flex border-b border-border">
         <button
           onClick={() => setActiveSection('messages')}
@@ -193,7 +192,7 @@ export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProp
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Notes & Schedule
+          Notes ({notes.length})
         </button>
       </div>
 
@@ -239,114 +238,29 @@ export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProp
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-6">
-              {/* Practitioner Notes */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Practitioner Notes
-                  </h3>
-                  <button className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80">
-                    <Plus className="h-3.5 w-3.5" />
-                    Add
-                  </button>
+            <div className="flex flex-col gap-4">
+              {/* Add Note button */}
+              <div className="flex justify-end">
+                <button className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80">
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Note
+                </button>
+              </div>
+
+              {/* Notes list */}
+              {sortedNotes.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {sortedNotes.map((note) => (
+                    <NoteCard key={note.id} note={note} />
+                  ))}
                 </div>
-                {notes.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {notes.map((note) => (
-                      <NoteCard key={note.id} note={note} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic py-2">
-                    No notes yet
+              ) : (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center">
+                  <p className="text-sm text-muted-foreground">No notes yet</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    Add notes about patient preferences, concerns, or follow-up reminders
                   </p>
-                )}
-              </section>
-
-              {/* This Appointment */}
-              <section>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                  This Appointment
-                </h3>
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium">
-                        {formatDate(schedule.currentAppointment.date)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatTime(schedule.currentAppointment.startTime)} - {formatTime(schedule.currentAppointment.endTime)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {schedule.currentAppointment.type} · {schedule.currentAppointment.duration} min
-                      </p>
-                    </div>
-                    {schedule.currentAppointment.confirmedAt && (
-                      <div className="flex items-center gap-1 text-xs text-green-600">
-                        <Check className="h-3 w-3" />
-                        <span>Confirmed</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button className="flex-1 h-9 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors">
-                      Reschedule
-                    </button>
-                    <button className="flex-1 h-9 text-xs font-medium rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors">
-                      Cancel
-                    </button>
-                  </div>
                 </div>
-              </section>
-
-              {/* Schedule Follow-up */}
-              {schedule.followUp && (
-                <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                    Schedule Follow-up
-                  </h3>
-                  <div className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-sm">
-                      Recommended: <span className="font-medium">{schedule.followUp.recommendedInterval}</span>
-                    </p>
-                    {schedule.followUp.nextAvailable && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Next available: {formatDate(schedule.followUp.nextAvailable)} at {formatTime(schedule.followUp.nextAvailable)}
-                      </p>
-                    )}
-                    <div className="flex gap-2 mt-3">
-                      {schedule.followUp.nextAvailable && (
-                        <button className="flex-1 h-9 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
-                          <CalendarPlus className="h-3.5 w-3.5" />
-                          Schedule {formatDate(schedule.followUp.nextAvailable)}
-                        </button>
-                      )}
-                      <button className="flex-1 h-9 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors flex items-center justify-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" />
-                        Pick Time
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Recent Visits */}
-              {schedule.recentVisits.length > 0 && (
-                <section>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                    Recent Visits
-                  </h3>
-                  <div className="space-y-1">
-                    {schedule.recentVisits.map((visit, index) => (
-                      <div key={index} className="flex items-center justify-between py-1.5 text-sm">
-                        <span className="text-muted-foreground">{formatDate(visit.date)}</span>
-                        <span>{visit.type}</span>
-                        <span className="text-xs text-muted-foreground">{visit.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
               )}
             </div>
           )}
@@ -366,9 +280,21 @@ export function CommsTab({ appointmentId, commsData, patientName }: CommsTabProp
   )
 }
 
-// Helper to get comms status preview for tab bar
-export function getCommsStatusPreview(commsData: CommsData): { text: string; color: string; icon?: 'check' | 'warning' | 'badge' } {
-  const { confirmationStatus, unreadCount, schedule } = commsData
+// =============================================================================
+// Status Preview Helper
+// =============================================================================
+
+export interface CommsStatusPreview {
+  text: string
+  color: string
+  icon?: 'check' | 'warning' | 'badge'
+}
+
+/**
+ * Get a short status preview for the comms tab bar
+ */
+export function getCommsStatusPreview(commsData: CommsData): CommsStatusPreview {
+  const { confirmationStatus, unreadCount } = commsData
 
   if (unreadCount > 0) {
     return { text: `${unreadCount} unread`, color: 'text-blue-600', icon: 'badge' }
@@ -386,11 +312,8 @@ export function getCommsStatusPreview(commsData: CommsData): { text: string; col
     return { text: 'Pending', color: 'text-amber-600' }
   }
 
-  // Show follow-up info if available and confirmed
-  if (schedule.followUp?.nextAvailable) {
-    const nextDate = schedule.followUp.nextAvailable
-    const dateStr = nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    return { text: `Follow-up: ${dateStr}`, color: 'text-muted-foreground' }
+  if (confirmationStatus === 'cancelled') {
+    return { text: 'Cancelled', color: 'text-slate-600' }
   }
 
   return { text: 'No comms', color: 'text-muted-foreground' }

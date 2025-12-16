@@ -177,10 +177,10 @@ const color = getStatusColor(appointment.status, appointment.isSigned)
 
 ## Bottom Tab Bar (Appointment Detail)
 
-The appointment detail page has a bottom tab bar with Medical/Billing/Comms tabs.
+The appointment detail page has a bottom tab bar with 4 tabs.
 
 ```typescript
-type TabType = 'medical' | 'billing' | 'comms'
+type TabType = 'medical' | 'billing' | 'schedule' | 'comms'
 const [activeTab, setActiveTab] = useState<TabType>('medical')
 ```
 
@@ -189,47 +189,83 @@ const [activeTab, setActiveTab] = useState<TabType>('medical')
 - Spans SOAP + Patient Context width (not Visit History panel)
 - Each tab shows: Icon (20px) → Label (12px) → Status preview (10px)
 
+**Tab layout:**
+| Tab | Icon | Purpose |
+|-----|------|---------|
+| Medical | ClipboardCheck | SOAP notes, treatment documentation |
+| Billing | CreditCard | Invoice, payment, insurance |
+| Schedule | Calendar | Appointment details, follow-up, visit history |
+| Comms | MessageSquare | Messages with patient, practitioner notes |
+
 **Tab content:**
 - **Medical**: SOAP Editor + Patient Context side-by-side, FAB visible
 - **Billing**: Full-width BillingTab component, FAB hidden
+- **Schedule**: Full-width ScheduleTab component, FAB hidden
 - **Comms**: Full-width CommsTab component, FAB hidden
 
 **Status preview helpers:**
 ```typescript
-import { getBillingStatusPreview, getCommsStatusPreview } from '@/components/custom'
+import { getBillingStatusPreview, getCommsStatusPreview, getScheduleStatusPreview } from '@/components/custom'
 
-// Returns { text: string, color: string }
-const billingPreview = getBillingStatusPreview(billingData)
-const commsPreview = getCommsStatusPreview(commsData)
+// Each returns { text: string, color: string, icon?: string }
+const billingPreview = getBillingStatusPreview(billingData)    // "$120 · Paid", "$95 · Due"
+const schedulePreview = getScheduleStatusPreview(scheduleData) // "✓ Confirmed", "Book follow-up"
+const commsPreview = getCommsStatusPreview(commsData)          // "✓ Confirmed", "Pending"
 ```
 
 **Header behavior:**
 - Medical tab: Shows patient context header (Visits count) on right
-- Billing/Comms tabs: Full-width header (no right section)
+- Billing/Schedule/Comms tabs: Full-width header (no right section)
 
 ---
 
-## BillingTab & CommsTab
+## Tab Components
 
-Tab components for appointment detail page.
+### BillingTab
 
 ```typescript
-import { BillingTab, CommsTab, type BillingData, type CommsData } from '@/components/custom'
+import { BillingTab, type BillingData } from '@/components/custom'
+import { getBillingDataForAppointment } from '@/data/mock-billing'
 
+const billingData = getBillingDataForAppointment(appointmentId, patientId, isCompleted, usedEstim)
 <BillingTab appointmentId={id} billingData={billingData} />
-<CommsTab appointmentId={id} commsData={commsData} patientName={name} />
 ```
 
 **BillingData structure:**
 - `charges[]`: Line items with CPT codes
-- `subtotal`, `tax`, `totalCharges`
-- `status`: 'draft' | 'pending' | 'partial' | 'paid' | 'no_charges'
-- `invoiceStatus`: 'draft' | 'sent' | 'paid'
-- `paymentMethod?`: Card on file info
+- `subtotal`, `tax`, `totalCharges`, `amountPaid`, `balanceDue`
+- `status`: 'no_charges' | 'pending' | 'partial' | 'paid' | 'failed'
+- `invoiceStatus`: 'draft' | 'sent' | 'paid' | 'partial' | 'void'
+- `transactions[]`: Payment history with success/failure status
+- `paymentMethod?`: Card on file with brand, last4, expiry
+- `autoPay?`: Whether auto-pay is enabled
 - `insurance?`: Insurance company info
 
+### ScheduleTab
+
+```typescript
+import { ScheduleTab, type ScheduleData } from '@/components/custom'
+
+<ScheduleTab appointmentId={id} scheduleData={scheduleData} patientName={name} />
+```
+
+**ScheduleData structure:**
+- `currentAppointment`: Date, time, type, duration, confirmedAt
+- `followUp?`: Recommended interval, next available slot
+- `recentVisits[]`: Past visit history
+- `upcomingAppointments[]`: Future appointments
+
+### CommsTab
+
+```typescript
+import { CommsTab, type CommsData } from '@/components/custom'
+
+<CommsTab appointmentId={id} commsData={commsData} patientName={name} />
+```
+
 **CommsData structure:**
-- `messages[]`: Message thread
-- `notes[]`: Practitioner notes
+- `messages[]`: Message thread (reminders, patient responses)
+- `notes[]`: Practitioner notes (pinned first)
 - `confirmationStatus`: 'pending' | 'confirmed' | 'no_response' | 'cancelled'
-- `schedule`: Current appointment, follow-up info, recent visits
+- `reminderSentAt?`, `confirmedAt?`: Timestamps
+- `unreadCount`: Number of unread messages

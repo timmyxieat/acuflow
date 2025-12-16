@@ -3,7 +3,8 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, getBillingStatusPreview, getCommsStatusPreview, type BillingData, type CommsData } from '@/components/custom'
+import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, ScheduleTab, getBillingStatusPreview, getCommsStatusPreview, getScheduleStatusPreview, type BillingData, type CommsData, type ScheduleData } from '@/components/custom'
+import { getBillingDataForAppointment } from '@/data/mock-billing'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
@@ -720,7 +721,7 @@ interface AppointmentHeaderProps {
   appointment: AppointmentWithRelations
   visitCount: number
   firstVisitDate: Date | null
-  activeTab: 'medical' | 'billing' | 'comms'
+  activeTab: 'medical' | 'billing' | 'schedule' | 'comms'
 }
 
 function getRelativeDay(date: Date): string {
@@ -1069,8 +1070,8 @@ export default function AppointmentDetailPage() {
   const [isFabExpanded, setIsFabExpanded] = useState(false)
   const fabRef = useRef<HTMLDivElement>(null)
 
-  // Tab state for Medical / Billing / Comms
-  type TabType = 'medical' | 'billing' | 'comms'
+  // Tab state for Medical / Billing / Schedule / Comms
+  type TabType = 'medical' | 'billing' | 'schedule' | 'comms'
   const [activeTab, setActiveTab] = useState<TabType>('medical')
 
   // Close FAB when clicking outside
@@ -1267,107 +1268,27 @@ export default function AppointmentDetailPage() {
     return getPatientTodayAppointmentId(appointment.patient.id) ?? undefined
   }, [appointment?.patient?.id])
 
-  // Mock billing data for the appointment
+  // Billing data from centralized mock data layer
+  // Different patients have different billing scenarios
   const billingData: BillingData = useMemo(() => {
-    // Generate mock data based on appointment status
+    const patientId = appointment?.patient?.id || ''
     const isCompleted = appointment?.status === 'COMPLETED'
+    const usedEstim = appointment?.usedEstim ?? false
 
-    if (!isCompleted) {
-      return {
-        charges: [],
-        subtotal: 0,
-        tax: 0,
-        totalCharges: 0,
-        amountPaid: 0,
-        balanceDue: 0,
-        status: 'no_charges' as const,
-        invoiceStatus: 'draft' as const,
-        transactions: [],
-        paymentMethod: {
-          id: 'pm_001',
-          type: 'card' as const,
-          brand: 'Visa',
-          last4: '4242',
-          expiryMonth: 8,
-          expiryYear: 2026,
-          isDefault: true,
-        },
-      }
-    }
+    return getBillingDataForAppointment(appointmentId, patientId, isCompleted, usedEstim)
+  }, [appointmentId, appointment?.patient?.id, appointment?.status, appointment?.usedEstim])
 
-    // For completed appointments, generate charges
-    const charges = [
-      {
-        id: 'chg_001',
-        cptCode: '97810',
-        description: 'Acupuncture, initial 15 min',
-        units: 1,
-        unitPrice: 85,
-        total: 85,
-      },
-      {
-        id: 'chg_002',
-        cptCode: '97811',
-        description: 'Acupuncture, additional 15 min',
-        units: appointment?.usedEstim ? 2 : 1,
-        unitPrice: 35,
-        total: appointment?.usedEstim ? 70 : 35,
-      },
-    ]
-
-    const subtotal = charges.reduce((sum, c) => sum + c.total, 0)
-    const tax = 0 // No tax for medical services
-    const totalCharges = subtotal + tax
-    const isPaid = appointment?.isSigned ?? false
-    const amountPaid = isPaid ? totalCharges : 0
-
-    return {
-      charges,
-      subtotal,
-      tax,
-      totalCharges,
-      amountPaid,
-      balanceDue: totalCharges - amountPaid,
-      status: isPaid ? 'paid' as const : 'pending' as const,
-      invoiceStatus: isPaid ? 'paid' as const : 'sent' as const,
-      transactions: isPaid ? [{
-        id: 'tx_001',
-        date: new Date(),
-        method: 'Visa',
-        amount: totalCharges,
-        cardLast4: '4242',
-      }] : [],
-      paymentMethod: {
-        id: 'pm_001',
-        type: 'card' as const,
-        brand: 'Visa',
-        last4: '4242',
-        expiryMonth: 8,
-        expiryYear: 2026,
-        isDefault: true,
-      },
-      insurance: {
-        company: 'Blue Cross Blue Shield',
-        memberId: 'XYZ123456789',
-        groupNumber: 'GRP-001',
-      },
-    }
-  }, [appointment?.status, appointment?.usedEstim, appointment?.isSigned])
-
-  // Mock comms data for the appointment
+  // Mock comms data for the appointment (simplified - no schedule data)
   const commsData: CommsData = useMemo(() => {
     const now = new Date()
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
     // Vary confirmation status based on appointment status
     const isInProgress = appointment?.status === 'IN_PROGRESS'
     const isCheckedIn = appointment?.status === 'CHECKED_IN'
     const confirmedAt = (isInProgress || isCheckedIn) ? new Date(yesterday.getTime() + 2 * 60 * 60 * 1000) : undefined
 
-    // Schedule info
     const appointmentStart = appointment?.scheduledStart ? new Date(appointment.scheduledStart) : now
-    const appointmentEnd = appointment?.scheduledEnd ? new Date(appointment.scheduledEnd) : new Date(now.getTime() + 60 * 60 * 1000)
 
     return {
       messages: [
@@ -1406,37 +1327,55 @@ export default function AppointmentDetailPage() {
       reminderSentAt: yesterday,
       confirmedAt,
       unreadCount: 0,
-      schedule: {
-        currentAppointment: {
-          date: appointmentStart,
-          startTime: appointmentStart,
-          endTime: appointmentEnd,
-          type: appointment?.appointmentType?.name ?? 'Follow-up Treatment',
-          duration: 60,
-          confirmedAt,
-        },
-        followUp: {
-          recommendedInterval: '1 week',
-          nextAvailable: new Date(oneWeekFromNow.setHours(10, 30, 0, 0)),
-        },
-        recentVisits: [
-          {
-            date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-            type: 'Follow-up',
-            status: 'Completed',
-          },
-          {
-            date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
-            type: 'Follow-up',
-            status: 'Completed',
-          },
-          {
-            date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-            type: 'Initial Consultation',
-            status: 'Completed',
-          },
-        ],
+    }
+  }, [appointment?.status, appointment?.scheduledStart])
+
+  // Mock schedule data for the appointment
+  const scheduleData: ScheduleData = useMemo(() => {
+    const now = new Date()
+    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+    // Vary confirmation status based on appointment status
+    const isInProgress = appointment?.status === 'IN_PROGRESS'
+    const isCheckedIn = appointment?.status === 'CHECKED_IN'
+    const confirmedAt = (isInProgress || isCheckedIn) ? new Date(yesterday.getTime() + 2 * 60 * 60 * 1000) : undefined
+
+    const appointmentStart = appointment?.scheduledStart ? new Date(appointment.scheduledStart) : now
+    const appointmentEnd = appointment?.scheduledEnd ? new Date(appointment.scheduledEnd) : new Date(now.getTime() + 60 * 60 * 1000)
+    const duration = Math.round((appointmentEnd.getTime() - appointmentStart.getTime()) / (1000 * 60))
+
+    return {
+      currentAppointment: {
+        date: appointmentStart,
+        startTime: appointmentStart,
+        endTime: appointmentEnd,
+        type: appointment?.appointmentType?.name ?? 'Follow-up Treatment',
+        duration,
+        confirmedAt,
       },
+      followUp: {
+        recommendedInterval: '1 week',
+        nextAvailable: new Date(oneWeekFromNow.setHours(10, 30, 0, 0)),
+      },
+      recentVisits: [
+        {
+          date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+          type: 'Follow-up',
+          status: 'Completed',
+        },
+        {
+          date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+          type: 'Follow-up',
+          status: 'Completed',
+        },
+        {
+          date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+          type: 'Initial Consultation',
+          status: 'Completed',
+        },
+      ],
+      upcomingAppointments: [],
     }
   }, [appointment?.status, appointment?.scheduledStart, appointment?.scheduledEnd, appointment?.appointmentType?.name])
 
@@ -2142,6 +2081,16 @@ export default function AppointmentDetailPage() {
                 </div>
               )}
 
+              {activeTab === 'schedule' && (
+                <div className="flex-1 overflow-hidden bg-background">
+                  <ScheduleTab
+                    appointmentId={appointmentId}
+                    scheduleData={scheduleData}
+                    patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                  />
+                </div>
+              )}
+
               {activeTab === 'comms' && (
                 <div className="flex-1 overflow-hidden bg-background">
                   <CommsTab
@@ -2153,7 +2102,7 @@ export default function AppointmentDetailPage() {
               )}
             </div>
 
-            {/* Tab Bar - Fixed at bottom */}
+            {/* Tab Bar - Fixed at bottom, 4 tabs */}
             <div className="h-16 flex border-t border-border bg-background flex-shrink-0">
               {/* Medical Tab */}
               <button
@@ -2166,9 +2115,7 @@ export default function AppointmentDetailPage() {
               >
                 <ClipboardCheck className="h-5 w-5" />
                 <span className="text-xs font-medium">Medical</span>
-                <span className={`text-[10px] flex items-center gap-1 ${
-                  activeTab === 'medical' ? '' : ''
-                }`}>
+                <span className="text-[10px] flex items-center gap-1">
                   <Circle
                     className="h-2 w-2"
                     style={{
@@ -2196,6 +2143,29 @@ export default function AppointmentDetailPage() {
                 <span className={`text-[10px] ${getBillingStatusPreview(billingData).color}`}>
                   {getBillingStatusPreview(billingData).text}
                 </span>
+              </button>
+
+              {/* Schedule Tab */}
+              <button
+                onClick={() => setActiveTab('schedule')}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 border-l border-border transition-colors ${
+                  activeTab === 'schedule'
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <Calendar className="h-5 w-5" />
+                <span className="text-xs font-medium">Schedule</span>
+                {(() => {
+                  const preview = getScheduleStatusPreview(scheduleData)
+                  return (
+                    <span className={`text-[10px] flex items-center gap-1 ${preview.color}`}>
+                      {preview.icon === 'check' && <Check className="h-2.5 w-2.5" />}
+                      {preview.icon === 'calendar' && <Calendar className="h-2.5 w-2.5" />}
+                      {preview.text}
+                    </span>
+                  )
+                })()}
               </button>
 
               {/* Comms Tab */}

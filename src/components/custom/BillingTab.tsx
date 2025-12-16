@@ -1,74 +1,55 @@
 'use client'
 
 import { ScrollableArea } from './ScrollableArea'
-import { FileText, Receipt, CreditCard, Check, AlertCircle, Plus, Mail } from 'lucide-react'
+import { FileText, CreditCard, Check, AlertCircle, Plus, Mail, XCircle, Zap } from 'lucide-react'
+import type { BillingData, PaymentMethod, InvoiceLineItem, PaymentTransaction, InsuranceInfo } from '@/data/mock-billing'
 
-// Mock billing data structure
-interface ChargeItem {
-  id: string
-  cptCode: string
-  description: string
-  units: number
-  unitPrice: number
-  total: number
-}
+// Re-export types for convenience
+export type { BillingData, PaymentMethod, InvoiceLineItem, PaymentTransaction, InsuranceInfo }
 
-interface PaymentTransaction {
-  id: string
-  date: Date
-  method: string
-  amount: number
-  cardLast4?: string
-}
-
-interface PaymentMethod {
-  id: string
-  type: 'card' | 'bank'
-  brand?: string // Visa, Mastercard, etc.
-  last4: string
-  expiryMonth?: number
-  expiryYear?: number
-  isDefault: boolean
-}
-
-export interface BillingData {
-  charges: ChargeItem[]
-  subtotal: number
-  tax: number
-  totalCharges: number
-  amountPaid: number
-  balanceDue: number
-  status: 'draft' | 'pending' | 'partial' | 'paid' | 'no_charges'
-  invoiceStatus: 'draft' | 'sent' | 'paid'
-  transactions: PaymentTransaction[]
-  paymentMethod?: PaymentMethod
-  insurance?: {
-    company: string
-    memberId: string
-    groupNumber?: string
-  }
-}
+// Re-export the getBillingStatusPreview function from mock-billing
+export { getBillingStatusPreview } from '@/data/mock-billing'
 
 interface BillingTabProps {
   appointmentId: string
   billingData: BillingData
 }
 
-// Card brand icon placeholder
+// =============================================================================
+// Helper Components
+// =============================================================================
+
 function CardBrandIcon({ brand }: { brand?: string }) {
+  // Simple card brand color coding
+  const getBrandColor = () => {
+    switch (brand?.toLowerCase()) {
+      case 'visa':
+        return 'text-blue-600'
+      case 'mastercard':
+        return 'text-orange-500'
+      case 'amex':
+        return 'text-blue-800'
+      case 'hsa':
+        return 'text-green-600'
+      default:
+        return 'text-muted-foreground'
+    }
+  }
+
   return (
     <div className="h-8 w-12 rounded border border-border bg-muted/30 flex items-center justify-center">
-      <CreditCard className="h-5 w-5 text-muted-foreground" />
+      <CreditCard className={`h-5 w-5 ${getBrandColor()}`} />
     </div>
   )
 }
 
-// Invoice status badge
 function InvoiceStatusBadge({ status }: { status: BillingData['invoiceStatus'] }) {
   const config = {
     draft: { label: 'Draft', color: 'bg-slate-100 text-slate-600' },
     sent: { label: 'Sent', color: 'bg-blue-100 text-blue-700' },
     paid: { label: 'Paid', color: 'bg-green-100 text-green-700' },
+    partial: { label: 'Partial', color: 'bg-amber-100 text-amber-700' },
+    void: { label: 'Void', color: 'bg-slate-100 text-slate-600' },
   }
 
   const { label, color } = config[status]
@@ -79,6 +60,10 @@ function InvoiceStatusBadge({ status }: { status: BillingData['invoiceStatus'] }
     </span>
   )
 }
+
+// =============================================================================
+// BillingTab Component
+// =============================================================================
 
 export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
   const {
@@ -92,11 +77,17 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
     invoiceStatus,
     transactions,
     paymentMethod,
+    autoPay,
     insurance,
   } = billingData
 
   const isPaid = status === 'paid'
+  const isFailed = status === 'failed'
+  const isPartial = status === 'partial'
   const hasCharges = charges.length > 0
+
+  // Get the latest transaction for display
+  const latestTransaction = transactions.length > 0 ? transactions[0] : null
 
   return (
     <div className="flex flex-col h-full">
@@ -117,9 +108,17 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
                 <div className="flex items-center gap-3">
                   <CardBrandIcon brand={paymentMethod.brand} />
                   <div>
-                    <p className="text-sm font-medium">
-                      {paymentMethod.brand || 'Card'} ending in {paymentMethod.last4}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">
+                        {paymentMethod.brand || 'Card'} ending in {paymentMethod.last4}
+                      </p>
+                      {autoPay && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary">
+                          <Zap className="h-2.5 w-2.5" />
+                          Auto-pay
+                        </span>
+                      )}
+                    </div>
                     {paymentMethod.expiryMonth && paymentMethod.expiryYear && (
                       <p className="text-xs text-muted-foreground">
                         Expires {String(paymentMethod.expiryMonth).padStart(2, '0')}/{String(paymentMethod.expiryYear).slice(-2)}
@@ -167,11 +166,11 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
                         <div className="flex-1 min-w-0 pr-4">
                           <p className="text-sm">{charge.description}</p>
                           <p className="text-xs text-muted-foreground">
-                            {charge.cptCode} {charge.units > 1 && `× ${charge.units}`}
+                            {charge.cptCode} {charge.quantity > 1 && `× ${charge.quantity}`}
                           </p>
                         </div>
                         <span className="text-sm font-medium tabular-nums">
-                          ${charge.total.toFixed(2)}
+                          ${charge.lineTotal.toFixed(2)}
                         </span>
                       </div>
                     ))}
@@ -223,21 +222,55 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-green-700">Paid</p>
-                    {transactions.length > 0 && (
+                    {latestTransaction && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        ${transactions[0].amount.toFixed(2)} · {transactions[0].method}
-                        {transactions[0].cardLast4 && ` ****${transactions[0].cardLast4}`}
+                        ${latestTransaction.amount.toFixed(2)} · {latestTransaction.cardBrand || latestTransaction.method}
+                        {latestTransaction.cardLast4 && ` ****${latestTransaction.cardLast4}`}
                         {' · '}
-                        {transactions[0].date.toLocaleDateString('en-US', {
+                        {latestTransaction.timestamp.toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                         })}{' '}
-                        {transactions[0].date.toLocaleTimeString('en-US', {
+                        {latestTransaction.timestamp.toLocaleTimeString('en-US', {
                           hour: 'numeric',
                           minute: '2-digit',
                         })}
                       </p>
                     )}
+                    {autoPay && (
+                      <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                        <Zap className="h-3 w-3" />
+                        Auto-charged on file
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : isFailed ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-red-700">Payment Failed</p>
+                      {latestTransaction && latestTransaction.failureReason && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {latestTransaction.failureReason}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        ${balanceDue.toFixed(2)} due
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button className="flex-1 h-10 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                      Retry Payment
+                    </button>
+                    <button className="flex-1 h-10 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors">
+                      Update Card
+                    </button>
                   </div>
                 </div>
               ) : hasCharges ? (
@@ -248,11 +281,11 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-amber-700">
-                        {status === 'partial' ? 'Partially Paid' : 'Unpaid'}
+                        {isPartial ? 'Partially Paid' : 'Unpaid'}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         ${balanceDue.toFixed(2)} due
-                        {amountPaid > 0 && ` (${amountPaid.toFixed(2)} paid)`}
+                        {amountPaid > 0 && ` ($${amountPaid.toFixed(2)} paid)`}
                       </p>
                     </div>
                   </div>
@@ -282,11 +315,18 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
 
             {insurance ? (
               <div className="rounded-lg border border-border bg-card p-3">
-                <p className="text-sm font-medium">{insurance.company}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Member ID: {insurance.memberId}
-                  {insurance.groupNumber && ` · Group: ${insurance.groupNumber}`}
-                </p>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{insurance.company}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Member ID: {insurance.memberId}
+                      {insurance.groupNumber && ` · Group: ${insurance.groupNumber}`}
+                    </p>
+                  </div>
+                  <button className="text-xs font-medium text-primary hover:text-primary/80">
+                    View Details
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-border bg-muted/20">
@@ -304,7 +344,12 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
               <FileText className="h-4 w-4" />
               Generate Superbill
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors">
+            <button
+              className={`flex-1 flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-md border border-border transition-colors ${
+                isPaid ? 'hover:bg-muted' : 'opacity-50 cursor-not-allowed'
+              }`}
+              disabled={!isPaid}
+            >
               <Mail className="h-4 w-4" />
               Email Receipt
             </button>
@@ -313,23 +358,4 @@ export function BillingTab({ appointmentId, billingData }: BillingTabProps) {
       </ScrollableArea>
     </div>
   )
-}
-
-// Helper to get billing status preview for tab bar
-export function getBillingStatusPreview(billingData: BillingData): { text: string; color: string } {
-  const { totalCharges, balanceDue, status } = billingData
-
-  if (status === 'no_charges' || totalCharges === 0) {
-    return { text: 'No charges', color: 'text-muted-foreground' }
-  }
-
-  if (status === 'paid') {
-    return { text: `$${totalCharges.toFixed(0)} Paid`, color: 'text-green-600' }
-  }
-
-  if (status === 'partial') {
-    return { text: `$${balanceDue.toFixed(0)} Due`, color: 'text-amber-600' }
-  }
-
-  return { text: `$${totalCharges.toFixed(0)} Due`, color: 'text-amber-600' }
 }
