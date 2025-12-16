@@ -726,6 +726,8 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
 
 interface AppointmentHeaderProps {
   appointment: AppointmentWithRelations
+  visitCount: number
+  firstVisitDate: Date | null
 }
 
 function getRelativeDay(date: Date): string {
@@ -748,33 +750,33 @@ function getRelativeDay(date: Date): string {
   const diffTime = date.getTime() - today.getTime()
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
 
-  if (diffDays > 0 && diffDays <= 7) return `In ${diffDays} days`
-  if (diffDays < 0 && diffDays >= -7) return `${Math.abs(diffDays)} days ago`
+  if (diffDays > 0 && diffDays <= 7) return `in ${diffDays}d`
+  if (diffDays < 0 && diffDays >= -7) return `${Math.abs(diffDays)}d ago`
 
   return date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
+function AppointmentHeader({ appointment, visitCount, firstVisitDate }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
   const statusColor = getStatusColor(appointment.status, appointment.isSigned)
 
   // Determine action button
   const getActionButton = () => {
     if (appointment.status === 'SCHEDULED') {
-      return { label: 'Start Appointment' }
+      return { label: 'Start' }
     }
     if (appointment.status === 'IN_PROGRESS') {
-      return { label: 'End Appointment' }
+      return { label: 'End' }
     }
     if (appointment.status === 'COMPLETED' && !appointment.isSigned) {
-      return { label: 'Sign Note' }
+      return { label: 'Sign' }
     }
     return null
   }
 
   const action = getActionButton()
   const appointmentDate = new Date(appointment.scheduledStart)
-  const dateStr = appointmentDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+  const dateStr = appointmentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const relativeDay = getRelativeDay(appointmentDate)
   const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
@@ -785,9 +787,14 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
     ? `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
     : '??'
 
+  // First visit date formatted
+  const firstVisitStr = firstVisitDate
+    ? `Since ${firstVisitDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+    : 'New patient'
+
   return (
     <div className="flex h-14 items-stretch border-b border-border">
-      {/* Left section: Avatar + Name (matches Visit History width) */}
+      {/* Left section: Avatar + Patient name (matches Visit History width) */}
       <div className={`flex items-center gap-2 px-3 border-r border-border flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}>
         {/* Avatar */}
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
@@ -797,8 +804,8 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
         <span className="text-sm font-semibold truncate">{patientName}</span>
       </div>
 
-      {/* Right section: Date + Time + Status + Action (spans SOAP + Patient Context) */}
-      <div className="flex flex-1 items-center justify-between px-3">
+      {/* Center section: Date + Time + Status + Action (matches SOAP Editor) */}
+      <div className="flex flex-1 items-center justify-between px-3 border-r border-border">
         {/* Date · Relative on row 1, Time Range on row 2 */}
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-1.5 text-sm">
@@ -809,22 +816,28 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
         </div>
 
         {/* Status badge + action button */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
             <div
-              className="h-2.5 w-2.5 rounded-full"
+              className="h-2 w-2 rounded-full"
               style={{ backgroundColor: statusColor }}
             />
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-xs font-medium text-foreground">
               {statusDisplay.label}
             </span>
           </div>
           {action && (
-            <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+            <button className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
               {action.label}
             </button>
           )}
         </div>
+      </div>
+
+      {/* Right section: Visit count + First visit date (matches Patient Context width) */}
+      <div className={`flex flex-col justify-center px-3 flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
+        <span className="text-sm font-semibold">Visits ({visitCount})</span>
+        <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
       </div>
     </div>
   )
@@ -1172,6 +1185,30 @@ export default function AppointmentDetailPage() {
     return getPatientVisitHistory(appointment.patient.id).map(v => v.id)
   }, [appointment?.patient?.id])
 
+  // Calculate visit count and first visit date for header
+  const { visitCount, firstVisitDate } = useMemo(() => {
+    if (!appointment?.patient?.id) return { visitCount: 0, firstVisitDate: null }
+
+    const visitHistory = getPatientVisitHistory(appointment.patient.id)
+    const scheduledAppts = getPatientScheduledAppointments(appointment.patient.id, appointmentId)
+    const todayCompletedCount = scheduledAppts.filter(a => a.status === 'COMPLETED' && !a.isFuture).length
+
+    // Total count = past visits + today's completed
+    const count = visitHistory.length + todayCompletedCount
+
+    // Find the oldest visit date
+    let oldest: Date | null = null
+    if (visitHistory.length > 0) {
+      // visitHistory is sorted most recent first, so last one is oldest
+      const oldestVisit = visitHistory[visitHistory.length - 1]
+      oldest = oldestVisit.appointment?.scheduledStart
+        ? new Date(oldestVisit.appointment.scheduledStart)
+        : new Date(oldestVisit.createdAt)
+    }
+
+    return { visitCount: count, firstVisitDate: oldest }
+  }, [appointment?.patient?.id, appointmentId])
+
   // Get today's appointment ID for the patient (for PatientCards selection)
   // When viewing a future appointment, we still want to highlight the patient's today card
   const selectedAppointmentIdForCards = useMemo(() => {
@@ -1489,7 +1526,11 @@ export default function AppointmentDetailPage() {
       {/* Main content area with unified header */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Unified Header Bar - spans all three columns */}
-        <AppointmentHeader appointment={appointment} />
+        <AppointmentHeader
+          appointment={appointment}
+          visitCount={visitCount}
+          firstVisitDate={firstVisitDate}
+        />
 
         {/* Content columns below header */}
         <div className="flex flex-1 overflow-hidden">
