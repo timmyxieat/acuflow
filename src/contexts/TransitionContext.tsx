@@ -23,7 +23,8 @@ interface TransitionContextType {
   showFutureAppointments: boolean
   transitionPatientId: string | null
   isPatientCardsCollapsed: boolean
-  startTransition: (rect: DOMRect, source: TransitionSource, patientId?: string) => void
+  previousPatientCardsCollapsed: boolean | null  // Track previous state for animation decisions
+  startTransition: (rect: DOMRect, source: TransitionSource, patientId?: string, isCollapsed?: boolean) => void
   setSlideDirection: (direction: SlideDirection) => void
   setSelectedAppointmentId: (id: string | null) => void
   setKeyboardNavMode: (active: boolean) => void
@@ -44,7 +45,8 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [isKeyboardNavMode, setIsKeyboardNavMode] = useState(false)
   const [showFutureAppointments, setShowFutureAppointments] = useState(false)
   const [transitionPatientId, setTransitionPatientId] = useState<string | null>(null)
-  const [isPatientCardsCollapsed, setPatientCardsCollapsed] = useState(true) // Start collapsed on appointment detail
+  const [isPatientCardsCollapsed, setPatientCardsCollapsedState] = useState(true) // Start collapsed on appointment detail
+  const [previousPatientCardsCollapsed, setPreviousPatientCardsCollapsed] = useState<boolean | null>(null)
 
   // Global mouse move listener to exit keyboard nav mode
   useEffect(() => {
@@ -82,9 +84,14 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const startTransition = useCallback((rect: DOMRect, source: TransitionSource, patientId?: string) => {
+  const startTransition = useCallback((rect: DOMRect, source: TransitionSource, patientId?: string, isCollapsed?: boolean) => {
     // Clear any lingering transition state first to prevent double animations
     setIsTransitioning(false)
+
+    // Capture current collapsed state for animation decisions
+    // If isCollapsed is provided, use it (from local state on calling page)
+    // Otherwise use the context state
+    setPreviousPatientCardsCollapsed(isCollapsed ?? isPatientCardsCollapsed)
 
     // Then set up the new transition
     setOrigin({
@@ -96,6 +103,11 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
     setTransitionSource(source)
     setTransitionPatientId(patientId ?? null)
     setIsTransitioning(true)
+  }, [isPatientCardsCollapsed])
+
+  // Wrapper for setPatientCardsCollapsed
+  const setPatientCardsCollapsed = useCallback((collapsed: boolean) => {
+    setPatientCardsCollapsedState(collapsed)
   }, [])
 
   const completeTransition = useCallback(() => {
@@ -117,6 +129,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
         showFutureAppointments,
         transitionPatientId,
         isPatientCardsCollapsed,
+        previousPatientCardsCollapsed,
         startTransition,
         setSlideDirection,
         setSelectedAppointmentId,

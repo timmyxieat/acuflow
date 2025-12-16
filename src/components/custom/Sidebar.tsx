@@ -28,7 +28,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { startTransition } = useTransition()
+  const { startTransition, isPatientCardsCollapsed } = useTransition()
   const { header } = useHeader()
 
   // Check if we're on an appointment detail page
@@ -38,8 +38,8 @@ export function Sidebar() {
   const handleHomeClick = (e: React.MouseEvent) => {
     if (isOnAppointmentPage) {
       e.preventDefault()
-      // Trigger back animation (same as back button)
-      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back')
+      // Trigger back animation (same as back button), pass current collapsed state
+      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back', undefined, isPatientCardsCollapsed)
       // Navigate to Today with patient selection preserved
       if (header.currentPatientId) {
         router.push(`/?patient=${header.currentPatientId}`)

@@ -438,6 +438,7 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
               <div
                 className="absolute left-0 right-0 z-20 flex items-center pointer-events-none -translate-y-1/2"
                 style={{ top: `${TOP_PADDING + currentTimeOffset * hourHeight}px` }}
+                suppressHydrationWarning
               >
                 <div className="h-2 w-2 -ml-1 rounded-full border border-blue-500 bg-white" />
                 <div className="h-[1px] flex-1 bg-blue-500" />

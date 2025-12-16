@@ -89,7 +89,7 @@ export function TodayScreen() {
     // Store selection in context so it persists when navigating back
     setSelectedAppointmentId(appointment.id)
     if (rect) {
-      startTransition(rect, 'today')
+      startTransition(rect, 'today', undefined, isCollapsed)
     }
     router.push(`/appointments/${appointment.id}`)
   }

@@ -5,6 +5,7 @@ import { motion, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
 import { SPRING_TRANSITION } from "@/lib/animations";
+import { useTransition } from "@/contexts/TransitionContext";
 import { Timer, Bell, ChevronLeft, Pause } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
@@ -326,7 +327,7 @@ function PatientCard({
                   }`}
                 />
               )}
-              <span>{timeDisplay.text}</span>
+              <span suppressHydrationWarning>{timeDisplay.text}</span>
             </motion.div>
           </div>
         )}
@@ -354,7 +355,7 @@ function PatientCard({
                   }`}
                 />
               )}
-              <span>{timeDisplay.text}</span>
+              <span suppressHydrationWarning>{timeDisplay.text}</span>
             </div>
           </motion.div>
         )}
@@ -377,6 +378,12 @@ export function PatientCards({
 }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), []);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { isTransitioning, previousPatientCardsCollapsed } = useTransition();
+
+  // Only animate chevron during navigation if the collapsed state is actually changing
+  const shouldAnimateChevron = isTransitioning &&
+    previousPatientCardsCollapsed !== null &&
+    previousPatientCardsCollapsed !== compact;
 
   // Force re-render every second to update timers
   const [, setTick] = useState(0);
@@ -426,17 +433,26 @@ export function PatientCards({
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
-          <div className={`flex items-center flex-shrink-0 ${compact ? "justify-center" : ""}`}>
+          <div className="flex items-center flex-shrink-0">
             <button
               onClick={onToggleCompact}
-              className={`flex h-12 w-full items-center text-muted-foreground hover:text-foreground transition-colors ${
-                compact ? "justify-center" : "px-3"
-              }`}
+              className="flex h-12 w-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
+              {/* Chevron animation:
+                  - x: 0 = left aligned (expanded), 12 = centered in 64px collapsed panel
+                  - Only animate during navigation if collapsed state is actually changing
+                  - On fresh page load or same collapsed state, skip animation */}
               <motion.div
-                initial={false}
-                animate={{ rotate: compact ? 180 : 0 }}
+                initial={
+                  shouldAnimateChevron
+                    ? { x: compact ? 0 : 12, rotate: compact ? 0 : 180 }
+                    : false
+                }
+                animate={{
+                  x: compact ? 12 : 0,
+                  rotate: compact ? 180 : 0
+                }}
                 transition={SPRING_TRANSITION}
               >
                 <ChevronLeft className="h-4 w-4" />

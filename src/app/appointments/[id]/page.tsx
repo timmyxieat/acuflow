@@ -3,7 +3,7 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContext } from '@/components/custom'
+import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, getBillingStatusPreview, getCommsStatusPreview, type BillingData, type CommsData } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
@@ -34,7 +34,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine, RotateCcw, DollarSign, Zap } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine, RotateCcw, DollarSign, Zap, CreditCard, MessageSquare, AlertTriangle, Circle } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { getStatusColor } from '@/lib/constants'
 
@@ -320,11 +320,6 @@ function TimelineCard({
                   <p className="text-xs">Complete earlier appointments first</p>
                 </TooltipContent>
               </Tooltip>
-            )}
-            {isUnsigned && !isLocked && (
-              <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Minus className="h-2.5 w-2.5 text-amber-600" />
-              </div>
             )}
           </div>
         </div>
@@ -725,6 +720,7 @@ interface AppointmentHeaderProps {
   appointment: AppointmentWithRelations
   visitCount: number
   firstVisitDate: Date | null
+  activeTab: 'medical' | 'billing' | 'comms'
 }
 
 function getRelativeDay(date: Date): string {
@@ -753,7 +749,7 @@ function getRelativeDay(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-function AppointmentHeader({ appointment, visitCount, firstVisitDate }: AppointmentHeaderProps) {
+function AppointmentHeader({ appointment, visitCount, firstVisitDate, activeTab }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
   const statusColor = getStatusColor(appointment.status, appointment.isSigned)
 
@@ -816,11 +812,13 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate }: Appointm
         </div>
       </div>
 
-      {/* Right section: Visit count + First visit date (matches Patient Context panel width + border-l) */}
-      <div className={`flex flex-col justify-center px-3 border-l border-border flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
-        <span className="text-sm font-semibold">Visits ({visitCount})</span>
-        <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
-      </div>
+      {/* Right section: Visit count + First visit date (only on Medical tab, matches Patient Context panel width) */}
+      {activeTab === 'medical' && (
+        <div className={`flex flex-col justify-center px-3 border-l border-border flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
+          <span className="text-sm font-semibold">Visits ({visitCount})</span>
+          <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -913,10 +911,12 @@ function SOAPSections({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Save status - floats right */}
-      <div className="flex justify-end">
-        {renderSaveStatus()}
-      </div>
+      {/* Save status - floats right, only render when there's status to show */}
+      {saveStatus !== 'idle' && (
+        <div className="flex justify-end">
+          {renderSaveStatus()}
+        </div>
+      )}
 
       {sections.map((section, index) => {
         const previewContent = getVisitSoapContent(section.key)
@@ -1068,6 +1068,10 @@ export default function AppointmentDetailPage() {
   // FAB state
   const [isFabExpanded, setIsFabExpanded] = useState(false)
   const fabRef = useRef<HTMLDivElement>(null)
+
+  // Tab state for Medical / Billing / Comms
+  type TabType = 'medical' | 'billing' | 'comms'
+  const [activeTab, setActiveTab] = useState<TabType>('medical')
 
   // Close FAB when clicking outside
   useEffect(() => {
@@ -1262,6 +1266,179 @@ export default function AppointmentDetailPage() {
     if (!appointment?.patient?.id) return undefined
     return getPatientTodayAppointmentId(appointment.patient.id) ?? undefined
   }, [appointment?.patient?.id])
+
+  // Mock billing data for the appointment
+  const billingData: BillingData = useMemo(() => {
+    // Generate mock data based on appointment status
+    const isCompleted = appointment?.status === 'COMPLETED'
+
+    if (!isCompleted) {
+      return {
+        charges: [],
+        subtotal: 0,
+        tax: 0,
+        totalCharges: 0,
+        amountPaid: 0,
+        balanceDue: 0,
+        status: 'no_charges' as const,
+        invoiceStatus: 'draft' as const,
+        transactions: [],
+        paymentMethod: {
+          id: 'pm_001',
+          type: 'card' as const,
+          brand: 'Visa',
+          last4: '4242',
+          expiryMonth: 8,
+          expiryYear: 2026,
+          isDefault: true,
+        },
+      }
+    }
+
+    // For completed appointments, generate charges
+    const charges = [
+      {
+        id: 'chg_001',
+        cptCode: '97810',
+        description: 'Acupuncture, initial 15 min',
+        units: 1,
+        unitPrice: 85,
+        total: 85,
+      },
+      {
+        id: 'chg_002',
+        cptCode: '97811',
+        description: 'Acupuncture, additional 15 min',
+        units: appointment?.usedEstim ? 2 : 1,
+        unitPrice: 35,
+        total: appointment?.usedEstim ? 70 : 35,
+      },
+    ]
+
+    const subtotal = charges.reduce((sum, c) => sum + c.total, 0)
+    const tax = 0 // No tax for medical services
+    const totalCharges = subtotal + tax
+    const isPaid = appointment?.isSigned ?? false
+    const amountPaid = isPaid ? totalCharges : 0
+
+    return {
+      charges,
+      subtotal,
+      tax,
+      totalCharges,
+      amountPaid,
+      balanceDue: totalCharges - amountPaid,
+      status: isPaid ? 'paid' as const : 'pending' as const,
+      invoiceStatus: isPaid ? 'paid' as const : 'sent' as const,
+      transactions: isPaid ? [{
+        id: 'tx_001',
+        date: new Date(),
+        method: 'Visa',
+        amount: totalCharges,
+        cardLast4: '4242',
+      }] : [],
+      paymentMethod: {
+        id: 'pm_001',
+        type: 'card' as const,
+        brand: 'Visa',
+        last4: '4242',
+        expiryMonth: 8,
+        expiryYear: 2026,
+        isDefault: true,
+      },
+      insurance: {
+        company: 'Blue Cross Blue Shield',
+        memberId: 'XYZ123456789',
+        groupNumber: 'GRP-001',
+      },
+    }
+  }, [appointment?.status, appointment?.usedEstim, appointment?.isSigned])
+
+  // Mock comms data for the appointment
+  const commsData: CommsData = useMemo(() => {
+    const now = new Date()
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+    // Vary confirmation status based on appointment status
+    const isInProgress = appointment?.status === 'IN_PROGRESS'
+    const isCheckedIn = appointment?.status === 'CHECKED_IN'
+    const confirmedAt = (isInProgress || isCheckedIn) ? new Date(yesterday.getTime() + 2 * 60 * 60 * 1000) : undefined
+
+    // Schedule info
+    const appointmentStart = appointment?.scheduledStart ? new Date(appointment.scheduledStart) : now
+    const appointmentEnd = appointment?.scheduledEnd ? new Date(appointment.scheduledEnd) : new Date(now.getTime() + 60 * 60 * 1000)
+
+    return {
+      messages: [
+        {
+          id: 'msg_001',
+          type: 'reminder' as const,
+          content: `Reminder: Your appointment is tomorrow at ${appointmentStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`,
+          timestamp: yesterday,
+          status: 'delivered' as const,
+        },
+        ...(isInProgress || isCheckedIn ? [{
+          id: 'msg_002',
+          type: 'patient_response' as const,
+          content: 'Confirmed! See you then.',
+          timestamp: new Date(yesterday.getTime() + 2 * 60 * 60 * 1000),
+          status: 'read' as const,
+          isFromPatient: true,
+        }] : []),
+      ],
+      notes: [
+        {
+          id: 'note_001',
+          content: 'Patient prefers afternoon appointments when possible.',
+          createdAt: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+          createdBy: 'Dr. Smith',
+          isPinned: true,
+        },
+        {
+          id: 'note_002',
+          content: 'Mentioned work deadline stress affecting sleep.',
+          createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+          createdBy: 'Dr. Smith',
+        },
+      ],
+      confirmationStatus: (isInProgress || isCheckedIn) ? 'confirmed' as const : 'pending' as const,
+      reminderSentAt: yesterday,
+      confirmedAt,
+      unreadCount: 0,
+      schedule: {
+        currentAppointment: {
+          date: appointmentStart,
+          startTime: appointmentStart,
+          endTime: appointmentEnd,
+          type: appointment?.appointmentType?.name ?? 'Follow-up Treatment',
+          duration: 60,
+          confirmedAt,
+        },
+        followUp: {
+          recommendedInterval: '1 week',
+          nextAvailable: new Date(oneWeekFromNow.setHours(10, 30, 0, 0)),
+        },
+        recentVisits: [
+          {
+            date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+            type: 'Follow-up',
+            status: 'Completed',
+          },
+          {
+            date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+            type: 'Follow-up',
+            status: 'Completed',
+          },
+          {
+            date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+            type: 'Initial Consultation',
+            status: 'Completed',
+          },
+        ],
+      },
+    }
+  }, [appointment?.status, appointment?.scheduledStart, appointment?.scheduledEnd, appointment?.appointmentType?.name])
 
   // Set the global header when this page mounts
   useEffect(() => {
@@ -1505,7 +1682,7 @@ export default function AppointmentDetailPage() {
 
       if (rect) {
         // Pass current patient ID to detect same vs different patient transitions
-        startTransition(rect, 'appointment', appointment?.patient?.id)
+        startTransition(rect, 'appointment', appointment?.patient?.id, isPatientCardsCollapsed)
       }
       router.push(`/appointments/${clickedAppointment.id}`)
     }
@@ -1580,6 +1757,7 @@ export default function AppointmentDetailPage() {
           appointment={appointment}
           visitCount={visitCount}
           firstVisitDate={firstVisitDate}
+          activeTab={activeTab}
         />
 
         {/* Content columns below header */}
@@ -1625,7 +1803,7 @@ export default function AppointmentDetailPage() {
                         setSlideDirection(direction)
                       }
                       // Set transition source to 'scheduled' with current patient ID for same-patient detection
-                      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id)
+                      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
                       router.push(`/appointments/${apptId}`)
                     }}
                     hoveredVisitId={effectiveHoveredVisitId}
@@ -1638,314 +1816,412 @@ export default function AppointmentDetailPage() {
             </motion.div>
           </AnimatePresence>
 
-          {/* SOAP Notes Panel - Flexible width */}
-          <div className="flex flex-1 flex-col overflow-hidden bg-background">
-            <AnimatePresence mode="wait" initial={true}>
-              <motion.div
-                key={appointmentId}
-                className="flex flex-1 flex-col overflow-hidden"
-                initial={{
-                  x: transitionSource === 'today' ? 100 : 0,
-                  y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                    ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                    : 0,
-                  opacity: 0,
-                }}
-                animate={{ x: 0, y: 0, opacity: 1 }}
-                exit={{
-                  y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                    ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                    : 0,
-                  opacity: 0,
-                }}
-                transition={SIDEBAR_ANIMATION.transition}
-              >
-                {/* Scrollable Content */}
-                <ScrollableArea className="flex-1 pt-2 pb-4 px-3" deps={[appointmentId]}>
-                  <div className="flex flex-col gap-4">
-                    {/* SOAP Sections */}
-                    <SOAPSections
-                      selectedVisitId={selectedVisitId}
-                      soapData={soapData}
-                      onSoapChange={handleSoapChange}
-                      onUsePastTreatment={handleUsePastTreatment}
-                      isZoneFocused={focusZone === 'soap'}
-                      focusedIndex={focusedSoapIndex}
-                      isEditing={isEditingField}
-                      textareaRefs={soapTextareaRefs}
-                      onTextareaFocus={handleTextareaFocus}
-                      saveStatus={saveStatus}
-                      previewSlideDirection={previewSlideDirection}
-                    />
-                  </div>
-                </ScrollableArea>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Patient Context Panel */}
-          <AnimatePresence mode="wait" initial={true}>
-            <motion.div
-              key={`context-${middlePanelKey}`}
-              className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
-              initial={{
-                x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
-                y: shouldAnimateMiddlePanel && transitionSource !== 'today'
-                  ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                  : 0,
-                opacity: shouldAnimateMiddlePanel ? 0 : 1,
-              }}
-              animate={{ x: 0, y: 0, opacity: 1 }}
-              exit={{
-                y: shouldAnimateMiddlePanel && transitionSource !== 'today'
-                  ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                  : 0,
-                opacity: shouldAnimateMiddlePanel ? 0 : 1,
-              }}
-              transition={SIDEBAR_ANIMATION.transition}
-            >
-              {appointment.patient && (
-                <PatientContext
-                  patient={appointment.patient}
-                  conditions={appointment.conditions}
-                  contextData={getPatientContextData(appointment.patient.id)}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Expandable Floating Action Button - Bottom Right */}
-        <div ref={fabRef} className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
-          <AnimatePresence>
-            {isFabExpanded && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="w-[220px] rounded-lg bg-background border border-border shadow-lg p-3"
-              >
-                <div className="flex flex-col gap-3">
-                  {/* Timer Section - Large timer value as header */}
-                  <div className="flex flex-col gap-2">
-                    {/* Large timer display - show selected preset when not started */}
-                    <div className={`text-3xl font-semibold tabular-nums text-center ${
-                      timerSeconds !== null && timerSeconds <= 0
-                        ? 'text-red-600'
-                        : timerSeconds !== null
-                          ? 'text-blue-600'
-                          : 'text-foreground'
-                    }`}>
-                      {timerSeconds !== null ? formatTimer(timerSeconds) : formatTimer(selectedPresetMinutes * 60)}
-                    </div>
-
-                    {/* Progress bar (thin) - show full bar when not started */}
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-1000 rounded-full ${
-                          timerSeconds !== null && timerSeconds <= 0
-                            ? 'bg-red-500'
-                            : timerSeconds !== null
-                              ? 'bg-blue-500'
-                              : 'bg-muted-foreground/30'
-                        }`}
-                        style={{ width: timerSeconds !== null ? `${timerProgress * 100}%` : '100%' }}
-                      />
-                    </div>
-
-                    {/* All presets in single row: [10][25][40][+5] */}
-                    <div className="grid grid-cols-4 gap-1">
-                      {[10, 25, 40].map((mins) => (
-                        <button
-                          key={mins}
-                          onClick={() => handleSelectPreset(mins)}
-                          className={`h-8 text-xs font-medium rounded transition-colors ${
-                            selectedPresetMinutes === mins && timerSeconds === null
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted hover:bg-muted/80'
-                          }`}
-                        >
-                          {mins}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => handleAddTime(5)}
-                        disabled={timerSeconds === null}
-                        className="h-8 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          {/* Tab Content Area - Contains SOAP+Context OR Billing OR Comms + Tab Bar */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* Tab Content */}
+            <div className="flex flex-1 overflow-hidden relative">
+              {activeTab === 'medical' && (
+                <>
+                  {/* SOAP Notes Panel - Flexible width */}
+                  <div className="flex flex-1 flex-col overflow-hidden bg-background">
+                    <AnimatePresence mode="wait" initial={true}>
+                      <motion.div
+                        key={appointmentId}
+                        className="flex flex-1 flex-col overflow-hidden"
+                        initial={{
+                          x: transitionSource === 'today' ? 100 : 0,
+                          y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                            ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+                            : 0,
+                          opacity: 0,
+                        }}
+                        animate={{ x: 0, y: 0, opacity: 1 }}
+                        exit={{
+                          y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                            ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+                            : 0,
+                          opacity: 0,
+                        }}
+                        transition={SIDEBAR_ANIMATION.transition}
                       >
-                        +5
-                      </button>
-                    </div>
-
-                    {/* Start/Pause button - full width */}
-                    {isTimerRunning ? (
-                      <button
-                        onClick={handleStopTimer}
-                        className="h-11 text-sm font-medium rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <StopCircle className="h-4 w-4" />
-                        Pause
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => timerSeconds !== null ? handleResumeTimer() : handleStartTimer(selectedPresetMinutes)}
-                        className="h-11 text-sm font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Play className="h-4 w-4" />
-                        {timerSeconds !== null ? 'Resume' : `Start ${selectedPresetMinutes} min`}
-                      </button>
-                    )}
+                        {/* Scrollable Content */}
+                        <ScrollableArea className="flex-1 pt-2 pb-4 px-3" deps={[appointmentId]}>
+                          <div className="flex flex-col gap-4">
+                            {/* SOAP Sections */}
+                            <SOAPSections
+                              selectedVisitId={selectedVisitId}
+                              soapData={soapData}
+                              onSoapChange={handleSoapChange}
+                              onUsePastTreatment={handleUsePastTreatment}
+                              isZoneFocused={focusZone === 'soap'}
+                              focusedIndex={focusedSoapIndex}
+                              isEditing={isEditingField}
+                              textareaRefs={soapTextareaRefs}
+                              onTextareaFocus={handleTextareaFocus}
+                              saveStatus={saveStatus}
+                              previewSlideDirection={previewSlideDirection}
+                            />
+                          </div>
+                        </ScrollableArea>
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
 
-                  {/* Divider */}
-                  <div className="border-t border-border -mx-3" />
-
-                  {/* Status Section - 3-step progress indicator */}
-                  <div className="flex flex-col gap-3">
-                    {/* Progress dots - 3 steps: Scheduled → In Progress → Complete */}
-                    {(() => {
-                      // Determine completed steps (1-3)
-                      // SCHEDULED/CHECKED_IN = step 1, IN_PROGRESS = step 2, COMPLETED = step 3
-                      const getCompletedSteps = () => {
-                        if (appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') return 1
-                        if (appointment.status === 'IN_PROGRESS') return 2
-                        if (appointment.status === 'COMPLETED') return 3
-                        return 1
-                      }
-                      const completedSteps = getCompletedSteps()
-
-                      return (
-                        <div className="flex items-center justify-center gap-0">
-                          {/* Step 1: Scheduled */}
-                          <div className={`h-3 w-3 rounded-full ${
-                            completedSteps >= 1 ? 'bg-primary' : 'border-2 border-muted-foreground'
-                          }`} />
-                          {/* Line 1 */}
-                          <div className={`h-0.5 w-12 ${
-                            completedSteps >= 2 ? 'bg-primary' : 'bg-muted'
-                          }`} />
-                          {/* Step 2: In Progress */}
-                          <div className={`h-3 w-3 rounded-full ${
-                            completedSteps >= 2 ? 'bg-primary' : 'border-2 border-muted-foreground'
-                          }`} />
-                          {/* Line 2 */}
-                          <div className={`h-0.5 w-12 ${
-                            completedSteps >= 3 ? 'bg-primary' : 'bg-muted'
-                          }`} />
-                          {/* Step 3: Complete */}
-                          <div className={`h-3 w-3 rounded-full ${
-                            completedSteps >= 3 ? 'bg-primary' : 'border-2 border-muted-foreground'
-                          }`} />
-                        </div>
-                      )
-                    })()}
-
-                    {/* Current status with colored dot */}
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: getStatusColor(appointment.status, appointment.isSigned) }}
-                        />
-                        <span className="text-sm font-semibold">
-                          {getStatusDisplay(appointment.status, appointment.isSigned).label}
-                        </span>
-                      </div>
-                      {/* Timestamp */}
-                      <div className="text-xs text-muted-foreground pl-[18px]">
-                        {appointment.status === 'SCHEDULED' && 'Waiting to start'}
-                        {appointment.status === 'CHECKED_IN' && appointment.checkedInAt && (
-                          <>Checked in {formatTime(appointment.checkedInAt)}</>
-                        )}
-                        {appointment.status === 'IN_PROGRESS' && appointment.startedAt && (
-                          <>Started {formatTime(appointment.startedAt)}</>
-                        )}
-                        {appointment.status === 'COMPLETED' && !appointment.isSigned && 'Ready to sign'}
-                        {appointment.status === 'COMPLETED' && appointment.isSigned && 'Visit complete'}
-                      </div>
-                    </div>
-
-                    {/* Status action button - full width */}
-                    {(appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') && (
-                      <button
-                        onClick={() => setIsFabExpanded(false)}
-                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Play className="h-4 w-4" />
-                        Start Visit
-                      </button>
-                    )}
-                    {appointment.status === 'IN_PROGRESS' && (
-                      <button
-                        onClick={() => setIsFabExpanded(false)}
-                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <StopCircle className="h-4 w-4" />
-                        End Visit
-                      </button>
-                    )}
-                    {appointment.status === 'COMPLETED' && !appointment.isSigned && (
-                      <button
-                        onClick={() => setIsFabExpanded(false)}
-                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <PenLine className="h-4 w-4" />
-                        Sign Note
-                      </button>
-                    )}
-                    {appointment.status === 'COMPLETED' && appointment.isSigned && (
-                      <div className="h-11 text-sm font-medium rounded-md bg-green-100 text-green-700 flex items-center justify-center gap-2">
-                        <Check className="h-4 w-4" />
-                        Signed
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-border -mx-3" />
-
-                  {/* Total Section - Inline amount + description */}
-                  <div className="flex flex-col gap-2">
-                    {/* Total + description inline */}
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold tabular-nums">
-                        ${appointment.usedEstim ? 100 : 85}
-                      </span>
-                      <span className="text-muted-foreground truncate">
-                        {appointment.appointmentType?.name ?? 'Visit'}
-                      </span>
-                    </div>
-
-                    {/* Checkout button - full width */}
-                    <button
-                      onClick={() => setIsFabExpanded(false)}
-                      className="h-11 text-sm font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors flex items-center justify-center gap-2"
+                  {/* Patient Context Panel */}
+                  <AnimatePresence mode="wait" initial={true}>
+                    <motion.div
+                      key={`context-${middlePanelKey}`}
+                      className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
+                      initial={{
+                        x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
+                        y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                          ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+                          : 0,
+                        opacity: shouldAnimateMiddlePanel ? 0 : 1,
+                      }}
+                      animate={{ x: 0, y: 0, opacity: 1 }}
+                      exit={{
+                        y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                          ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+                          : 0,
+                        opacity: shouldAnimateMiddlePanel ? 0 : 1,
+                      }}
+                      transition={SIDEBAR_ANIMATION.transition}
                     >
-                      <LogOut className="h-4 w-4" />
-                      Check Out
+                      {appointment.patient && (
+                        <PatientContext
+                          patient={appointment.patient}
+                          conditions={appointment.conditions}
+                          contextData={getPatientContextData(appointment.patient.id)}
+                        />
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {/* FAB - Only on Medical Tab, positioned above tab bar */}
+                  <div ref={fabRef} className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
+                    <AnimatePresence>
+                      {isFabExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="w-[220px] rounded-lg bg-background border border-border shadow-lg p-3"
+                        >
+                          <div className="flex flex-col gap-3">
+                            {/* Timer Section - Large timer value as header */}
+                            <div className="flex flex-col gap-2">
+                              {/* Large timer display - show selected preset when not started */}
+                              <div className={`text-3xl font-semibold tabular-nums text-center ${
+                                timerSeconds !== null && timerSeconds <= 0
+                                  ? 'text-red-600'
+                                  : timerSeconds !== null
+                                    ? 'text-blue-600'
+                                    : 'text-foreground'
+                              }`}>
+                                {timerSeconds !== null ? formatTimer(timerSeconds) : formatTimer(selectedPresetMinutes * 60)}
+                              </div>
+
+                              {/* Progress bar (thin) - show full bar when not started */}
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-1000 rounded-full ${
+                                    timerSeconds !== null && timerSeconds <= 0
+                                      ? 'bg-red-500'
+                                      : timerSeconds !== null
+                                        ? 'bg-blue-500'
+                                        : 'bg-muted-foreground/30'
+                                  }`}
+                                  style={{ width: timerSeconds !== null ? `${timerProgress * 100}%` : '100%' }}
+                                />
+                              </div>
+
+                              {/* All presets in single row: [10][25][40][+5] */}
+                              <div className="grid grid-cols-4 gap-1">
+                                {[10, 25, 40].map((mins) => (
+                                  <button
+                                    key={mins}
+                                    onClick={() => handleSelectPreset(mins)}
+                                    className={`h-8 text-xs font-medium rounded transition-colors ${
+                                      selectedPresetMinutes === mins && timerSeconds === null
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted hover:bg-muted/80'
+                                    }`}
+                                  >
+                                    {mins}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => handleAddTime(5)}
+                                  disabled={timerSeconds === null}
+                                  className="h-8 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  +5
+                                </button>
+                              </div>
+
+                              {/* Start/Pause button - full width */}
+                              {isTimerRunning ? (
+                                <button
+                                  onClick={handleStopTimer}
+                                  className="h-11 text-sm font-medium rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <StopCircle className="h-4 w-4" />
+                                  Pause
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => timerSeconds !== null ? handleResumeTimer() : handleStartTimer(selectedPresetMinutes)}
+                                  className="h-11 text-sm font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <Play className="h-4 w-4" />
+                                  {timerSeconds !== null ? 'Resume' : `Start ${selectedPresetMinutes} min`}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Divider */}
+                            <div className="border-t border-border -mx-3" />
+
+                            {/* Status Section - 3-step progress indicator */}
+                            <div className="flex flex-col gap-3">
+                              {/* Progress dots - 3 steps: Scheduled → In Progress → Complete */}
+                              {(() => {
+                                // Determine completed steps (1-3)
+                                // SCHEDULED/CHECKED_IN = step 1, IN_PROGRESS = step 2, COMPLETED = step 3
+                                const getCompletedSteps = () => {
+                                  if (appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') return 1
+                                  if (appointment.status === 'IN_PROGRESS') return 2
+                                  if (appointment.status === 'COMPLETED') return 3
+                                  return 1
+                                }
+                                const completedSteps = getCompletedSteps()
+
+                                return (
+                                  <div className="flex items-center justify-center gap-0">
+                                    {/* Step 1: Scheduled */}
+                                    <div className={`h-3 w-3 rounded-full ${
+                                      completedSteps >= 1 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                                    }`} />
+                                    {/* Line 1 */}
+                                    <div className={`h-0.5 w-12 ${
+                                      completedSteps >= 2 ? 'bg-primary' : 'bg-muted'
+                                    }`} />
+                                    {/* Step 2: In Progress */}
+                                    <div className={`h-3 w-3 rounded-full ${
+                                      completedSteps >= 2 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                                    }`} />
+                                    {/* Line 2 */}
+                                    <div className={`h-0.5 w-12 ${
+                                      completedSteps >= 3 ? 'bg-primary' : 'bg-muted'
+                                    }`} />
+                                    {/* Step 3: Complete */}
+                                    <div className={`h-3 w-3 rounded-full ${
+                                      completedSteps >= 3 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                                    }`} />
+                                  </div>
+                                )
+                              })()}
+
+                              {/* Current status with colored dot */}
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: getStatusColor(appointment.status, appointment.isSigned) }}
+                                  />
+                                  <span className="text-sm font-semibold">
+                                    {getStatusDisplay(appointment.status, appointment.isSigned).label}
+                                  </span>
+                                </div>
+                                {/* Timestamp */}
+                                <div className="text-xs text-muted-foreground pl-[18px]">
+                                  {appointment.status === 'SCHEDULED' && 'Waiting to start'}
+                                  {appointment.status === 'CHECKED_IN' && appointment.checkedInAt && (
+                                    <>Checked in {formatTime(appointment.checkedInAt)}</>
+                                  )}
+                                  {appointment.status === 'IN_PROGRESS' && appointment.startedAt && (
+                                    <>Started {formatTime(appointment.startedAt)}</>
+                                  )}
+                                  {appointment.status === 'COMPLETED' && !appointment.isSigned && 'Ready to sign'}
+                                  {appointment.status === 'COMPLETED' && appointment.isSigned && 'Visit complete'}
+                                </div>
+                              </div>
+
+                              {/* Status action button - full width */}
+                              {(appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') && (
+                                <button
+                                  onClick={() => setIsFabExpanded(false)}
+                                  className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <Play className="h-4 w-4" />
+                                  Start Visit
+                                </button>
+                              )}
+                              {appointment.status === 'IN_PROGRESS' && (
+                                <button
+                                  onClick={() => setIsFabExpanded(false)}
+                                  className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <StopCircle className="h-4 w-4" />
+                                  End Visit
+                                </button>
+                              )}
+                              {appointment.status === 'COMPLETED' && !appointment.isSigned && (
+                                <button
+                                  onClick={() => setIsFabExpanded(false)}
+                                  className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <PenLine className="h-4 w-4" />
+                                  Sign Note
+                                </button>
+                              )}
+                              {appointment.status === 'COMPLETED' && appointment.isSigned && (
+                                <div className="h-11 text-sm font-medium rounded-md bg-green-100 text-green-700 flex items-center justify-center gap-2">
+                                  <Check className="h-4 w-4" />
+                                  Signed
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Divider */}
+                            <div className="border-t border-border -mx-3" />
+
+                            {/* Total Section - Inline amount + description */}
+                            <div className="flex flex-col gap-2">
+                              {/* Total + description inline */}
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-semibold tabular-nums">
+                                  ${appointment.usedEstim ? 100 : 85}
+                                </span>
+                                <span className="text-muted-foreground truncate">
+                                  {appointment.appointmentType?.name ?? 'Visit'}
+                                </span>
+                              </div>
+
+                              {/* Checkout button - full width */}
+                              <button
+                                onClick={() => setIsFabExpanded(false)}
+                                className="h-11 text-sm font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors flex items-center justify-center gap-2"
+                              >
+                                <LogOut className="h-4 w-4" />
+                                Check Out
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* FAB toggle button */}
+                    <button
+                      onClick={() => setIsFabExpanded(!isFabExpanded)}
+                      className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all ${
+                        isFabExpanded
+                          ? 'bg-muted text-foreground hover:bg-muted/80'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      }`}
+                    >
+                      {isFabExpanded ? (
+                        <X className="h-5 w-5" />
+                      ) : (
+                        <Plus className="h-5 w-5" />
+                      )}
                     </button>
                   </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </>
+              )}
 
-          {/* FAB toggle button */}
-          <button
-            onClick={() => setIsFabExpanded(!isFabExpanded)}
-            className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all ${
-              isFabExpanded
-                ? 'bg-muted text-foreground hover:bg-muted/80'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90'
-            }`}
-          >
-            {isFabExpanded ? (
-              <X className="h-5 w-5" />
-            ) : (
-              <Plus className="h-5 w-5" />
-            )}
-          </button>
+              {activeTab === 'billing' && (
+                <div className="flex-1 overflow-hidden bg-background">
+                  <BillingTab
+                    appointmentId={appointmentId}
+                    billingData={billingData}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'comms' && (
+                <div className="flex-1 overflow-hidden bg-background">
+                  <CommsTab
+                    appointmentId={appointmentId}
+                    commsData={commsData}
+                    patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Tab Bar - Fixed at bottom */}
+            <div className="h-16 flex border-t border-border bg-background flex-shrink-0">
+              {/* Medical Tab */}
+              <button
+                onClick={() => setActiveTab('medical')}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                  activeTab === 'medical'
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <ClipboardCheck className="h-5 w-5" />
+                <span className="text-xs font-medium">Medical</span>
+                <span className={`text-[10px] flex items-center gap-1 ${
+                  activeTab === 'medical' ? '' : ''
+                }`}>
+                  <Circle
+                    className="h-2 w-2"
+                    style={{
+                      fill: getStatusColor(appointment.status, appointment.isSigned),
+                      color: getStatusColor(appointment.status, appointment.isSigned),
+                    }}
+                  />
+                  <span style={{ color: getStatusColor(appointment.status, appointment.isSigned) }}>
+                    {getStatusDisplay(appointment.status, appointment.isSigned).label}
+                  </span>
+                </span>
+              </button>
+
+              {/* Billing Tab */}
+              <button
+                onClick={() => setActiveTab('billing')}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 border-l border-border transition-colors ${
+                  activeTab === 'billing'
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <CreditCard className="h-5 w-5" />
+                <span className="text-xs font-medium">Billing</span>
+                <span className={`text-[10px] ${getBillingStatusPreview(billingData).color}`}>
+                  {getBillingStatusPreview(billingData).text}
+                </span>
+              </button>
+
+              {/* Comms Tab */}
+              <button
+                onClick={() => setActiveTab('comms')}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 border-l border-border transition-colors ${
+                  activeTab === 'comms'
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <MessageSquare className="h-5 w-5" />
+                <span className="text-xs font-medium">Comms</span>
+                {(() => {
+                  const preview = getCommsStatusPreview(commsData)
+                  return (
+                    <span className={`text-[10px] flex items-center gap-1 ${preview.color}`}>
+                      {preview.icon === 'check' && <Check className="h-2.5 w-2.5" />}
+                      {preview.icon === 'warning' && <AlertTriangle className="h-2.5 w-2.5" />}
+                      {preview.text}
+                    </span>
+                  )
+                })()}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

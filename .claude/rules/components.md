@@ -172,3 +172,64 @@ const color = getStatusColor(appointment.status, appointment.isSigned)
 | Scheduled | Yellow | `#eab308` |
 | Unsigned | Amber | `#f59e0b` |
 | Completed | Slate | `#94a3b8` |
+
+---
+
+## Bottom Tab Bar (Appointment Detail)
+
+The appointment detail page has a bottom tab bar with Medical/Billing/Comms tabs.
+
+```typescript
+type TabType = 'medical' | 'billing' | 'comms'
+const [activeTab, setActiveTab] = useState<TabType>('medical')
+```
+
+**Tab bar specs:**
+- Height: 64px (fits icon + label + status preview)
+- Spans SOAP + Patient Context width (not Visit History panel)
+- Each tab shows: Icon (20px) → Label (12px) → Status preview (10px)
+
+**Tab content:**
+- **Medical**: SOAP Editor + Patient Context side-by-side, FAB visible
+- **Billing**: Full-width BillingTab component, FAB hidden
+- **Comms**: Full-width CommsTab component, FAB hidden
+
+**Status preview helpers:**
+```typescript
+import { getBillingStatusPreview, getCommsStatusPreview } from '@/components/custom'
+
+// Returns { text: string, color: string }
+const billingPreview = getBillingStatusPreview(billingData)
+const commsPreview = getCommsStatusPreview(commsData)
+```
+
+**Header behavior:**
+- Medical tab: Shows patient context header (Visits count) on right
+- Billing/Comms tabs: Full-width header (no right section)
+
+---
+
+## BillingTab & CommsTab
+
+Tab components for appointment detail page.
+
+```typescript
+import { BillingTab, CommsTab, type BillingData, type CommsData } from '@/components/custom'
+
+<BillingTab appointmentId={id} billingData={billingData} />
+<CommsTab appointmentId={id} commsData={commsData} patientName={name} />
+```
+
+**BillingData structure:**
+- `charges[]`: Line items with CPT codes
+- `subtotal`, `tax`, `totalCharges`
+- `status`: 'draft' | 'pending' | 'partial' | 'paid' | 'no_charges'
+- `invoiceStatus`: 'draft' | 'sent' | 'paid'
+- `paymentMethod?`: Card on file info
+- `insurance?`: Insurance company info
+
+**CommsData structure:**
+- `messages[]`: Message thread
+- `notes[]`: Practitioner notes
+- `confirmationStatus`: 'pending' | 'confirmed' | 'no_response' | 'cancelled'
+- `schedule`: Current appointment, follow-up info, recent visits
