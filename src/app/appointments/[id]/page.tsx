@@ -34,7 +34,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { getStatusColor } from '@/lib/constants'
 
@@ -278,18 +278,16 @@ function TimelineCard({
         />
       )}
 
-      {/* Selection indicator - morphs between cards */}
-      {isSelected && (
-        <motion.div
-          layoutId="timeline-selection-indicator"
-          className="absolute inset-0 pointer-events-none"
-          style={getSelectionStyle()}
-          transition={SPRING_TRANSITION}
-        />
-      )}
+      {/* Selection indicator - CSS transition (no layoutId to avoid resize animation) */}
+      <div
+        className={`absolute inset-0 pointer-events-none transition-all duration-200 ${
+          isSelected ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={isSelected ? getSelectionStyle() : {}}
+      />
 
       {/* Card content - two rows with icon on top right */}
-      <div className={`relative z-10 flex flex-col justify-center gap-0.5 pl-3 pr-2 ${TIMELINE_CARD_HEIGHT}`}>
+      <div className={`relative z-10 flex flex-col justify-center gap-0.5 px-3 ${TIMELINE_CARD_HEIGHT}`}>
         {/* Row 1: Date · Relative date + icon/status indicators on right */}
         <div className="flex items-center gap-1">
           <span className={`text-sm font-medium truncate ${
@@ -366,9 +364,9 @@ function TimelineCard({
     )
   }
 
-  // All other cards are buttons
+  // All other cards are buttons (no motion wrapper - selection handled by inner layoutId)
   return (
-    <motion.button
+    <button
       onClick={onClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
@@ -376,7 +374,7 @@ function TimelineCard({
       style={{ boxShadow: isSelected ? undefined : `inset 3px 0 0 0 ${color}40` }}
     >
       {cardContent}
-    </motion.button>
+    </button>
   )
 }
 
@@ -487,7 +485,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
       {scheduledCount > 0 && (
         <div className="flex flex-col gap-2">
           {/* Section header with expand/collapse */}
-          <div className="flex items-center justify-between pl-3">
+          <div className="relative flex items-center px-3">
             <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               <div
                 className="h-2.5 w-2.5 rounded-full flex-shrink-0"
@@ -499,18 +497,12 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
             {lockedCount > 0 && (
               <button
                 onClick={() => setShowFutureAppointments(!showFutureAppointments)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-0 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
               >
                 {showFutureAppointments ? (
-                  <>
-                    <ChevronUp className="h-3 w-3" />
-                    <span>Collapse</span>
-                  </>
+                  <ChevronUp className="h-4 w-4" />
                 ) : (
-                  <>
-                    <span>Show all</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </>
+                  <ChevronDown className="h-4 w-4" />
                 )}
               </button>
             )}
@@ -724,6 +716,9 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
 // Row 2: Time range (smaller)
 // =============================================================================
 
+// Default needle retention time in minutes (would come from clinic settings)
+const DEFAULT_NEEDLE_RETENTION_MINUTES = 25
+
 interface AppointmentHeaderProps {
   appointment: AppointmentWithRelations
   visitCount: number
@@ -760,21 +755,6 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate }: Appointm
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
   const statusColor = getStatusColor(appointment.status, appointment.isSigned)
 
-  // Determine action button
-  const getActionButton = () => {
-    if (appointment.status === 'SCHEDULED') {
-      return { label: 'Start' }
-    }
-    if (appointment.status === 'IN_PROGRESS') {
-      return { label: 'End' }
-    }
-    if (appointment.status === 'COMPLETED' && !appointment.isSigned) {
-      return { label: 'Sign' }
-    }
-    return null
-  }
-
-  const action = getActionButton()
   const appointmentDate = new Date(appointment.scheduledStart)
   const dateStr = appointmentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const relativeDay = getRelativeDay(appointmentDate)
@@ -794,18 +774,25 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate }: Appointm
 
   return (
     <div className="flex h-14 items-stretch border-b border-border">
-      {/* Left section: Avatar + Patient name (matches Visit History width) */}
+      {/* Left section: Avatar + Patient name + demographics (matches Visit History panel width + border-r) */}
       <div className={`flex items-center gap-2 px-3 border-r border-border flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}>
         {/* Avatar */}
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
           {initials}
         </div>
-        {/* Patient name */}
-        <span className="text-sm font-semibold truncate">{patientName}</span>
+        {/* Patient name + demographics */}
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm font-semibold truncate">{patientName}</span>
+          <span className="text-xs text-muted-foreground">
+            {patient?.dateOfBirth ? `${calculateAge(patient.dateOfBirth)} yo` : ''}
+            {patient?.sex && patient?.dateOfBirth ? ', ' : ''}
+            {patient?.sex === 'FEMALE' ? 'Female' : patient?.sex === 'MALE' ? 'Male' : ''}
+          </span>
+        </div>
       </div>
 
-      {/* Center section: Date + Time + Status + Action (matches SOAP Editor) */}
-      <div className="flex flex-1 items-center justify-between px-3 border-r border-border">
+      {/* Center section: Date + Time + Status + Action (matches SOAP Editor - flex-1, no borders) */}
+      <div className="flex flex-1 items-center justify-between px-3">
         {/* Date · Relative on row 1, Time Range on row 2 */}
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-1.5 text-sm">
@@ -815,27 +802,20 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate }: Appointm
           <span className="text-xs text-muted-foreground">{timeRange}</span>
         </div>
 
-        {/* Status badge + action button */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
-            <div
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: statusColor }}
-            />
-            <span className="text-xs font-medium text-foreground">
-              {statusDisplay.label}
-            </span>
-          </div>
-          {action && (
-            <button className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-              {action.label}
-            </button>
-          )}
+        {/* Status badge only - actions moved to FAB */}
+        <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+          <div
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: statusColor }}
+          />
+          <span className="text-xs font-medium text-foreground">
+            {statusDisplay.label}
+          </span>
         </div>
       </div>
 
-      {/* Right section: Visit count + First visit date (matches Patient Context width) */}
-      <div className={`flex flex-col justify-center px-3 flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
+      {/* Right section: Visit count + First visit date (matches Patient Context panel width + border-l) */}
+      <div className={`flex flex-col justify-center px-3 border-l border-border flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
         <span className="text-sm font-semibold">Visits ({visitCount})</span>
         <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
       </div>
@@ -978,13 +958,12 @@ function SOAPSections({
               rows={2}
             />
 
-            {/* Compact preview from selected past visit - crossfade with stable height */}
+            {/* Compact preview from selected past visit - crossfade only (no layout animation) */}
             <div className="relative">
               <AnimatePresence mode="popLayout">
                 {previewContent && (
                   <motion.div
                     key={`${selectedVisitId}-${section.key}`}
-                    layout
                     initial={{
                       y: previewSlideDirection === 'up' ? -20 : 20,
                       opacity: 0,
@@ -1105,6 +1084,48 @@ export default function AppointmentDetailPage() {
   }, [updateUrlPreview])
   // Track preview slide direction for animation
   const [previewSlideDirection, setPreviewSlideDirection] = useState<'up' | 'down' | null>(null)
+
+  // FAB state
+  const [isFabExpanded, setIsFabExpanded] = useState(false)
+
+  // Timer state (for needle retention)
+  const [timerSeconds, setTimerSeconds] = useState<number | null>(null)
+  const [isTimerRunning, setIsTimerRunning] = useState(false)
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!isTimerRunning || timerSeconds === null) return
+
+    if (timerSeconds <= 0) {
+      setIsTimerRunning(false)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setTimerSeconds(prev => (prev !== null ? prev - 1 : null))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isTimerRunning, timerSeconds])
+
+  // Format seconds as MM:SS
+  const formatTimer = (seconds: number): string => {
+    const mins = Math.floor(Math.abs(seconds) / 60)
+    const secs = Math.abs(seconds) % 60
+    const sign = seconds < 0 ? '-' : ''
+    return `${sign}${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Timer handlers
+  const handleStartTimer = () => {
+    setTimerSeconds(DEFAULT_NEEDLE_RETENTION_MINUTES * 60)
+    setIsTimerRunning(true)
+  }
+
+  const handleStopTimer = () => {
+    setIsTimerRunning(false)
+    setTimerSeconds(null)
+  }
 
   // State for SOAP note content
   const [soapData, setSoapData] = useState<SOAPData>({
@@ -1524,7 +1545,7 @@ export default function AppointmentDetailPage() {
       <div className="w-px bg-border" />
 
       {/* Main content area with unified header */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="relative flex flex-1 flex-col overflow-hidden">
         {/* Unified Header Bar - spans all three columns */}
         <AppointmentHeader
           appointment={appointment}
@@ -1669,6 +1690,106 @@ export default function AppointmentDetailPage() {
               )}
             </motion.div>
           </AnimatePresence>
+        </div>
+
+        {/* Expandable Floating Action Button - Bottom Right */}
+        <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
+          <AnimatePresence>
+            {isFabExpanded && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="flex flex-col gap-2 rounded-lg bg-background border border-border shadow-lg p-2"
+              >
+                {/* Timer action */}
+                {isTimerRunning ? (
+                  <>
+                    {/* Timer display */}
+                    <div className="flex h-11 items-center gap-2 rounded-md bg-blue-50 px-4 text-sm font-medium text-blue-700">
+                      <Timer className="h-4 w-4" />
+                      <span className="tabular-nums">{formatTimer(timerSeconds ?? 0)}</span>
+                    </div>
+                    {/* Stop timer button */}
+                    <button
+                      onClick={() => { handleStopTimer(); setIsFabExpanded(false); }}
+                      className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+                    >
+                      <StopCircle className="h-4 w-4" />
+                      <span>Stop Timer</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { handleStartTimer(); }}
+                    className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+                  >
+                    <Play className="h-4 w-4" />
+                    <span>Start Timer</span>
+                  </button>
+                )}
+
+                {/* Status-based action */}
+                {appointment.status === 'SCHEDULED' && (
+                  <button
+                    onClick={() => setIsFabExpanded(false)}
+                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Play className="h-4 w-4" />
+                    <span>Start Visit</span>
+                  </button>
+                )}
+                {appointment.status === 'IN_PROGRESS' && (
+                  <button
+                    onClick={() => setIsFabExpanded(false)}
+                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <StopCircle className="h-4 w-4" />
+                    <span>End Visit</span>
+                  </button>
+                )}
+                {appointment.status === 'COMPLETED' && !appointment.isSigned && (
+                  <button
+                    onClick={() => setIsFabExpanded(false)}
+                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <PenLine className="h-4 w-4" />
+                    <span>Sign Note</span>
+                  </button>
+                )}
+
+                {/* Check Out */}
+                <button
+                  onClick={() => setIsFabExpanded(false)}
+                  className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Check Out</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* FAB toggle button */}
+          <button
+            onClick={() => setIsFabExpanded(!isFabExpanded)}
+            className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all ${
+              isFabExpanded
+                ? 'bg-muted text-foreground hover:bg-muted/80'
+                : isTimerRunning
+                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            }`}
+          >
+            {isFabExpanded ? (
+              <X className="h-5 w-5" />
+            ) : isTimerRunning ? (
+              <span className="text-xs font-medium tabular-nums">{formatTimer(timerSeconds ?? 0)}</span>
+            ) : (
+              <Plus className="h-5 w-5" />
+            )}
+          </button>
         </div>
       </div>
     </div>

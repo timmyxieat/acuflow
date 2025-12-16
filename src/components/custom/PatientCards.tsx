@@ -81,11 +81,7 @@ function StatusSection({
   return (
     <div className="flex flex-col gap-2">
       {/* Section header - compact shows dot + count, full shows dot + title + count */}
-      <div
-        className={`flex items-center gap-1.5 text-sm font-medium text-foreground ${
-          compact ? "pl-3" : "pl-3"
-        }`}
-      >
+      <div className="flex items-center gap-1.5 px-3 text-sm font-medium text-foreground">
         <motion.div
           layoutId={`status-dot-${variant}`}
           className="h-2.5 w-2.5 rounded-full flex-shrink-0"
@@ -292,16 +288,16 @@ function PatientCard({
           </div>
         )}
 
-        {/* Compact mode: Time below avatar - fixed width to prevent container fluctuation */}
+        {/* Compact mode: Time below avatar - centered text, no cutoff */}
         {compact && (
           <motion.div
             layoutId={`time-${appointmentId}`}
             layout="position"
-            className="w-8 overflow-hidden"
+            className="w-8 text-center"
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             suppressHydrationWarning
           >
-            <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
+            <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
               {timeDisplay.icon && (
                 <timeDisplay.icon
                   className={`h-2.5 w-2.5 flex-shrink-0 ${
@@ -378,11 +374,11 @@ export function PatientCards({
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
-          <div className="flex items-center flex-shrink-0">
+          <div className={`flex items-center flex-shrink-0 ${compact ? "justify-center" : ""}`}>
             <button
               onClick={onToggleCompact}
-              className={`flex h-12 items-center text-muted-foreground hover:text-foreground transition-colors ${
-                compact ? "w-12 justify-center" : "w-full justify-start pl-3"
+              className={`flex h-12 items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${
+                compact ? "w-12" : "w-full pl-3"
               }`}
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
