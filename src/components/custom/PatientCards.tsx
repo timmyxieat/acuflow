@@ -5,7 +5,7 @@ import { motion, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
 import { SPRING_TRANSITION } from "@/lib/animations";
-import { Timer, Bell, ChevronLeft, ChevronRight } from "lucide-react";
+import { Timer, Bell, ChevronLeft } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
   getAppointmentsByStatus,
@@ -35,6 +35,14 @@ function formatCompactTime(date: Date): string {
   return `${hour12}:${minutes.toString().padStart(2, "0")}${ampm}`;
 }
 
+// Format seconds as MM:SS for FAB timer display
+function formatTimerSeconds(seconds: number): string {
+  const mins = Math.floor(Math.abs(seconds) / 60);
+  const secs = Math.abs(seconds) % 60;
+  const sign = seconds < 0 ? "-" : "";
+  return `${sign}${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 interface PatientCardsProps {
   onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void;
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void;
@@ -45,6 +53,10 @@ interface PatientCardsProps {
   compact?: boolean;
   /** Callback to toggle compact/expanded mode */
   onToggleCompact?: () => void;
+  /** Active timer state from FAB - synced across components */
+  activeTimerAppointmentId?: string;
+  activeTimerSeconds?: number | null;
+  isTimerRunning?: boolean;
 }
 
 interface StatusSectionProps {
@@ -57,6 +69,9 @@ interface StatusSectionProps {
   selectedAppointmentId?: string;
   variant: "inProgress" | "checkedIn" | "scheduled" | "unsigned" | "completed";
   compact?: boolean;
+  activeTimerAppointmentId?: string;
+  activeTimerSeconds?: number | null;
+  isTimerRunning?: boolean;
 }
 
 function StatusSection({
@@ -69,6 +84,9 @@ function StatusSection({
   selectedAppointmentId,
   variant,
   compact,
+  activeTimerAppointmentId,
+  activeTimerSeconds,
+  isTimerRunning,
 }: StatusSectionProps) {
   if (appointments.length === 0) return null;
 
@@ -114,6 +132,8 @@ function StatusSection({
             isHovered={appointment.id === hoveredAppointmentId}
             isSelected={appointment.id === selectedAppointmentId}
             compact={compact}
+            activeTimerSeconds={appointment.id === activeTimerAppointmentId ? activeTimerSeconds : undefined}
+            isTimerRunning={appointment.id === activeTimerAppointmentId ? isTimerRunning : undefined}
           />
         ))}
       </div>
@@ -129,6 +149,8 @@ interface PatientCardProps {
   isHovered?: boolean;
   isSelected?: boolean;
   compact?: boolean;
+  activeTimerSeconds?: number | null;
+  isTimerRunning?: boolean;
 }
 
 function PatientCard({
@@ -139,6 +161,8 @@ function PatientCard({
   isHovered: _isHovered,
   isSelected,
   compact,
+  activeTimerSeconds,
+  isTimerRunning,
 }: PatientCardProps) {
   const patient = appointment.patient;
   if (!patient) return null;
@@ -152,7 +176,19 @@ function PatientCard({
     text: string;
     icon?: typeof Timer;
     shake?: boolean;
+    isFabTimer?: boolean;
   } => {
+    // If FAB timer is active for this appointment, show it instead
+    if (activeTimerSeconds !== undefined && activeTimerSeconds !== null) {
+      const isOver = activeTimerSeconds <= 0;
+      return {
+        text: formatTimerSeconds(activeTimerSeconds),
+        icon: isOver ? Bell : Timer,
+        shake: isOver,
+        isFabTimer: true,
+      };
+    }
+
     const now = getDevNow();
     const NEEDLE_RETENTION_MINUTES = 20; // Standard needle retention time
 
@@ -272,7 +308,13 @@ function PatientCard({
             <motion.div
               layoutId={`time-${appointmentId}`}
               layout="position"
-              className="flex items-center gap-1 text-[11px] text-muted-foreground"
+              className={`flex items-center gap-1 text-[11px] ${
+                timeDisplay.isFabTimer
+                  ? timeDisplay.shake
+                    ? "text-red-600 font-medium"
+                    : "text-blue-600 font-medium"
+                  : "text-muted-foreground"
+              }`}
               transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
               suppressHydrationWarning
             >
@@ -297,7 +339,13 @@ function PatientCard({
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             suppressHydrationWarning
           >
-            <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
+            <div className={`flex items-center justify-center gap-0.5 text-[10px] whitespace-nowrap ${
+              timeDisplay.isFabTimer
+                ? timeDisplay.shake
+                  ? "text-red-600 font-medium"
+                  : "text-blue-600 font-medium"
+                : "text-muted-foreground"
+            }`}>
               {timeDisplay.icon && (
                 <timeDisplay.icon
                   className={`h-2.5 w-2.5 flex-shrink-0 ${
@@ -322,6 +370,9 @@ export function PatientCards({
   selectedAppointmentId,
   compact,
   onToggleCompact,
+  activeTimerAppointmentId,
+  activeTimerSeconds,
+  isTimerRunning,
 }: PatientCardsProps) {
   const groupedAppointments = useMemo(() => getAppointmentsByStatus(), []);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -377,16 +428,18 @@ export function PatientCards({
           <div className={`flex items-center flex-shrink-0 ${compact ? "justify-center" : ""}`}>
             <button
               onClick={onToggleCompact}
-              className={`flex h-12 items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${
-                compact ? "w-12" : "w-full pl-3"
+              className={`flex h-12 w-full items-center text-muted-foreground hover:text-foreground transition-colors ${
+                compact ? "justify-center" : "px-3"
               }`}
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
-              {compact ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
+              <motion.div
+                layoutId="collapse-chevron"
+                animate={{ rotate: compact ? 180 : 0 }}
+                transition={SPRING_TRANSITION}
+              >
                 <ChevronLeft className="h-4 w-4" />
-              )}
+              </motion.div>
             </button>
           </div>
         )}
@@ -406,6 +459,9 @@ export function PatientCards({
           selectedAppointmentId={selectedAppointmentId}
           variant="inProgress"
           compact={compact}
+          activeTimerAppointmentId={activeTimerAppointmentId}
+          activeTimerSeconds={activeTimerSeconds}
+          isTimerRunning={isTimerRunning}
         />
 
         {/* Checked In - Waiting */}
@@ -419,6 +475,9 @@ export function PatientCards({
           selectedAppointmentId={selectedAppointmentId}
           variant="checkedIn"
           compact={compact}
+          activeTimerAppointmentId={activeTimerAppointmentId}
+          activeTimerSeconds={activeTimerSeconds}
+          isTimerRunning={isTimerRunning}
         />
 
         {/* Scheduled - Upcoming */}
@@ -432,6 +491,9 @@ export function PatientCards({
           selectedAppointmentId={selectedAppointmentId}
           variant="scheduled"
           compact={compact}
+          activeTimerAppointmentId={activeTimerAppointmentId}
+          activeTimerSeconds={activeTimerSeconds}
+          isTimerRunning={isTimerRunning}
         />
 
         {/* Divider between active/upcoming and completed sections */}
@@ -454,6 +516,9 @@ export function PatientCards({
           selectedAppointmentId={selectedAppointmentId}
           variant="unsigned"
           compact={compact}
+          activeTimerAppointmentId={activeTimerAppointmentId}
+          activeTimerSeconds={activeTimerSeconds}
+          isTimerRunning={isTimerRunning}
         />
 
         {/* Completed - Done for today */}
@@ -467,6 +532,9 @@ export function PatientCards({
           selectedAppointmentId={selectedAppointmentId}
           variant="completed"
           compact={compact}
+          activeTimerAppointmentId={activeTimerAppointmentId}
+          activeTimerSeconds={activeTimerSeconds}
+          isTimerRunning={isTimerRunning}
         />
 
         {/* Empty state */}

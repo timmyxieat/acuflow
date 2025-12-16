@@ -46,7 +46,7 @@ You're running low on context. Before this session ends:
    - Current state of the feature
    - Any pending work or known issues
    - Session summary
-3. Update `.claude.md` if there are any new patterns, conventions, or important context the next agent should know
+3. Update `.claude.md` or files within /.claude/rules if there are any new patterns, conventions, or important context the next agent should know
 4. Push everything
 ```
 

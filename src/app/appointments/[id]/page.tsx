@@ -34,7 +34,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine, RotateCcw, DollarSign, Zap } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { getStatusColor } from '@/lib/constants'
 
@@ -911,11 +911,8 @@ function SOAPSections({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* SOAP Header with save status */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          SOAP Note
-        </h3>
+      {/* Save status - floats right */}
+      <div className="flex justify-end">
         {renderSaveStatus()}
       </div>
 
@@ -993,25 +990,6 @@ function SOAPSections({
   )
 }
 
-// =============================================================================
-// Patient Intake Section (Right Panel) - Placeholder
-// =============================================================================
-
-function PatientIntakeSection() {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Patient Intake</h3>
-        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-          Expand
-        </button>
-      </div>
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-        Patient intake form will appear here (future feature)
-      </div>
-    </div>
-  )
-}
 
 // =============================================================================
 // Main Page Component
@@ -1090,17 +1068,14 @@ export default function AppointmentDetailPage() {
 
   // Timer state (for needle retention)
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null)
+  const [timerDuration, setTimerDuration] = useState(DEFAULT_NEEDLE_RETENTION_MINUTES * 60) // Total duration for progress calc
   const [isTimerRunning, setIsTimerRunning] = useState(false)
 
   // Timer countdown effect
   useEffect(() => {
     if (!isTimerRunning || timerSeconds === null) return
 
-    if (timerSeconds <= 0) {
-      setIsTimerRunning(false)
-      return
-    }
-
+    // Allow timer to go negative (over time)
     const interval = setInterval(() => {
       setTimerSeconds(prev => (prev !== null ? prev - 1 : null))
     }, 1000)
@@ -1117,15 +1092,43 @@ export default function AppointmentDetailPage() {
   }
 
   // Timer handlers
-  const handleStartTimer = () => {
-    setTimerSeconds(DEFAULT_NEEDLE_RETENTION_MINUTES * 60)
+  const handleStartTimer = (minutes?: number) => {
+    const durationSeconds = (minutes ?? DEFAULT_NEEDLE_RETENTION_MINUTES) * 60
+    setTimerDuration(durationSeconds)
+    setTimerSeconds(durationSeconds)
     setIsTimerRunning(true)
   }
 
   const handleStopTimer = () => {
     setIsTimerRunning(false)
+  }
+
+  const handleResetTimer = () => {
+    setIsTimerRunning(false)
     setTimerSeconds(null)
   }
+
+  const handleAddTime = (minutes: number) => {
+    if (timerSeconds !== null) {
+      const newSeconds = timerSeconds + minutes * 60
+      setTimerSeconds(newSeconds)
+      setTimerDuration(prev => prev + minutes * 60)
+    }
+  }
+
+  const handleSetTimerDuration = (minutes: number) => {
+    const durationSeconds = minutes * 60
+    setTimerDuration(durationSeconds)
+    setTimerSeconds(durationSeconds)
+    if (!isTimerRunning) {
+      setIsTimerRunning(true)
+    }
+  }
+
+  // Calculate timer progress (0 to 1, can exceed 1 when over)
+  const timerProgress = timerSeconds !== null && timerDuration > 0
+    ? Math.max(0, timerSeconds) / timerDuration
+    : 0
 
   // State for SOAP note content
   const [soapData, setSoapData] = useState<SOAPData>({
@@ -1537,6 +1540,9 @@ export default function AppointmentDetailPage() {
             selectedAppointmentId={selectedAppointmentIdForCards}
             compact={isPatientCardsCollapsed}
             onToggleCompact={handleToggleCollapse}
+            activeTimerAppointmentId={appointmentId}
+            activeTimerSeconds={timerSeconds}
+            isTimerRunning={isTimerRunning}
           />
         </div>
       </div>
@@ -1632,14 +1638,8 @@ export default function AppointmentDetailPage() {
                 transition={SIDEBAR_ANIMATION.transition}
               >
                 {/* Scrollable Content */}
-                <ScrollableArea className="flex-1 py-4 px-3" deps={[appointmentId]}>
+                <ScrollableArea className="flex-1 pt-2 pb-4 px-3" deps={[appointmentId]}>
                   <div className="flex flex-col gap-4">
-                    {/* Patient Intake (Collapsible) */}
-                    <PatientIntakeSection />
-
-                    {/* Divider */}
-                    <div className="border-t border-border" />
-
                     {/* SOAP Sections */}
                     <SOAPSections
                       selectedVisitId={selectedVisitId}
@@ -1701,72 +1701,186 @@ export default function AppointmentDetailPage() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="flex flex-col gap-2 rounded-lg bg-background border border-border shadow-lg p-2"
+                className="w-[220px] rounded-lg bg-background border border-border shadow-lg p-3"
               >
-                {/* Timer action */}
-                {isTimerRunning ? (
-                  <>
-                    {/* Timer display */}
-                    <div className="flex h-11 items-center gap-2 rounded-md bg-blue-50 px-4 text-sm font-medium text-blue-700">
-                      <Timer className="h-4 w-4" />
-                      <span className="tabular-nums">{formatTimer(timerSeconds ?? 0)}</span>
+                <div className="flex flex-col gap-3">
+                  {/* Timer Section - Large timer value as header */}
+                  <div className="flex flex-col gap-2">
+                    {/* Large timer display */}
+                    <div className={`text-3xl font-semibold tabular-nums text-center ${
+                      timerSeconds !== null && timerSeconds <= 0
+                        ? 'text-red-600'
+                        : timerSeconds !== null
+                          ? 'text-blue-600'
+                          : 'text-muted-foreground'
+                    }`}>
+                      {timerSeconds !== null ? formatTimer(timerSeconds) : '--:--'}
                     </div>
-                    {/* Stop timer button */}
+
+                    {/* Progress bar (thin) */}
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-1000 rounded-full ${
+                          timerSeconds !== null && timerSeconds <= 0
+                            ? 'bg-red-500'
+                            : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${timerProgress * 100}%` }}
+                      />
+                    </div>
+
+                    {/* All presets in single row: [15][20][25][30][+5] */}
+                    <div className="grid grid-cols-5 gap-1">
+                      {[15, 20, 25, 30].map((mins) => (
+                        <button
+                          key={mins}
+                          onClick={() => handleSetTimerDuration(mins)}
+                          className="h-8 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors"
+                        >
+                          {mins}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleAddTime(5)}
+                        disabled={timerSeconds === null}
+                        className="h-8 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        +5
+                      </button>
+                    </div>
+
+                    {/* Start/Pause button - full width */}
+                    {isTimerRunning ? (
+                      <button
+                        onClick={handleStopTimer}
+                        className="h-11 text-sm font-medium rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                        Pause
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleStartTimer()}
+                        className="h-11 text-sm font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        {timerSeconds !== null ? 'Resume' : 'Start Timer'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
+                  {/* Status Section - Inline indicator + label */}
+                  <div className="flex flex-col gap-2">
+                    {/* Progress dots + label inline */}
+                    <div className="flex items-center gap-2">
+                      {/* Progress indicator - 3 dots */}
+                      <div className="flex items-center">
+                        <div className="h-2.5 w-2.5 rounded-full border-2 bg-primary border-primary" />
+                        <div className={`w-3 h-0.5 ${
+                          appointment.status === 'IN_PROGRESS' ||
+                          appointment.status === 'CHECKED_IN' ||
+                          appointment.status === 'COMPLETED'
+                            ? 'bg-primary'
+                            : 'bg-muted'
+                        }`} />
+                        <div className={`h-2.5 w-2.5 rounded-full border-2 ${
+                          appointment.status === 'IN_PROGRESS' ||
+                          appointment.status === 'COMPLETED'
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground'
+                        }`} />
+                        <div className={`w-3 h-0.5 ${
+                          appointment.status === 'COMPLETED' ? 'bg-primary' : 'bg-muted'
+                        }`} />
+                        <div className={`h-2.5 w-2.5 rounded-full border-2 ${
+                          appointment.status === 'COMPLETED'
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground'
+                        }`} />
+                      </div>
+                      {/* Status label */}
+                      <span className="text-sm font-semibold">
+                        {getStatusDisplay(appointment.status, appointment.isSigned).label}
+                      </span>
+                    </div>
+
+                    {/* Timestamp - small, muted */}
+                    <div className="text-xs text-muted-foreground">
+                      {appointment.status === 'SCHEDULED' && 'Waiting to start'}
+                      {appointment.status === 'CHECKED_IN' && appointment.checkedInAt && (
+                        <>Checked in {formatTime(appointment.checkedInAt)}</>
+                      )}
+                      {appointment.status === 'IN_PROGRESS' && appointment.startedAt && (
+                        <>Started {formatTime(appointment.startedAt)}</>
+                      )}
+                      {appointment.status === 'COMPLETED' && !appointment.isSigned && 'Ready to sign'}
+                      {appointment.status === 'COMPLETED' && appointment.isSigned && 'Visit complete'}
+                    </div>
+
+                    {/* Status action button - full width */}
+                    {(appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') && (
+                      <button
+                        onClick={() => setIsFabExpanded(false)}
+                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        Start Visit
+                      </button>
+                    )}
+                    {appointment.status === 'IN_PROGRESS' && (
+                      <button
+                        onClick={() => setIsFabExpanded(false)}
+                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                        End Visit
+                      </button>
+                    )}
+                    {appointment.status === 'COMPLETED' && !appointment.isSigned && (
+                      <button
+                        onClick={() => setIsFabExpanded(false)}
+                        className="h-11 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <PenLine className="h-4 w-4" />
+                        Sign Note
+                      </button>
+                    )}
+                    {appointment.status === 'COMPLETED' && appointment.isSigned && (
+                      <div className="h-11 text-sm font-medium rounded-md bg-green-100 text-green-700 flex items-center justify-center gap-2">
+                        <Check className="h-4 w-4" />
+                        Signed
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-border" />
+
+                  {/* Total Section - Inline amount + description */}
+                  <div className="flex flex-col gap-2">
+                    {/* Total + description inline */}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold tabular-nums">
+                        ${appointment.usedEstim ? 100 : 85}
+                      </span>
+                      <span className="text-muted-foreground truncate">
+                        {appointment.appointmentType?.name ?? 'Visit'}
+                      </span>
+                    </div>
+
+                    {/* Checkout button - full width */}
                     <button
-                      onClick={() => { handleStopTimer(); setIsFabExpanded(false); }}
-                      className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+                      onClick={() => setIsFabExpanded(false)}
+                      className="h-11 text-sm font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors flex items-center justify-center gap-2"
                     >
-                      <StopCircle className="h-4 w-4" />
-                      <span>Stop Timer</span>
+                      <LogOut className="h-4 w-4" />
+                      Check Out
                     </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => { handleStartTimer(); }}
-                    className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
-                  >
-                    <Play className="h-4 w-4" />
-                    <span>Start Timer</span>
-                  </button>
-                )}
-
-                {/* Status-based action */}
-                {appointment.status === 'SCHEDULED' && (
-                  <button
-                    onClick={() => setIsFabExpanded(false)}
-                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <Play className="h-4 w-4" />
-                    <span>Start Visit</span>
-                  </button>
-                )}
-                {appointment.status === 'IN_PROGRESS' && (
-                  <button
-                    onClick={() => setIsFabExpanded(false)}
-                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <StopCircle className="h-4 w-4" />
-                    <span>End Visit</span>
-                  </button>
-                )}
-                {appointment.status === 'COMPLETED' && !appointment.isSigned && (
-                  <button
-                    onClick={() => setIsFabExpanded(false)}
-                    className="flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <PenLine className="h-4 w-4" />
-                    <span>Sign Note</span>
-                  </button>
-                )}
-
-                {/* Check Out */}
-                <button
-                  onClick={() => setIsFabExpanded(false)}
-                  className="flex h-11 items-center gap-2 rounded-md bg-muted px-4 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Check Out</span>
-                </button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1777,15 +1891,11 @@ export default function AppointmentDetailPage() {
             className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all ${
               isFabExpanded
                 ? 'bg-muted text-foreground hover:bg-muted/80'
-                : isTimerRunning
-                  ? 'bg-blue-500 text-white hover:bg-blue-600'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
             }`}
           >
             {isFabExpanded ? (
               <X className="h-5 w-5" />
-            ) : isTimerRunning ? (
-              <span className="text-xs font-medium tabular-nums">{formatTimer(timerSeconds ?? 0)}</span>
             ) : (
               <Plus className="h-5 w-5" />
             )}
