@@ -34,7 +34,7 @@ import {
   type VisitWithAppointment,
   type ScheduledAppointmentWithType,
 } from '@/data/mock-data'
-import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, ChevronUp, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine, RotateCcw, DollarSign, Zap } from 'lucide-react'
+import { Check, ClipboardCheck, RefreshCw, Sparkles, Calendar, ChevronDown, Minus, Lock, Timer, LogOut, Plus, X, StopCircle, Play, PenLine, RotateCcw, DollarSign, Zap } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { getStatusColor } from '@/lib/constants'
 
@@ -497,13 +497,15 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
             {lockedCount > 0 && (
               <button
                 onClick={() => setShowFutureAppointments(!showFutureAppointments)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-0 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-end pr-3 text-muted-foreground hover:text-foreground transition-colors"
               >
-                {showFutureAppointments ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
+                <motion.div
+                  initial={false}
+                  animate={{ rotate: showFutureAppointments ? 180 : 0 }}
+                  transition={SPRING_TRANSITION}
+                >
                   <ChevronDown className="h-4 w-4" />
-                )}
+                </motion.div>
               </button>
             )}
           </div>
@@ -1065,11 +1067,27 @@ export default function AppointmentDetailPage() {
 
   // FAB state
   const [isFabExpanded, setIsFabExpanded] = useState(false)
+  const fabRef = useRef<HTMLDivElement>(null)
+
+  // Close FAB when clicking outside
+  useEffect(() => {
+    if (!isFabExpanded) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fabRef.current && !fabRef.current.contains(event.target as Node)) {
+        setIsFabExpanded(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isFabExpanded])
 
   // Timer state (for needle retention)
   const [timerSeconds, setTimerSeconds] = useState<number | null>(null)
   const [timerDuration, setTimerDuration] = useState(DEFAULT_NEEDLE_RETENTION_MINUTES * 60) // Total duration for progress calc
   const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [selectedPresetMinutes, setSelectedPresetMinutes] = useState(DEFAULT_NEEDLE_RETENTION_MINUTES) // Selected preset (default 25)
 
   // Timer countdown effect
   useEffect(() => {
@@ -1103,6 +1121,10 @@ export default function AppointmentDetailPage() {
     setIsTimerRunning(false)
   }
 
+  const handleResumeTimer = () => {
+    setIsTimerRunning(true)
+  }
+
   const handleResetTimer = () => {
     setIsTimerRunning(false)
     setTimerSeconds(null)
@@ -1116,12 +1138,13 @@ export default function AppointmentDetailPage() {
     }
   }
 
-  const handleSetTimerDuration = (minutes: number) => {
-    const durationSeconds = minutes * 60
-    setTimerDuration(durationSeconds)
-    setTimerSeconds(durationSeconds)
-    if (!isTimerRunning) {
-      setIsTimerRunning(true)
+  const handleSelectPreset = (minutes: number) => {
+    setSelectedPresetMinutes(minutes)
+    // If timer is already running, also update the current timer
+    if (timerSeconds !== null) {
+      const durationSeconds = minutes * 60
+      setTimerDuration(durationSeconds)
+      setTimerSeconds(durationSeconds)
     }
   }
 
@@ -1693,7 +1716,7 @@ export default function AppointmentDetailPage() {
         </div>
 
         {/* Expandable Floating Action Button - Bottom Right */}
-        <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
+        <div ref={fabRef} className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
           <AnimatePresence>
             {isFabExpanded && (
               <motion.div
@@ -1706,36 +1729,42 @@ export default function AppointmentDetailPage() {
                 <div className="flex flex-col gap-3">
                   {/* Timer Section - Large timer value as header */}
                   <div className="flex flex-col gap-2">
-                    {/* Large timer display */}
+                    {/* Large timer display - show selected preset when not started */}
                     <div className={`text-3xl font-semibold tabular-nums text-center ${
                       timerSeconds !== null && timerSeconds <= 0
                         ? 'text-red-600'
                         : timerSeconds !== null
                           ? 'text-blue-600'
-                          : 'text-muted-foreground'
+                          : 'text-foreground'
                     }`}>
-                      {timerSeconds !== null ? formatTimer(timerSeconds) : '--:--'}
+                      {timerSeconds !== null ? formatTimer(timerSeconds) : formatTimer(selectedPresetMinutes * 60)}
                     </div>
 
-                    {/* Progress bar (thin) */}
+                    {/* Progress bar (thin) - show full bar when not started */}
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all duration-1000 rounded-full ${
                           timerSeconds !== null && timerSeconds <= 0
                             ? 'bg-red-500'
-                            : 'bg-blue-500'
+                            : timerSeconds !== null
+                              ? 'bg-blue-500'
+                              : 'bg-muted-foreground/30'
                         }`}
-                        style={{ width: `${timerProgress * 100}%` }}
+                        style={{ width: timerSeconds !== null ? `${timerProgress * 100}%` : '100%' }}
                       />
                     </div>
 
-                    {/* All presets in single row: [15][20][25][30][+5] */}
-                    <div className="grid grid-cols-5 gap-1">
-                      {[15, 20, 25, 30].map((mins) => (
+                    {/* All presets in single row: [10][25][40][+5] */}
+                    <div className="grid grid-cols-4 gap-1">
+                      {[10, 25, 40].map((mins) => (
                         <button
                           key={mins}
-                          onClick={() => handleSetTimerDuration(mins)}
-                          className="h-8 text-xs font-medium rounded bg-muted hover:bg-muted/80 transition-colors"
+                          onClick={() => handleSelectPreset(mins)}
+                          className={`h-8 text-xs font-medium rounded transition-colors ${
+                            selectedPresetMinutes === mins && timerSeconds === null
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted hover:bg-muted/80'
+                          }`}
                         >
                           {mins}
                         </button>
@@ -1760,64 +1789,81 @@ export default function AppointmentDetailPage() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleStartTimer()}
+                        onClick={() => timerSeconds !== null ? handleResumeTimer() : handleStartTimer(selectedPresetMinutes)}
                         className="h-11 text-sm font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
                       >
                         <Play className="h-4 w-4" />
-                        {timerSeconds !== null ? 'Resume' : 'Start Timer'}
+                        {timerSeconds !== null ? 'Resume' : `Start ${selectedPresetMinutes} min`}
                       </button>
                     )}
                   </div>
 
                   {/* Divider */}
-                  <div className="border-t border-border" />
+                  <div className="border-t border-border -mx-3" />
 
-                  {/* Status Section - Inline indicator + label */}
-                  <div className="flex flex-col gap-2">
-                    {/* Progress dots + label inline */}
-                    <div className="flex items-center gap-2">
-                      {/* Progress indicator - 3 dots */}
-                      <div className="flex items-center">
-                        <div className="h-2.5 w-2.5 rounded-full border-2 bg-primary border-primary" />
-                        <div className={`w-3 h-0.5 ${
-                          appointment.status === 'IN_PROGRESS' ||
-                          appointment.status === 'CHECKED_IN' ||
-                          appointment.status === 'COMPLETED'
-                            ? 'bg-primary'
-                            : 'bg-muted'
-                        }`} />
-                        <div className={`h-2.5 w-2.5 rounded-full border-2 ${
-                          appointment.status === 'IN_PROGRESS' ||
-                          appointment.status === 'COMPLETED'
-                            ? 'bg-primary border-primary'
-                            : 'border-muted-foreground'
-                        }`} />
-                        <div className={`w-3 h-0.5 ${
-                          appointment.status === 'COMPLETED' ? 'bg-primary' : 'bg-muted'
-                        }`} />
-                        <div className={`h-2.5 w-2.5 rounded-full border-2 ${
-                          appointment.status === 'COMPLETED'
-                            ? 'bg-primary border-primary'
-                            : 'border-muted-foreground'
-                        }`} />
+                  {/* Status Section - 3-step progress indicator */}
+                  <div className="flex flex-col gap-3">
+                    {/* Progress dots - 3 steps: Scheduled → In Progress → Complete */}
+                    {(() => {
+                      // Determine completed steps (1-3)
+                      // SCHEDULED/CHECKED_IN = step 1, IN_PROGRESS = step 2, COMPLETED = step 3
+                      const getCompletedSteps = () => {
+                        if (appointment.status === 'SCHEDULED' || appointment.status === 'CHECKED_IN') return 1
+                        if (appointment.status === 'IN_PROGRESS') return 2
+                        if (appointment.status === 'COMPLETED') return 3
+                        return 1
+                      }
+                      const completedSteps = getCompletedSteps()
+
+                      return (
+                        <div className="flex items-center justify-center gap-0">
+                          {/* Step 1: Scheduled */}
+                          <div className={`h-3 w-3 rounded-full ${
+                            completedSteps >= 1 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                          }`} />
+                          {/* Line 1 */}
+                          <div className={`h-0.5 w-12 ${
+                            completedSteps >= 2 ? 'bg-primary' : 'bg-muted'
+                          }`} />
+                          {/* Step 2: In Progress */}
+                          <div className={`h-3 w-3 rounded-full ${
+                            completedSteps >= 2 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                          }`} />
+                          {/* Line 2 */}
+                          <div className={`h-0.5 w-12 ${
+                            completedSteps >= 3 ? 'bg-primary' : 'bg-muted'
+                          }`} />
+                          {/* Step 3: Complete */}
+                          <div className={`h-3 w-3 rounded-full ${
+                            completedSteps >= 3 ? 'bg-primary' : 'border-2 border-muted-foreground'
+                          }`} />
+                        </div>
+                      )
+                    })()}
+
+                    {/* Current status with colored dot */}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: getStatusColor(appointment.status, appointment.isSigned) }}
+                        />
+                        <span className="text-sm font-semibold">
+                          {getStatusDisplay(appointment.status, appointment.isSigned).label}
+                        </span>
                       </div>
-                      {/* Status label */}
-                      <span className="text-sm font-semibold">
-                        {getStatusDisplay(appointment.status, appointment.isSigned).label}
-                      </span>
-                    </div>
-
-                    {/* Timestamp - small, muted */}
-                    <div className="text-xs text-muted-foreground">
-                      {appointment.status === 'SCHEDULED' && 'Waiting to start'}
-                      {appointment.status === 'CHECKED_IN' && appointment.checkedInAt && (
-                        <>Checked in {formatTime(appointment.checkedInAt)}</>
-                      )}
-                      {appointment.status === 'IN_PROGRESS' && appointment.startedAt && (
-                        <>Started {formatTime(appointment.startedAt)}</>
-                      )}
-                      {appointment.status === 'COMPLETED' && !appointment.isSigned && 'Ready to sign'}
-                      {appointment.status === 'COMPLETED' && appointment.isSigned && 'Visit complete'}
+                      {/* Timestamp */}
+                      <div className="text-xs text-muted-foreground pl-[18px]">
+                        {appointment.status === 'SCHEDULED' && 'Waiting to start'}
+                        {appointment.status === 'CHECKED_IN' && appointment.checkedInAt && (
+                          <>Checked in {formatTime(appointment.checkedInAt)}</>
+                        )}
+                        {appointment.status === 'IN_PROGRESS' && appointment.startedAt && (
+                          <>Started {formatTime(appointment.startedAt)}</>
+                        )}
+                        {appointment.status === 'COMPLETED' && !appointment.isSigned && 'Ready to sign'}
+                        {appointment.status === 'COMPLETED' && appointment.isSigned && 'Visit complete'}
+                      </div>
                     </div>
 
                     {/* Status action button - full width */}
@@ -1857,7 +1903,7 @@ export default function AppointmentDetailPage() {
                   </div>
 
                   {/* Divider */}
-                  <div className="border-t border-border" />
+                  <div className="border-t border-border -mx-3" />
 
                   {/* Total Section - Inline amount + description */}
                   <div className="flex flex-col gap-2">

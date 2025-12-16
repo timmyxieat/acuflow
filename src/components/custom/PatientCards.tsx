@@ -5,7 +5,7 @@ import { motion, LayoutGroup } from "framer-motion";
 import { getDevNow, formatTime } from "@/lib/dev-time";
 import { getStatusColor } from "@/lib/constants";
 import { SPRING_TRANSITION } from "@/lib/animations";
-import { Timer, Bell, ChevronLeft } from "lucide-react";
+import { Timer, Bell, ChevronLeft, Pause } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
   getAppointmentsByStatus,
@@ -181,9 +181,10 @@ function PatientCard({
     // If FAB timer is active for this appointment, show it instead
     if (activeTimerSeconds !== undefined && activeTimerSeconds !== null) {
       const isOver = activeTimerSeconds <= 0;
+      const isPaused = !isTimerRunning;
       return {
         text: formatTimerSeconds(activeTimerSeconds),
-        icon: isOver ? Bell : Timer,
+        icon: isOver ? Bell : isPaused ? Pause : Timer,
         shake: isOver,
         isFabTimer: true,
       };
@@ -434,7 +435,7 @@ export function PatientCards({
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
               <motion.div
-                layoutId="collapse-chevron"
+                initial={false}
                 animate={{ rotate: compact ? 180 : 0 }}
                 transition={SPRING_TRANSITION}
               >

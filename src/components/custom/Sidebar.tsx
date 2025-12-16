@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Calendar, Home, Settings } from 'lucide-react'
 import {
@@ -10,6 +10,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useTransition } from '@/contexts/TransitionContext'
+import { useHeader } from '@/contexts/HeaderContext'
 
 interface NavItem {
   label: string
@@ -25,6 +27,28 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { startTransition } = useTransition()
+  const { header } = useHeader()
+
+  // Check if we're on an appointment detail page
+  const isOnAppointmentPage = pathname.startsWith('/appointments/')
+
+  // Handle navigation with animation for home button
+  const handleHomeClick = (e: React.MouseEvent) => {
+    if (isOnAppointmentPage) {
+      e.preventDefault()
+      // Trigger back animation (same as back button)
+      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back')
+      // Navigate to Today with patient selection preserved
+      if (header.currentPatientId) {
+        router.push(`/?patient=${header.currentPatientId}`)
+      } else {
+        router.push('/')
+      }
+    }
+    // Otherwise, let the Link handle navigation normally
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -33,7 +57,7 @@ export function Sidebar() {
         <div className="flex h-14 items-center justify-center border-b border-sidebar-border">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Link href="/" className="flex items-center justify-center">
+              <Link href="/" onClick={handleHomeClick} className="flex items-center justify-center">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                   <span className="text-sm font-bold text-primary-foreground">A</span>
                 </div>
@@ -50,12 +74,14 @@ export function Sidebar() {
           {navItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
+            const isHomeItem = item.href === '/'
 
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger asChild>
                   <Link
                     href={item.href}
+                    onClick={isHomeItem ? handleHomeClick : undefined}
                     className={cn(
                       'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                       isActive
