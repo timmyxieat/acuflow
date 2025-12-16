@@ -39,8 +39,11 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { getStatusColor } from '@/lib/constants'
 
 // CSS clamp value for consistent responsive width (20vw, min 180px, max 280px)
-// Used for PatientCards, Visit History panel, and Patient Context panel
+// Used for PatientCards and Patient Context panel
 const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
+
+// Narrower width for Visit History panel (compact two-row cards)
+const VISIT_HISTORY_WIDTH_CLASS = 'w-[clamp(160px,16vw,220px)]'
 
 // Map appointment type IDs to icons (same as Timeline.tsx)
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -113,20 +116,25 @@ function getRelativeDate(date: Date): string {
   if (diffDays < 0) {
     const futureDays = Math.abs(diffDays)
     if (futureDays === 1) return 'Tomorrow'
-    if (futureDays < 7) return `In ${futureDays} days`
-    if (futureDays < 14) return 'In 1 week'
-    if (futureDays < 30) return `In ${Math.floor(futureDays / 7)} weeks`
-    return `In ${Math.floor(futureDays / 30)} months`
+    if (futureDays < 7) return `in ${futureDays}d`
+    const weeks = Math.floor(futureDays / 7)
+    if (futureDays < 30) return `in ${weeks}w`
+    const months = Math.floor(futureDays / 30)
+    if (futureDays < 365) return `in ${months}m`
+    const years = Math.floor(futureDays / 365)
+    return `in ${years}y`
   }
 
-  // Past dates
+  // Past dates - abbreviated format
   if (diffDays === 0) return 'Today'
   if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 14) return '1 week ago'
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-  if (diffDays < 60) return '1 month ago'
-  return `${Math.floor(diffDays / 30)} months ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  const weeks = Math.floor(diffDays / 7)
+  if (diffDays < 30) return `${weeks}w ago`
+  const months = Math.floor(diffDays / 30)
+  if (diffDays < 365) return `${months}m ago`
+  const years = Math.floor(diffDays / 365)
+  return `${years}y ago`
 }
 
 // =============================================================================
@@ -202,6 +210,7 @@ interface TimelineCardProps {
   id: string
   date: Date
   startTime: Date  // Appointment start time for display
+  endTime: Date    // Appointment end time for display
   appointmentTypeId?: string
   isEditing?: boolean  // True when this card's appointment matches URL's appointmentId
   isUnsigned?: boolean
@@ -221,6 +230,7 @@ function TimelineCard({
   id,
   date,
   startTime,
+  endTime,
   appointmentTypeId,
   isEditing,
   isUnsigned,
@@ -240,6 +250,7 @@ function TimelineCard({
   // Format date as "Dec 15"
   const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const relativeDate = getRelativeDate(date)
+  const timeRange = `${formatTime(startTime)} - ${formatTime(endTime)}`
 
   // Selection indicator style
   const getSelectionStyle = () => {
@@ -256,6 +267,7 @@ function TimelineCard({
   const hoverBgColor = `${color}15`
 
   // Card content - fixed height, edge-to-edge
+  // New layout: Icon on left spanning both rows, content on right
   const cardContent = (
     <>
       {/* Hover background - CSS-only (not for locked cards) */}
@@ -276,47 +288,51 @@ function TimelineCard({
         />
       )}
 
-      {/* Card content - fixed height */}
+      {/* Card content - two rows with icon on top right */}
       <div className={`relative z-10 flex flex-col justify-center gap-0.5 pl-3 pr-2 ${TIMELINE_CARD_HEIGHT}`}>
-        {/* Line 1: Icon + Date · Relative date */}
-        <div className="flex items-center gap-1.5">
-          <IconComponent className={`h-3.5 w-3.5 flex-shrink-0 ${
-            isEditing ? 'text-blue-600' :
-            isLocked ? 'text-muted-foreground/30' :
-            'text-muted-foreground/60'
-          }`} />
-          <span className={`text-sm font-medium ${
+        {/* Row 1: Date · Relative date + icon/status indicators on right */}
+        <div className="flex items-center gap-1">
+          <span className={`text-sm font-medium truncate ${
             isEditing ? 'text-blue-600' :
             isLocked ? 'text-muted-foreground/50' :
             'text-foreground'
           }`}>
             {formattedDate}
           </span>
-          <span className={`text-xs ${isLocked ? 'text-muted-foreground/30' : 'text-muted-foreground'}`}>
+          <span className={`text-xs flex-shrink-0 ${isLocked ? 'text-muted-foreground/30' : 'text-muted-foreground'}`}>
             · {relativeDate}
           </span>
-          {/* Status indicators on far right */}
-          {isLocked && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="ml-auto h-4 w-4 flex items-center justify-center">
-                  <Lock className="h-3 w-3 text-muted-foreground/40" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p className="text-xs">Complete earlier appointments first</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {isUnsigned && !isLocked && (
-            <div className="ml-auto h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center">
-              <Minus className="h-2.5 w-2.5 text-amber-600" />
-            </div>
-          )}
+          {/* Right side: icon + status indicators */}
+          <div className="ml-auto flex items-center gap-1">
+            {/* Appointment type icon */}
+            <IconComponent className={`h-3.5 w-3.5 flex-shrink-0 ${
+              isEditing ? 'text-blue-600' :
+              isLocked ? 'text-muted-foreground/30' :
+              'text-muted-foreground/60'
+            }`} />
+            {/* Status indicators */}
+            {isLocked && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="h-4 w-4 flex items-center justify-center flex-shrink-0">
+                    <Lock className="h-3 w-3 text-muted-foreground/40" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p className="text-xs">Complete earlier appointments first</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {isUnsigned && !isLocked && (
+              <div className="h-4 w-4 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Minus className="h-2.5 w-2.5 text-amber-600" />
+              </div>
+            )}
+          </div>
         </div>
-        {/* Line 2: Start time */}
-        <p className={`text-xs ${isLocked ? 'text-muted-foreground/40' : 'text-muted-foreground'}`}>
-          {formatTime(startTime)}
+        {/* Row 2: Time range */}
+        <p className={`text-xs truncate ${isLocked ? 'text-muted-foreground/40' : 'text-muted-foreground'}`}>
+          {timeRange}
         </p>
       </div>
     </>
@@ -386,6 +402,20 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
   const inProgressAppts = scheduledAppointments.filter(a =>
     a.status === 'IN_PROGRESS'
   ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+
+  // Today's COMPLETED appointments (not from past visit history)
+  // Split into unsigned and signed for proper section grouping
+  const completedTodayAppts = scheduledAppointments.filter(a =>
+    a.status === 'COMPLETED' && !a.isFuture
+  ).sort((a, b) => {
+    // Sort by completedAt descending (most recent first), fallback to scheduledStart
+    const aTime = a.completedAt?.getTime() ?? new Date(a.scheduledStart).getTime()
+    const bTime = b.completedAt?.getTime() ?? new Date(b.scheduledStart).getTime()
+    return bTime - aTime
+  })
+
+  const unsignedTodayAppts = completedTodayAppts.filter(a => !a.isSigned)
+  const signedTodayAppts = completedTodayAppts.filter(a => a.isSigned)
 
   // Separate unsigned visits (past, not signed) and signed history (completed)
   const unsignedVisits = visitHistory.filter(v => !v.appointment?.isSigned)
@@ -497,6 +527,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                   id={appointment.id}
                   date={new Date(appointment.scheduledStart)}
                   startTime={new Date(appointment.scheduledStart)}
+                  endTime={new Date(appointment.scheduledEnd)}
                   appointmentTypeId={appointment.appointmentType?.id}
                   isEditing={isEditing}
                   isLocked={isLocked}
@@ -525,6 +556,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
               id={appointment.id}
               date={new Date(appointment.scheduledStart)}
               startTime={new Date(appointment.scheduledStart)}
+              endTime={new Date(appointment.scheduledEnd)}
               appointmentTypeId={appointment.appointmentType?.id}
               isEditing={appointment.id === currentAppointmentId}
               onClick={appointment.id !== currentAppointmentId
@@ -551,6 +583,7 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
               id={appointment.id}
               date={new Date(appointment.scheduledStart)}
               startTime={new Date(appointment.scheduledStart)}
+              endTime={new Date(appointment.scheduledEnd)}
               appointmentTypeId={appointment.appointmentType?.id}
               isEditing={appointment.id === currentAppointmentId}
               onClick={appointment.id !== currentAppointmentId
@@ -564,13 +597,34 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
         </TimelineSection>
       )}
 
-      {/* 4. Unsigned Section - Completed but needs signature */}
-      {unsignedVisits.length > 0 && (
+      {/* 4. Unsigned Section - Completed but needs signature (today + past) */}
+      {(unsignedTodayAppts.length > 0 || unsignedVisits.length > 0) && (
         <TimelineSection
           title="Unsigned"
           color={TIMELINE_COLORS.unsigned}
-          count={unsignedVisits.length}
+          count={unsignedTodayAppts.length + unsignedVisits.length}
         >
+          {/* Today's unsigned completed appointments */}
+          {unsignedTodayAppts.map((appointment) => {
+            const isEditing = appointment.id === currentAppointmentId
+            return (
+              <TimelineCard
+                key={appointment.id}
+                id={appointment.id}
+                date={new Date(appointment.scheduledStart)}
+                startTime={new Date(appointment.scheduledStart)}
+                endTime={new Date(appointment.scheduledEnd)}
+                appointmentTypeId={appointment.appointmentType?.id}
+                isEditing={isEditing}
+                isUnsigned={true}
+                onClick={!isEditing
+                  ? () => handleScheduledAppointmentClick(appointment.id)
+                  : undefined}
+                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.unsigned}
+              />
+            )
+          })}
+          {/* Past unsigned visits */}
           {unsignedVisits.map((visit, index) => (
             <TimelineCard
               key={visit.id}
@@ -580,6 +634,9 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                 : new Date(visit.createdAt)}
               startTime={visit.appointment?.scheduledStart
                 ? new Date(visit.appointment.scheduledStart)
+                : new Date(visit.createdAt)}
+              endTime={visit.appointment?.scheduledEnd
+                ? new Date(visit.appointment.scheduledEnd)
                 : new Date(visit.createdAt)}
               appointmentTypeId={visit.appointment?.appointmentType?.id}
               isUnsigned={true}
@@ -594,13 +651,33 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
         </TimelineSection>
       )}
 
-      {/* 5. Completed Section - Signed and done */}
-      {completedVisits.length > 0 && (
+      {/* 5. Completed Section - Signed and done (today + past) */}
+      {(signedTodayAppts.length > 0 || completedVisits.length > 0) && (
         <TimelineSection
           title="Completed"
           color={TIMELINE_COLORS.completed}
-          count={completedVisits.length}
+          count={signedTodayAppts.length + completedVisits.length}
         >
+          {/* Today's signed completed appointments */}
+          {signedTodayAppts.map((appointment) => {
+            const isEditing = appointment.id === currentAppointmentId
+            return (
+              <TimelineCard
+                key={appointment.id}
+                id={appointment.id}
+                date={new Date(appointment.scheduledStart)}
+                startTime={new Date(appointment.scheduledStart)}
+                endTime={new Date(appointment.scheduledEnd)}
+                appointmentTypeId={appointment.appointmentType?.id}
+                isEditing={isEditing}
+                onClick={!isEditing
+                  ? () => handleScheduledAppointmentClick(appointment.id)
+                  : undefined}
+                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.completed}
+              />
+            )
+          })}
+          {/* Past signed visits */}
           {completedVisits.map((visit, index) => (
             <TimelineCard
               key={visit.id}
@@ -610,6 +687,9 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
                 : new Date(visit.createdAt)}
               startTime={visit.appointment?.scheduledStart
                 ? new Date(visit.appointment.scheduledStart)
+                : new Date(visit.createdAt)}
+              endTime={visit.appointment?.scheduledEnd
+                ? new Date(visit.appointment.scheduledEnd)
                 : new Date(visit.createdAt)}
               appointmentTypeId={visit.appointment?.appointmentType?.id}
               isSelected={selectedVisitId === visit.id}
@@ -698,33 +778,53 @@ function AppointmentHeader({ appointment }: AppointmentHeaderProps) {
   const relativeDay = getRelativeDay(appointmentDate)
   const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
+  // Patient info
+  const patient = appointment.patient
+  const patientName = patient ? getPatientDisplayName(patient) : 'Unknown Patient'
+  const initials = patient
+    ? `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
+    : '??'
+
   return (
-    <div className="flex h-[72px] items-center justify-between border-b border-border px-3">
-      {/* Left: Date + time in a column */}
-      <div className="flex flex-col">
-        <div className="flex items-baseline gap-2">
-          <span className="text-base font-semibold">{dateStr}</span>
-          <span className="text-sm text-muted-foreground">· {relativeDay}</span>
+    <div className="flex h-14 items-stretch border-b border-border">
+      {/* Left section: Avatar + Name (matches Visit History width) */}
+      <div className={`flex items-center gap-2 px-3 border-r border-border flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}>
+        {/* Avatar */}
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+          {initials}
         </div>
-        <div className="text-sm text-muted-foreground">{timeRange}</div>
+        {/* Patient name */}
+        <span className="text-sm font-semibold truncate">{patientName}</span>
       </div>
 
-      {/* Right: Status badge (colored dot + black text) + action button */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <div
-            className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: statusColor }}
-          />
-          <span className="text-sm font-medium text-foreground">
-            {statusDisplay.label}
-          </span>
+      {/* Right section: Date + Time + Status + Action (spans SOAP + Patient Context) */}
+      <div className="flex flex-1 items-center justify-between px-3">
+        {/* Date · Relative on row 1, Time Range on row 2 */}
+        <div className="flex flex-col justify-center">
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="font-semibold">{dateStr}</span>
+            <span className="text-muted-foreground">· {relativeDay}</span>
+          </div>
+          <span className="text-xs text-muted-foreground">{timeRange}</span>
         </div>
-        {action && (
-          <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-            {action.label}
-          </button>
-        )}
+
+        {/* Status badge + action button */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: statusColor }}
+            />
+            <span className="text-sm font-medium text-foreground">
+              {statusDisplay.label}
+            </span>
+          </div>
+          {action && (
+            <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+              {action.label}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -887,7 +987,7 @@ function SOAPSections({
                       transition: { duration: 0.15 },
                     }}
                   >
-                    <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic line-clamp-2">
+                    <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic">
                       {previewContent}
                     </p>
                   </motion.div>
@@ -1397,7 +1497,7 @@ export default function AppointmentDetailPage() {
           <AnimatePresence mode="wait" initial={true}>
             <motion.div
               key={middlePanelKey}
-              className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${PANEL_WIDTH_CLASS}`}
+              className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
               initial={{
                 x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
                 y: shouldAnimateMiddlePanel && transitionSource !== 'today'

@@ -1808,6 +1808,52 @@ export const mockPastAppointments: Appointment[] = [
     createdAt: getPastDate(30, 15),
     updatedAt: getPastDate(30, 16, 20),
   },
+
+  // Michael Taylor (Mike) - 2 past visits
+  {
+    id: "past_appt_mt1",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_010",
+    appointmentTypeId: "appt_type_001",
+    scheduledStart: getPastDate(45, 10),
+    scheduledEnd: getPastDate(45, 11, 30),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(45, 9, 55),
+    startedAt: getPastDate(45, 10),
+    needleInsertionAt: getPastDate(45, 10, 30),
+    needleRemovalAt: getPastDate(45, 11),
+    completedAt: getPastDate(45, 11, 20),
+    treatmentDurationMinutes: 30,
+    usedEstim: false,
+    cancellationReason: null,
+    createdAt: getPastDate(45, 10),
+    updatedAt: getPastDate(45, 11, 20),
+  },
+  {
+    id: "past_appt_mt2",
+    clinicId: "clinic_dev_001",
+    practitionerId: "pract_dev_001",
+    patientId: "patient_010",
+    appointmentTypeId: "appt_type_002",
+    scheduledStart: getPastDate(14, 9),
+    scheduledEnd: getPastDate(14, 10),
+    status: AppointmentStatus.COMPLETED,
+    isLate: false,
+    isSigned: true,
+    checkedInAt: getPastDate(14, 8, 55),
+    startedAt: getPastDate(14, 9),
+    needleInsertionAt: getPastDate(14, 9, 20),
+    needleRemovalAt: getPastDate(14, 9, 45),
+    completedAt: getPastDate(14, 9, 55),
+    treatmentDurationMinutes: 25,
+    usedEstim: true,
+    cancellationReason: null,
+    createdAt: getPastDate(14, 9),
+    updatedAt: getPastDate(14, 9, 55),
+  },
 ];
 
 // =============================================================================
@@ -2067,6 +2113,32 @@ export const mockVisits: Visit[] = [
     signedBy: "Dr. Sarah Chen",
     createdAt: getPastDate(30, 15),
     updatedAt: getPastDate(30, 16, 20),
+  },
+
+  // Michael Taylor (Mike) visits
+  {
+    id: "visit_mt1",
+    appointmentId: "past_appt_mt1",
+    subjective: { raw: "New patient. Chief complaint: Neck and shoulder tension x 6 months. Works long hours on computer as entrepreneur. Stress from wedding planning. Pain 6/10, worse end of day." },
+    objective: { raw: "Tongue: red edges, thin white coating. Pulse: wiry, rapid. Palpation: bilateral trapezius tension, trigger points GB21, tender SI11-14." },
+    assessment: { raw: "Liver Qi stagnation with Qi and Blood stasis in neck/shoulder region. Stress-related." },
+    plan: { raw: "Points: GB20, GB21, SI11, SI14 bilateral. Four Gates (LI4, LV3). Added Yintang for stress. Recommend weekly x 4 weeks." },
+    signedAt: getPastDate(45, 11, 20),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(45, 10),
+    updatedAt: getPastDate(45, 11, 20),
+  },
+  {
+    id: "visit_mt2",
+    appointmentId: "past_appt_mt2",
+    subjective: { raw: "Follow-up for neck/shoulder tension. Pain improved to 4/10. Less tension at end of workday. Still stressed but managing better. Wedding in 2 months." },
+    objective: { raw: "Tongue: less red on edges. Pulse: less wiry. Palpation: reduced tenderness GB21, SI points improved." },
+    assessment: { raw: "Liver Qi stagnation improving. Continue current approach." },
+    plan: { raw: "Same protocol with e-stim on GB21, SI11. Added GV20 for calming. Continue weekly until wedding." },
+    signedAt: getPastDate(14, 9, 55),
+    signedBy: "Dr. Sarah Chen",
+    createdAt: getPastDate(14, 9),
+    updatedAt: getPastDate(14, 9, 55),
   },
 ];
 
@@ -2467,6 +2539,7 @@ export interface ScheduledAppointmentWithType {
   scheduledEnd: Date;
   status: AppointmentStatus;
   isSigned: boolean;
+  completedAt?: Date;  // When the appointment was completed
   appointmentType?: AppointmentType;
   isFuture: boolean; // True if scheduled for a future date (not today)
 }
@@ -2489,13 +2562,15 @@ export function getPatientScheduledAppointments(
   // Get today's appointments for this patient (from mockAppointments)
   const todayAppointments = mockAppointments.filter((appt) => {
     if (appt.patientId !== patientId) return false;
-    // Include all non-completed/cancelled statuses, plus the current appointment regardless of status
+    // Include active statuses, completed appointments, and the current appointment
     const isCurrentAppt = appt.id === currentAppointmentId;
     const isActiveStatus =
       appt.status === AppointmentStatus.SCHEDULED ||
       appt.status === AppointmentStatus.CHECKED_IN ||
       appt.status === AppointmentStatus.IN_PROGRESS;
-    return isCurrentAppt || isActiveStatus;
+    const isCompleted = appt.status === AppointmentStatus.COMPLETED;
+    // Exclude cancelled and no_show
+    return isCurrentAppt || isActiveStatus || isCompleted;
   });
 
   // Get future appointments for this patient
@@ -2516,6 +2591,7 @@ export function getPatientScheduledAppointments(
       scheduledEnd: appt.scheduledEnd,
       status: appt.status,
       isSigned: 'isSigned' in appt ? appt.isSigned : false,
+      completedAt: 'completedAt' in appt && appt.completedAt ? appt.completedAt : undefined,
       appointmentType: mockAppointmentTypes.find(
         (at) => at.id === appt.appointmentTypeId
       ),
