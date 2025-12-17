@@ -208,6 +208,14 @@ if (isSignedCompleted) {
 - **Blue**: Current appointment being viewed (`isEditing=true`)
 - **Slate**: Preview-selected visit (non-signed-completed mode)
 
+**Animation on Navigation:**
+When navigating between appointments of the same patient (signed completed), content slides vertically:
+- Clicking older appointment → slides up
+- Clicking newer appointment → slides down
+
+What animates: Header center/right sections, SOAP panel, PatientContext panel
+What stays static: Header left section (patient avatar/name), Visit History panel
+
 ---
 
 ## Bottom Tab Bar (Appointment Detail)
