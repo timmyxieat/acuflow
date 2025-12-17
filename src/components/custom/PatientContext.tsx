@@ -38,6 +38,9 @@ interface PatientContextProps {
   patient: Patient
   conditions?: PatientCondition[]
   contextData?: PatientContextData
+  // Visit-specific intake data (for viewing past visits)
+  appointmentId?: string
+  visitIntakeData?: IntakeData  // Passed in for past visits
 }
 
 // =============================================================================

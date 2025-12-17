@@ -175,6 +175,41 @@ const color = getStatusColor(appointment.status, appointment.isSigned)
 
 ---
 
+## Visit History Panel Behavior
+
+The Visit History panel (left of SOAP) behaves differently based on current appointment status:
+
+**Signed Completed Appointments:**
+- Clicking a past visit **navigates** to that appointment
+- No preview auto-selected
+- No SOAP preview text shown
+
+**All Other Appointments** (Unsigned, In Progress, Checked In, Scheduled):
+- Clicking a past visit **toggles preview selection**
+- Most recent past visit auto-selected on load
+- Selected visit's SOAP content shown as preview under textareas
+- "Use past treatment" button appears when a visit is selected
+
+```typescript
+// Check for signed completed (no preview, navigation mode)
+const isSignedCompleted = appointment?.status === 'COMPLETED' && appointment?.isSigned === true
+
+// Click handler uses this to decide behavior
+if (isSignedCompleted) {
+  // Navigate to clicked appointment
+  router.push(`/appointments/${targetApptId}`)
+} else {
+  // Toggle preview selection
+  setSelectedVisitId(visitId)
+}
+```
+
+**Visual Indicators:**
+- **Blue**: Current appointment being viewed (`isEditing=true`)
+- **Slate**: Preview-selected visit (non-signed-completed mode)
+
+---
+
 ## Bottom Tab Bar (Appointment Detail)
 
 The appointment detail page has a bottom tab bar with 4 tabs.

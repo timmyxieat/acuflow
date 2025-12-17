@@ -253,11 +253,11 @@ function TimelineCard({
   const relativeDate = getRelativeDate(date)
   const timeRange = `${formatTime(startTime)} - ${formatTime(endTime)}`
 
-  // Selection indicator style
+  // Selection indicator style - uses the card's status color
   const getSelectionStyle = () => {
     if (isSelected) {
       return {
-        backgroundColor: `${color}25`,
+        backgroundColor: `${color}20`,
         boxShadow: `inset 3px 0 0 0 ${color}`,
       }
     }
@@ -668,28 +668,32 @@ function VisitTimeline({ patientId, currentAppointmentId, selectedVisitId, onSel
             )
           })}
           {/* Past signed visits */}
-          {completedVisits.map((visit, index) => (
-            <TimelineCard
-              key={visit.id}
-              id={visit.id}
-              date={visit.appointment?.scheduledStart
-                ? new Date(visit.appointment.scheduledStart)
-                : new Date(visit.createdAt)}
-              startTime={visit.appointment?.scheduledStart
-                ? new Date(visit.appointment.scheduledStart)
-                : new Date(visit.createdAt)}
-              endTime={visit.appointment?.scheduledEnd
-                ? new Date(visit.appointment.scheduledEnd)
-                : new Date(visit.createdAt)}
-              appointmentTypeId={visit.appointment?.appointmentType?.id}
-              isSelected={selectedVisitId === visit.id}
-              isHovered={hoveredVisitId === visit.id}
-              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('completed', index)}
-              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('completed', index))}
-              onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-              color={TIMELINE_COLORS.completed}
-            />
-          ))}
+          {completedVisits.map((visit, index) => {
+            const isEditing = visit.appointment?.id === currentAppointmentId
+            return (
+              <TimelineCard
+                key={visit.id}
+                id={visit.id}
+                date={visit.appointment?.scheduledStart
+                  ? new Date(visit.appointment.scheduledStart)
+                  : new Date(visit.createdAt)}
+                startTime={visit.appointment?.scheduledStart
+                  ? new Date(visit.appointment.scheduledStart)
+                  : new Date(visit.createdAt)}
+                endTime={visit.appointment?.scheduledEnd
+                  ? new Date(visit.appointment.scheduledEnd)
+                  : new Date(visit.createdAt)}
+                appointmentTypeId={visit.appointment?.appointmentType?.id}
+                isEditing={isEditing}
+                isSelected={selectedVisitId === visit.id}
+                isHovered={hoveredVisitId === visit.id}
+                isFocused={isZoneFocused && focusedIndex === getGlobalIndex('completed', index)}
+                onClick={!isEditing ? () => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('completed', index)) : undefined}
+                onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
+                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.completed}
+              />
+            )
+          })}
         </TimelineSection>
       )}
 
@@ -851,6 +855,10 @@ interface SOAPSectionsProps {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
   // Preview animation direction
   previewSlideDirection: 'up' | 'down' | null
+  // Read-only mode for signed/completed visits
+  isReadOnly?: boolean
+  signedBy?: string
+  signedAt?: Date
 }
 
 function SOAPSections({
@@ -1407,6 +1415,9 @@ export default function AppointmentDetailPage() {
   }, [isTransitioning, completeTransition])
 
   // Initialize preview selection from URL or default to most recent
+  // - For signed COMPLETED appointments: no auto-selection (user navigates between appointments)
+  // - For all other appointments (including unsigned): auto-select most recent for preview
+  const isSignedCompleted = appointment?.status === 'COMPLETED' && appointment?.isSigned === true
   useEffect(() => {
     if (orderedVisitIds.length === 0) return
 
@@ -1417,18 +1428,19 @@ export default function AppointmentDetailPage() {
       // Valid preview in URL - use it (don't update URL again)
       setSelectedVisitIdState(previewFromUrl)
       setFocusedVisitIndex(orderedVisitIds.indexOf(previewFromUrl))
-    } else if (selectedVisitId === null) {
-      // No URL param or invalid - default to most recent
-      // orderedVisitIds is already sorted (most recent first from getPatientVisitHistory)
+    } else if (selectedVisitId === null && !isSignedCompleted) {
+      // For non-signed-completed appointments, default to most recent visit for preview
       const defaultVisitId = orderedVisitIds[0]
       setSelectedVisitIdState(defaultVisitId)
       setFocusedVisitIndex(0)
       // Update URL with the default
       updateUrlPreview(defaultVisitId)
+    } else {
+      // For signed completed appointments or when already selected, just set focus index
+      setFocusedVisitIndex(0)
     }
-  // Only run on mount or when visits change, not when searchParams changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderedVisitIds, appointmentId])
+  }, [orderedVisitIds, appointmentId, isSignedCompleted])
 
   // Handle keyboard shortcuts - Two-zone navigation (SOAP ↔ Visit History)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -1538,18 +1550,49 @@ export default function AppointmentDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  // Handle visit selection from timeline (also sets navigation focus)
-  const handleSelectVisit = (visitId: string | null, index: number) => {
-    // Determine slide direction based on old vs new index
-    const oldIndex = selectedVisitId ? orderedVisitIds.indexOf(selectedVisitId) : -1
-    if (oldIndex !== -1 && visitId !== null) {
-      // newIndex > oldIndex means clicking below → slide up
-      // newIndex < oldIndex means clicking above → slide down
-      setPreviewSlideDirection(index > oldIndex ? 'up' : 'down')
+  // Handle visit selection from timeline
+  // - For signed COMPLETED appointments: navigate to that appointment
+  // - For all other appointments (including unsigned): select for preview (toggle selection)
+  const handleSelectVisit = async (visitId: string | null, index: number) => {
+    if (!appointment) return
+
+    // For signed COMPLETED appointments, clicking navigates to that appointment
+    if (appointment.status === 'COMPLETED' && appointment.isSigned) {
+      if (!visitId) return
+
+      // Get the visit to find its appointment ID
+      const visit = getVisitById(visitId)
+      if (!visit?.appointment?.id) return
+
+      const targetApptId = visit.appointment.id
+
+      // Don't navigate if clicking the current appointment
+      if (targetApptId === appointmentId) return
+
+      // Flush any pending SOAP saves before navigating
+      await flushSave()
+
+      // Determine direction based on appointment dates
+      const currentApptDate = new Date(appointment.scheduledStart)
+      const targetApptDate = new Date(visit.appointment.scheduledStart)
+      const direction = targetApptDate > currentApptDate ? 'down' : 'up'
+      setSlideDirection(direction)
+
+      // Set transition source for same-patient detection
+      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
+      router.push(`/appointments/${targetApptId}`)
+    } else {
+      // For non-completed appointments, toggle preview selection
+      const oldIndex = selectedVisitId ? orderedVisitIds.indexOf(selectedVisitId) : -1
+      if (oldIndex !== -1 && visitId !== null) {
+        // newIndex > oldIndex means clicking below → slide up
+        // newIndex < oldIndex means clicking above → slide down
+        setPreviewSlideDirection(index > oldIndex ? 'up' : 'down')
+      }
+      setSelectedVisitId(visitId)
+      setFocusZone('visits')
+      setFocusedVisitIndex(index)
     }
-    setSelectedVisitId(visitId)
-    setFocusZone('visits')
-    setFocusedVisitIndex(index)
   }
 
   // Handle SOAP field changes
