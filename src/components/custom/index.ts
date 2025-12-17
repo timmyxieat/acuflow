@@ -18,3 +18,4 @@ export { BillingTab, getBillingStatusPreview, type BillingData, type PaymentMeth
 export { CommsTab, getCommsStatusPreview, type CommsData, type ConfirmationStatus, type CommsStatusPreview } from './CommsTab'
 export { ScheduleTab, getScheduleStatusPreview, type ScheduleData, type ScheduleAppointment, type FollowUpInfo, type RecentVisit, type UpcomingAppointment, type ScheduleStatusPreview } from './ScheduleTab'
 export { SegmentedToggle, type ViewScope, type SegmentedToggleProps } from './SegmentedToggle'
+export { DatePicker } from './DatePicker'

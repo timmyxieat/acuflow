@@ -40,7 +40,7 @@ export function TodayScreen() {
     return parseDateFromUrl(dateStr) ?? new Date()
   }, [searchParams])
 
-  // Navigate to a different date
+  // Navigate to a different date by offset
   const navigateDate = useCallback((offset: number) => {
     const newDate = new Date(selectedDate)
     newDate.setDate(newDate.getDate() + offset)
@@ -57,6 +57,21 @@ export function TodayScreen() {
     router.replace(newUrl, { scroll: false })
   }, [selectedDate, searchParams, router])
 
+  // Select a specific date (from calendar picker)
+  const selectDate = useCallback((date: Date) => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (isToday(date)) {
+      params.delete('date')
+    } else {
+      params.set('date', formatDateForUrl(date))
+    }
+
+    // Preserve patient selection if any
+    const newUrl = params.toString() ? `?${params.toString()}` : '/'
+    router.replace(newUrl, { scroll: false })
+  }, [searchParams, router])
+
   // Update header with date navigation info
   useEffect(() => {
     setHeader({
@@ -64,6 +79,7 @@ export function TodayScreen() {
       subtitle: getDateSubtitle(selectedDate),
       selectedDate,
       onNavigateDate: navigateDate,
+      onSelectDate: selectDate,
       showDateNavigation: true,
     })
     return () => resetHeader()

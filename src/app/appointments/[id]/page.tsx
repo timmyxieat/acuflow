@@ -16,11 +16,11 @@ import {
   getAppointmentsByStatusForDate,
   getPatientDisplayName,
   getPatientVisitHistory,
-  getPatientScheduledAppointments,
   getVisitById,
   getPatientContextData,
   type AppointmentWithRelations,
 } from '@/data/mock-data'
+import { parseDateFromUrl, formatDateForUrl } from '@/lib/date-utils'
 
 // Local components and hooks
 import {
@@ -196,27 +196,6 @@ export default function AppointmentDetailPage() {
     return getPatientVisitHistory(appointment.patient.id).map(v => v.id)
   }, [appointment?.patient?.id])
 
-  // Calculate visit count and first visit date
-  const { visitCount, firstVisitDate } = useMemo(() => {
-    if (!appointment?.patient?.id) return { visitCount: 0, firstVisitDate: null }
-
-    const visitHistory = getPatientVisitHistory(appointment.patient.id)
-    const scheduledAppts = getPatientScheduledAppointments(appointment.patient.id, appointmentId)
-    const todayCompletedCount = scheduledAppts.filter(a => a.status === 'COMPLETED' && !a.isFuture).length
-
-    const count = visitHistory.length + todayCompletedCount
-
-    let oldest: Date | null = null
-    if (visitHistory.length > 0) {
-      const oldestVisit = visitHistory[visitHistory.length - 1]
-      oldest = oldestVisit.appointment?.scheduledStart
-        ? new Date(oldestVisit.appointment.scheduledStart)
-        : new Date(oldestVisit.createdAt)
-    }
-
-    return { visitCount: count, firstVisitDate: oldest }
-  }, [appointment?.patient?.id, appointmentId])
-
   // Highlight the current appointment in PatientCards
   const selectedAppointmentIdForCards = appointmentId
 
@@ -307,35 +286,29 @@ export default function AppointmentDetailPage() {
     }
   }, [appointment?.status, appointment?.scheduledStart, appointment?.scheduledEnd, appointment?.appointmentType?.name])
 
+  // Get the viewing context date from URL (preserved when navigating between appointments)
+  // If not present, use the appointment's date (initial navigation from Today screen)
+  const viewDateFromUrl = useMemo(() => {
+    const viewDateStr = searchParams.get('viewDate')
+    return viewDateStr ? parseDateFromUrl(viewDateStr) : null
+  }, [searchParams])
+
+  // The "context date" for navigation - either from URL or the appointment's date
+  const contextDate = viewDateFromUrl ?? (appointment ? new Date(appointment.scheduledStart) : new Date())
+
   // Set the global header when this page mounts
   // Include currentDate so back button returns to the correct day's view
-  // Include patient and appointment info for topbar display
   useEffect(() => {
     if (appointment) {
       setHeader({
         showBackButton: true,
         currentPatientId: appointment.patient?.id,
-        currentDate: appointment.scheduledStart,
-        patient: appointment.patient ? {
-          id: appointment.patient.id,
-          firstName: appointment.patient.firstName,
-          lastName: appointment.patient.lastName,
-          preferredName: appointment.patient.preferredName ?? undefined,
-          dateOfBirth: new Date(appointment.patient.dateOfBirth),
-          sex: appointment.patient.sex ?? undefined,
-        } : undefined,
-        appointment: {
-          id: appointment.id,
-          scheduledStart: new Date(appointment.scheduledStart),
-          scheduledEnd: new Date(appointment.scheduledEnd),
-          status: appointment.status,
-          isSigned: appointment.isSigned,
-        },
+        currentDate: contextDate,
       })
     }
     return () => { resetHeader() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointmentId])
+  }, [appointmentId, viewDateFromUrl])
 
   // Complete transition after animation
   useEffect(() => {
@@ -456,6 +429,14 @@ export default function AppointmentDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // Build URL for navigating to another appointment while preserving viewDate context
+  const buildAppointmentUrl = useCallback((targetApptId: string) => {
+    const params = new URLSearchParams()
+    // Preserve the viewing context date (use current contextDate)
+    params.set('viewDate', formatDateForUrl(contextDate))
+    return `/appointments/${targetApptId}?${params.toString()}`
+  }, [contextDate])
+
   // Handle visit selection from timeline
   const handleSelectVisit = async (visitId: string | null, index: number) => {
     if (!appointment) return
@@ -475,7 +456,7 @@ export default function AppointmentDetailPage() {
       setSlideDirection(direction)
 
       startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
-      router.push(`/appointments/${targetApptId}`)
+      router.push(buildAppointmentUrl(targetApptId))
     } else {
       const oldIndex = selectedVisitId ? orderedVisitIds.indexOf(selectedVisitId) : -1
       if (oldIndex !== -1 && visitId !== null) {
@@ -595,177 +576,184 @@ export default function AppointmentDetailPage() {
       <div className="w-px bg-border" />
 
       {/* Main content area */}
-      <div className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Header - receives animation configs from usePageAnimations hook */}
-        <AppointmentHeader
-          appointment={appointment}
-          visitCount={visitCount}
-          firstVisitDate={firstVisitDate}
-          activeTab={activeTab}
-          headerLeftConfig={animations.headerLeft}
-          headerCenterConfig={animations.headerCenter}
-          headerRightConfig={animations.headerRight}
-        />
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Visit History Column (with patient header) */}
+        <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
+          <motion.div
+            key={animations.visitHistory.key}
+            className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
+            initial={animations.visitHistory.shouldAnimate ? animations.visitHistory.initial : false}
+            animate={{ x: 0, y: 0, opacity: 1 }}
+            exit={animations.visitHistory.shouldAnimate ? animations.visitHistory.exit : undefined}
+            transition={animations.transition}
+          >
+            {/* Patient Info Header */}
+            {appointment.patient && (
+              <div className="flex items-center gap-2 px-3 h-14 border-b border-border flex-shrink-0">
+                {/* Avatar */}
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                  {`${appointment.patient.firstName?.[0] || ''}${appointment.patient.lastName?.[0] || ''}`.toUpperCase()}
+                </div>
+                {/* Patient name + demographics */}
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-semibold truncate">{getPatientDisplayName(appointment.patient)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {appointment.patient.dateOfBirth ? `${Math.floor((Date.now() - new Date(appointment.patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} yo` : ''}
+                    {appointment.patient.sex && appointment.patient.dateOfBirth ? ', ' : ''}
+                    {appointment.patient.sex === 'FEMALE' ? 'Female' : appointment.patient.sex === 'MALE' ? 'Male' : ''}
+                  </span>
+                </div>
+              </div>
+            )}
 
-        {/* Content columns below header */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Visit History Panel */}
-          <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
-            <motion.div
-              key={animations.visitHistory.key}
-              className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
-              initial={animations.visitHistory.shouldAnimate ? animations.visitHistory.initial : false}
-              animate={{ x: 0, y: 0, opacity: 1 }}
-              exit={animations.visitHistory.shouldAnimate ? animations.visitHistory.exit : undefined}
-              transition={animations.transition}
-            >
-              <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
-                {appointment.patient && (
-                  <VisitTimeline
-                    patientId={appointment.patient.id}
-                    currentAppointmentId={appointmentId}
-                    selectedVisitId={selectedVisitId}
-                    onSelectVisit={handleSelectVisit}
-                    onSelectScheduledAppointment={async (apptId) => {
-                      await flushSave()
-                      const currentApptDate = new Date(appointment.scheduledStart)
-                      const targetAppt = getAppointmentById(apptId)
-                      if (targetAppt) {
-                        const targetApptDate = new Date(targetAppt.scheduledStart)
-                        const direction = targetApptDate > currentApptDate ? 'down' : 'up'
-                        setSlideDirection(direction)
-                      }
-                      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
-                      router.push(`/appointments/${apptId}`)
-                    }}
-                    hoveredVisitId={effectiveHoveredVisitId}
-                    onHoverVisit={setHoveredVisitId}
-                    isZoneFocused={focusZone === 'visits'}
-                    focusedIndex={focusedVisitIndex}
-                  />
-                )}
-              </ScrollableArea>
-            </motion.div>
-          </AnimatePresence>
+            {/* Visit Timeline */}
+            <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
+              {appointment.patient && (
+                <VisitTimeline
+                  patientId={appointment.patient.id}
+                  currentAppointmentId={appointmentId}
+                  selectedVisitId={selectedVisitId}
+                  onSelectVisit={handleSelectVisit}
+                  onSelectScheduledAppointment={async (apptId) => {
+                    await flushSave()
+                    const currentApptDate = new Date(appointment.scheduledStart)
+                    const targetAppt = getAppointmentById(apptId)
+                    if (targetAppt) {
+                      const targetApptDate = new Date(targetAppt.scheduledStart)
+                      const direction = targetApptDate > currentApptDate ? 'down' : 'up'
+                      setSlideDirection(direction)
+                    }
+                    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
+                    router.push(buildAppointmentUrl(apptId))
+                  }}
+                  hoveredVisitId={effectiveHoveredVisitId}
+                  onHoverVisit={setHoveredVisitId}
+                  isZoneFocused={focusZone === 'visits'}
+                  focusedIndex={focusedVisitIndex}
+                />
+              )}
+            </ScrollableArea>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Right Content Column (TopTabBar + Tab Content) */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Top Tab Bar */}
+          <TopTabBar
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            appointment={appointment}
+            billingData={billingData}
+            scheduleData={scheduleData}
+            commsData={commsData}
+          />
 
           {/* Tab Content Area */}
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="flex flex-1 overflow-hidden relative">
-              {activeTab === 'medical' && (
-                <>
-                  {/* SOAP Notes Panel */}
-                  <div className="flex flex-1 flex-col overflow-hidden bg-background">
-                    <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
-                      <motion.div
-                        key={animations.soapPanel.key}
-                        className="flex flex-1 flex-col overflow-hidden"
-                        initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
-                        animate={{ x: 0, y: 0, opacity: 1 }}
-                        exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
-                        transition={animations.transition}
-                      >
-                        <ScrollableArea className="flex-1 pt-2 pb-4 px-3" deps={[appointmentId]}>
-                          <div className="flex flex-col gap-4">
-                            <SOAPSections
-                              selectedVisitId={selectedVisitId}
-                              soapData={soapData}
-                              onSoapChange={handleSoapChange}
-                              onUsePastTreatment={handleUsePastTreatment}
-                              isZoneFocused={focusZone === 'soap'}
-                              focusedIndex={focusedSoapIndex}
-                              isEditing={isEditingField}
-                              textareaRefs={soapTextareaRefs}
-                              onTextareaFocus={handleTextareaFocus}
-                              onSectionFocus={handleSectionFocus}
-                              onSectionBlur={handleSectionBlur}
-                              saveStatus={saveStatus}
-                              previewSlideDirection={previewSlideDirection}
-                            />
-                          </div>
-                        </ScrollableArea>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Patient Context Panel */}
-                  <AnimatePresence mode="wait" initial={animations.patientContext.shouldAnimate}>
+          <div className="flex flex-1 overflow-hidden relative">
+            {activeTab === 'medical' && (
+              <>
+                {/* SOAP Notes Panel */}
+                <div className="flex flex-1 flex-col overflow-hidden bg-background">
+                  <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
                     <motion.div
-                      key={animations.patientContext.key}
-                      className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
-                      initial={animations.patientContext.shouldAnimate ? animations.patientContext.initial : false}
+                      key={animations.soapPanel.key}
+                      className="flex flex-1 flex-col overflow-hidden"
+                      initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
                       animate={{ x: 0, y: 0, opacity: 1 }}
-                      exit={animations.patientContext.shouldAnimate ? animations.patientContext.exit : undefined}
+                      exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
                       transition={animations.transition}
                     >
-                      {appointment.patient && (
-                        <PatientContextAdaptive
-                          patient={appointment.patient}
-                          conditions={appointment.conditions ?? []}
-                          contextData={getPatientContextData(appointment.patient.id)}
-                          focusedSection={focusedSection}
-                          appointmentId={appointmentId}
-                          visitHistory={getPatientVisitHistory(appointment.patient.id)}
-                        />
-                      )}
+                      <ScrollableArea className="flex-1 p-3" deps={[appointmentId]}>
+                        <div className="flex flex-col gap-4">
+                          <SOAPSections
+                            selectedVisitId={selectedVisitId}
+                            soapData={soapData}
+                            onSoapChange={handleSoapChange}
+                            onUsePastTreatment={handleUsePastTreatment}
+                            isZoneFocused={focusZone === 'soap'}
+                            focusedIndex={focusedSoapIndex}
+                            isEditing={isEditingField}
+                            textareaRefs={soapTextareaRefs}
+                            onTextareaFocus={handleTextareaFocus}
+                            onSectionFocus={handleSectionFocus}
+                            onSectionBlur={handleSectionBlur}
+                            saveStatus={saveStatus}
+                            previewSlideDirection={previewSlideDirection}
+                          />
+                        </div>
+                      </ScrollableArea>
                     </motion.div>
                   </AnimatePresence>
-
-                  {/* FAB */}
-                  <FABPanel
-                    appointment={appointment}
-                    isExpanded={isFabExpanded}
-                    onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-                    timer={timer}
-                  />
-                </>
-              )}
-
-              {activeTab === 'billing' && (
-                <div className="flex-1 overflow-hidden bg-background">
-                  <BillingTab
-                    appointmentId={appointmentId}
-                    billingData={billingData}
-                    billingHistory={billingHistory}
-                    viewScope={viewScope}
-                    onViewScopeChange={setViewScope}
-                  />
                 </div>
-              )}
 
-              {activeTab === 'schedule' && (
-                <div className="flex-1 overflow-hidden bg-background">
-                  <ScheduleTab
-                    appointmentId={appointmentId}
-                    scheduleData={scheduleData}
-                    patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
-                    viewScope={viewScope}
-                    onViewScopeChange={setViewScope}
-                  />
-                </div>
-              )}
+                {/* Patient Context Panel */}
+                <AnimatePresence mode="wait" initial={animations.patientContext.shouldAnimate}>
+                  <motion.div
+                    key={animations.patientContext.key}
+                    className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
+                    initial={animations.patientContext.shouldAnimate ? animations.patientContext.initial : false}
+                    animate={{ x: 0, y: 0, opacity: 1 }}
+                    exit={animations.patientContext.shouldAnimate ? animations.patientContext.exit : undefined}
+                    transition={animations.transition}
+                  >
+                    {appointment.patient && (
+                      <PatientContextAdaptive
+                        patient={appointment.patient}
+                        conditions={appointment.conditions ?? []}
+                        contextData={getPatientContextData(appointment.patient.id)}
+                        focusedSection={focusedSection}
+                        appointmentId={appointmentId}
+                        visitHistory={getPatientVisitHistory(appointment.patient.id)}
+                      />
+                    )}
+                  </motion.div>
+                </AnimatePresence>
 
-              {activeTab === 'comms' && (
-                <div className="flex-1 overflow-hidden bg-background">
-                  <CommsTab
-                    appointmentId={appointmentId}
-                    commsData={commsData}
-                    patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
-                    viewScope={viewScope}
-                    onViewScopeChange={setViewScope}
-                  />
-                </div>
-              )}
-            </div>
+                {/* FAB */}
+                <FABPanel
+                  appointment={appointment}
+                  isExpanded={isFabExpanded}
+                  onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
+                  timer={timer}
+                />
+              </>
+            )}
 
-            {/* Tab Bar */}
-            <TabBar
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              appointment={appointment}
-              billingData={billingData}
-              scheduleData={scheduleData}
-              commsData={commsData}
-            />
+            {activeTab === 'billing' && (
+              <div className="flex-1 overflow-hidden bg-background">
+                <BillingTab
+                  appointmentId={appointmentId}
+                  billingData={billingData}
+                  billingHistory={billingHistory}
+                  viewScope={viewScope}
+                  onViewScopeChange={setViewScope}
+                />
+              </div>
+            )}
+
+            {activeTab === 'schedule' && (
+              <div className="flex-1 overflow-hidden bg-background">
+                <ScheduleTab
+                  appointmentId={appointmentId}
+                  scheduleData={scheduleData}
+                  patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                  viewScope={viewScope}
+                  onViewScopeChange={setViewScope}
+                />
+              </div>
+            )}
+
+            {activeTab === 'comms' && (
+              <div className="flex-1 overflow-hidden bg-background">
+                <CommsTab
+                  appointmentId={appointmentId}
+                  commsData={commsData}
+                  patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                  viewScope={viewScope}
+                  onViewScopeChange={setViewScope}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -34,10 +34,13 @@ interface HeaderContent {
   // Date navigation (for Today screen)
   selectedDate?: Date
   onNavigateDate?: (offset: number) => void
+  onSelectDate?: (date: Date) => void
   showDateNavigation?: boolean
   // Appointment detail page info
   patient?: PatientInfo
   appointment?: AppointmentInfo
+  // Patient cards collapse state (for aligning patient info with TopTabBar)
+  isPatientCardsCollapsed?: boolean
 }
 
 interface HeaderContextType {
