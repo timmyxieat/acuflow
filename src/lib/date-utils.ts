@@ -154,6 +154,24 @@ export function formatDateForUrl(date: Date): string {
 }
 
 /**
+ * Get the label for a back button that returns to a specific date
+ * Returns "Back to Today", "Back to Tomorrow", "Back to December 24", etc.
+ */
+export function getBackButtonLabel(date: Date): string {
+  if (isToday(date)) {
+    return 'Back to Today'
+  }
+  if (isTomorrow(date)) {
+    return 'Back to Tomorrow'
+  }
+  if (isYesterday(date)) {
+    return 'Back to Yesterday'
+  }
+  // For other dates, use the month and day
+  return `Back to ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+}
+
+/**
  * Parse a date from URL parameter
  * Returns null if invalid
  */

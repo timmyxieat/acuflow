@@ -7,7 +7,7 @@ import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useSearch } from '@/contexts/SearchContext'
 import { CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
-import { isToday, formatDateForUrl } from '@/lib/date-utils'
+import { isToday, formatDateForUrl, getBackButtonLabel } from '@/lib/date-utils'
 
 export function Topbar() {
   const router = useRouter()
@@ -17,11 +17,15 @@ export function Topbar() {
 
   const showBackToToday = header.showDateNavigation && header.selectedDate && !isToday(header.selectedDate)
 
-  // Light orange background when viewing a non-today date
-  const headerBgClass = showBackToToday ? 'bg-orange-50' : 'bg-sidebar'
+  // Show accent line when viewing a non-today date (either on Today screen or appointment detail)
+  const showAccentLine = showBackToToday || (header.showBackButton && header.currentDate && !isToday(header.currentDate))
 
   return (
-    <header className={`relative flex h-14 items-center border-b border-border px-3 ${headerBgClass}`}>
+    <header className="relative flex h-14 items-center border-b border-border px-3 bg-sidebar">
+      {/* Orange accent line when viewing non-today date */}
+      {showAccentLine && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-orange-400" />
+      )}
       {/* Left area - Back button when on detail pages OR Back to Today when viewing other dates */}
       <div className="flex-shrink-0">
         {header.showBackButton ? (
@@ -43,14 +47,14 @@ export function Topbar() {
             className="flex h-14 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Back to Today</span>
+            <span>{header.currentDate ? getBackButtonLabel(header.currentDate) : 'Back to Today'}</span>
           </button>
         ) : showBackToToday ? (
           <button
             onClick={() => {
               router.replace('/', { scroll: false })
             }}
-            className="flex h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-14 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Today</span>

@@ -13,11 +13,10 @@ import { saveVisitSOAP, loadVisitSOAP } from '@/lib/api/visits'
 import { SIDEBAR_ANIMATION } from '@/lib/animations'
 import {
   getAppointmentById,
-  getAppointmentsByStatus,
+  getAppointmentsByStatusForDate,
   getPatientDisplayName,
   getPatientVisitHistory,
   getPatientScheduledAppointments,
-  getPatientTodayAppointmentId,
   getVisitById,
   getPatientContextData,
   type AppointmentWithRelations,
@@ -179,9 +178,10 @@ export default function AppointmentDetailPage() {
     currentPatientId: appointment?.patient?.id ?? null,
   })
 
-  // Get flat ordered list of all appointments
+  // Get flat ordered list of all appointments for the appointment's date
   const orderedAppointmentIds = useMemo(() => {
-    const grouped = getAppointmentsByStatus()
+    if (!appointment) return []
+    const grouped = getAppointmentsByStatusForDate(new Date(appointment.scheduledStart))
     return [
       ...grouped.inProgress,
       ...grouped.checkedIn,
@@ -189,7 +189,7 @@ export default function AppointmentDetailPage() {
       ...grouped.unsigned,
       ...grouped.completed,
     ].map(a => a.id)
-  }, [])
+  }, [appointment])
 
   // Get ordered visit IDs for current patient
   const orderedVisitIds = useMemo(() => {
@@ -218,11 +218,8 @@ export default function AppointmentDetailPage() {
     return { visitCount: count, firstVisitDate: oldest }
   }, [appointment?.patient?.id, appointmentId])
 
-  // Get today's appointment ID for PatientCards selection
-  const selectedAppointmentIdForCards = useMemo(() => {
-    if (!appointment?.patient?.id) return undefined
-    return getPatientTodayAppointmentId(appointment.patient.id) ?? undefined
-  }, [appointment?.patient?.id])
+  // Highlight the current appointment in PatientCards
+  const selectedAppointmentIdForCards = appointmentId
 
   // Billing data
   const billingData: BillingData = useMemo(() => {
@@ -565,6 +562,7 @@ export default function AppointmentDetailPage() {
       >
         <div className="h-full">
           <PatientCards
+            date={new Date(appointment.scheduledStart)}
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={setHoveredAppointmentId}
             hoveredAppointmentId={effectiveHoveredAppointmentId}

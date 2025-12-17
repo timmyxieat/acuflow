@@ -102,6 +102,34 @@ useEffect(() => {
 
 ---
 
+## SearchContext (Global Patient Search)
+
+Use `useSearch` to open/close the command palette from anywhere.
+
+```typescript
+import { useSearch } from '@/contexts/SearchContext'
+
+const { openSearch, closeSearch, isOpen } = useSearch()
+
+// Open search programmatically
+<button onClick={openSearch}>Search patients...</button>
+
+// Check if search is open (for keyboard conflict avoidance)
+const handleKeyDown = useCallback((event: KeyboardEvent) => {
+  if (isSearchOpen) return
+  if ((event.target as HTMLElement).closest('[role="dialog"]')) return
+  // ... handle keys
+}, [isSearchOpen])
+```
+
+**Global shortcut:** `⌘K` / `Ctrl+K` - handled in AppShell
+
+**Keyboard conflict avoidance:** When adding keyboard handlers to pages, always check:
+1. `isSearchOpen` from SearchContext
+2. `target.closest('[role="dialog"]')` for any open dialog
+
+---
+
 ## TransitionContext (Page Transitions)
 
 Coordinate animations across route changes.

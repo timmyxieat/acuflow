@@ -1,6 +1,7 @@
 export { AppShell } from './AppShell'
 export { Sidebar } from './Sidebar'
 export { Topbar } from './Topbar'
+export { PatientSearchCommand } from './PatientSearchCommand'
 export { Timeline } from './Timeline'
 export { PatientCards } from './PatientCards'
 export { TodayScreen } from './TodayScreen'
@@ -8,7 +9,11 @@ export { AppointmentPreview } from './AppointmentPreview'
 export { AppointmentDetail } from './AppointmentDetail'
 export { ScrollableArea, type ScrollableAreaRef, type ScrollPosition } from './ScrollableArea'
 export { ScrollableAreaOld } from './ScrollableAreaOld'
-export { PatientContext, type PatientContextData } from './PatientContext'
+// Legacy PatientContext (kept as backup during adaptive panel refactor)
+export { PatientContext, type PatientContextData } from './PatientContextLegacy'
+
+// New Adaptive Patient Context Panel (use this for new implementations)
+export { PatientContextAdaptive, type PatientContextAdaptiveProps } from './PatientContextAdaptive'
 export { BillingTab, getBillingStatusPreview, type BillingData, type PaymentMethod, type InvoiceLineItem, type PaymentTransaction, type InsuranceInfo, type PatientBillingHistory, type BillingHistoryInvoice } from './BillingTab'
 export { CommsTab, getCommsStatusPreview, type CommsData, type ConfirmationStatus, type CommsStatusPreview } from './CommsTab'
 export { ScheduleTab, getScheduleStatusPreview, type ScheduleData, type ScheduleAppointment, type FollowUpInfo, type RecentVisit, type UpcomingAppointment, type ScheduleStatusPreview } from './ScheduleTab'

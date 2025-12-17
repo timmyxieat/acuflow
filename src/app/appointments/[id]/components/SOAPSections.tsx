@@ -10,6 +10,7 @@ import { getVisitById } from '@/data/mock-data'
 // =============================================================================
 
 export type SOAPKey = 'subjective' | 'objective' | 'assessment' | 'plan'
+export type FocusedSection = 'subjective' | 'objective' | 'assessment' | 'plan' | null
 
 export interface SOAPData {
   subjective: string
@@ -28,6 +29,8 @@ export interface SOAPSectionsProps {
   isEditing: boolean
   textareaRefs: React.MutableRefObject<(HTMLTextAreaElement | null)[]>
   onTextareaFocus: (index: number) => void
+  onSectionFocus?: (section: FocusedSection) => void
+  onSectionBlur?: () => void
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
   previewSlideDirection: 'up' | 'down' | null
   isReadOnly?: boolean
@@ -49,6 +52,8 @@ export function SOAPSections({
   isEditing,
   textareaRefs,
   onTextareaFocus,
+  onSectionFocus,
+  onSectionBlur,
   saveStatus,
   previewSlideDirection,
 }: SOAPSectionsProps) {
@@ -135,7 +140,13 @@ export function SOAPSections({
               ref={(el) => { textareaRefs.current[index] = el }}
               value={soapData[section.key]}
               onChange={(e) => onSoapChange(section.key, e.target.value)}
-              onFocus={() => onTextareaFocus(index)}
+              onFocus={() => {
+                onTextareaFocus(index)
+                onSectionFocus?.(section.key)
+              }}
+              onBlur={() => {
+                onSectionBlur?.()
+              }}
               placeholder={`Enter ${section.label.toLowerCase()} notes...`}
               className={`w-full rounded-lg border bg-background p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20 focus:border-primary transition-colors field-sizing-content ${
                 isFocused ? 'border-primary ring-2 ring-inset ring-primary/50' : 'border-border'

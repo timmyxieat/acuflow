@@ -438,7 +438,7 @@ export function PatientCards({
 
   return (
     <LayoutGroup>
-      <div ref={containerRef} className={`flex h-full flex-col overflow-hidden ${isToday(selectedDate) ? 'bg-sidebar' : 'bg-orange-50'}`}>
+      <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
           <div className="flex items-center flex-shrink-0">
