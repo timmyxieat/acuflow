@@ -10,6 +10,12 @@ interface HeaderContent {
   showBackButton?: boolean
   // Patient ID for back navigation (to restore selection)
   currentPatientId?: string
+  // Date for back navigation (to return to the same day's view)
+  currentDate?: Date
+  // Date navigation (for Today screen)
+  selectedDate?: Date
+  onNavigateDate?: (offset: number) => void
+  showDateNavigation?: boolean
 }
 
 interface HeaderContextType {

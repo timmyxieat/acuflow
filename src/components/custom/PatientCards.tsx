@@ -9,11 +9,12 @@ import { useTransition } from "@/contexts/TransitionContext";
 import { Timer, Bell, ChevronLeft, Pause } from "lucide-react";
 import { ScrollableArea } from "./ScrollableArea";
 import {
-  getAppointmentsByStatus,
+  getAppointmentsByStatusForDate,
   getPatientDisplayName,
   type AppointmentWithRelations,
   AppointmentStatus,
 } from "@/data/mock-data";
+import { isToday } from "@/lib/date-utils";
 
 // Variant to status mapping for header colors
 const VARIANT_STATUS_MAP: Record<
@@ -45,6 +46,8 @@ function formatTimerSeconds(seconds: number): string {
 }
 
 interface PatientCardsProps {
+  /** The date to show appointments for (defaults to today) */
+  date?: Date;
   onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void;
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void;
   onAppointmentHover?: (appointmentId: string | null) => void;
@@ -365,6 +368,7 @@ function PatientCard({
 }
 
 export function PatientCards({
+  date,
   onAppointmentClick,
   onAppointmentDoubleClick,
   onAppointmentHover,
@@ -376,7 +380,11 @@ export function PatientCards({
   activeTimerSeconds,
   isTimerRunning,
 }: PatientCardsProps) {
-  const groupedAppointments = useMemo(() => getAppointmentsByStatus(), []);
+  const selectedDate = date ?? new Date();
+  const groupedAppointments = useMemo(
+    () => getAppointmentsByStatusForDate(selectedDate),
+    [selectedDate]
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const { isTransitioning, previousPatientCardsCollapsed } = useTransition();
 
@@ -430,7 +438,7 @@ export function PatientCards({
 
   return (
     <LayoutGroup>
-      <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
+      <div ref={containerRef} className={`flex h-full flex-col overflow-hidden ${isToday(selectedDate) ? 'bg-sidebar' : 'bg-orange-50'}`}>
         {/* Header row with collapse/expand button */}
         {onToggleCompact && (
           <div className="flex items-center flex-shrink-0">
@@ -558,8 +566,11 @@ export function PatientCards({
         {Object.values(groupedAppointments).every(
           (arr) => arr.length === 0
         ) && (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            No appointments today
+          <div className="flex h-full items-center justify-center text-muted-foreground text-sm px-3 text-center">
+            {isToday(selectedDate)
+              ? "No appointments today"
+              : `No appointments on ${selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+            }
           </div>
         )}
         </ScrollableArea>

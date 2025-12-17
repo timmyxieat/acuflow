@@ -74,12 +74,16 @@ export { mockVisits } from "./visits";
 
 export {
   getEnrichedAppointments,
+  getAllEnrichedAppointments,
   getAppointmentById,
   getPatientTodayAppointmentId,
   getAppointmentsByStatus,
+  getAppointmentsByStatusForDate,
   getPatientConditionsWithMeasurements,
   getPatientPinnedNotes,
   searchPatients,
+  searchPatientsWithConditions,
+  getRecentPatients,
   getAppointmentsForDate,
   calculateAge,
   getPatientDisplayName,
@@ -88,6 +92,25 @@ export {
   getPatientVisitHistory,
   getVisitById,
   getPatientScheduledAppointments,
+  // Section-specific history helpers
+  getPatientSubjectiveHistory,
+  getPatientObjectiveHistory,
+  getPatientAssessmentHistory,
+  getPatientPlanHistory,
+  getPatientVitalsHistory,
+  getPatientTonguePulseHistory,
+  getPatientTCMPatterns,
+  getPatientICDCodes,
+  getPatientTreatmentHistory,
+  getConditionPainScores,
+  type SubjectiveHistory,
+  type VitalsHistory,
+  type TonguePulseHistory,
+  type TCMPattern,
+  type ICDCode,
+  type TreatmentHistory,
+  type PainScoreEntry,
+  type RecentPatient,
 } from "./helpers";
 
 // =============================================================================

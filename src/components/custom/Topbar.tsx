@@ -1,267 +1,155 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Search, X, User, Calendar, ArrowLeft } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { formatTime } from '@/lib/dev-time'
+import { Search, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
+import { useSearch } from '@/contexts/SearchContext'
 import { CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
-import {
-  searchPatients,
-  getAppointmentsForDate,
-  getPatientDisplayName,
-  calculateAge,
-  type Patient,
-  type AppointmentWithRelations,
-} from '@/data/mock-data'
-
-type SearchMode = 'patient' | 'date'
-
-interface SearchResult {
-  type: 'patient' | 'appointment'
-  patient: Patient
-  appointment?: AppointmentWithRelations
-}
+import { isToday, formatDateForUrl } from '@/lib/date-utils'
 
 export function Topbar() {
   const router = useRouter()
-  const { header, previousTitle } = useHeader()
+  const { header } = useHeader()
   const { startTransition, isTransitioning, transitionSource } = useTransition()
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [searchMode, setSearchMode] = useState<SearchMode>('patient')
-  const [query, setQuery] = useState('')
-  const [selectedDate, setSelectedDate] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
-  const inputRef = useRef<HTMLInputElement>(null)
-  const dateInputRef = useRef<HTMLInputElement>(null)
+  const { openSearch } = useSearch()
 
-  // Focus input when search opens
-  useEffect(() => {
-    if (isSearchOpen && searchMode === 'patient') {
-      inputRef.current?.focus()
-    } else if (isSearchOpen && searchMode === 'date') {
-      dateInputRef.current?.focus()
-    }
-  }, [isSearchOpen, searchMode])
+  const showBackToToday = header.showDateNavigation && header.selectedDate && !isToday(header.selectedDate)
 
-  // Search patients by text
-  useEffect(() => {
-    if (searchMode === 'patient' && query.length >= 2) {
-      const patients = searchPatients(query)
-      setResults(patients.map((p) => ({ type: 'patient', patient: p })))
-    } else if (searchMode === 'patient') {
-      setResults([])
-    }
-  }, [query, searchMode])
-
-  // Search by date
-  useEffect(() => {
-    if (searchMode === 'date' && selectedDate) {
-      const date = new Date(selectedDate)
-      const appointments = getAppointmentsForDate(date)
-      setResults(
-        appointments
-          .filter((a) => a.patient)
-          .map((a) => ({
-            type: 'appointment',
-            patient: a.patient!,
-            appointment: a,
-          }))
-      )
-    } else if (searchMode === 'date') {
-      setResults([])
-    }
-  }, [selectedDate, searchMode])
-
-  const handleClose = () => {
-    setIsSearchOpen(false)
-    setQuery('')
-    setSelectedDate('')
-    setResults([])
-  }
-
-  const handlePatientClick = (patient: Patient) => {
-    // TODO: Navigate to patient profile
-    console.log('Navigate to patient:', patient.id)
-    handleClose()
-  }
+  // Light orange background when viewing a non-today date
+  const headerBgClass = showBackToToday ? 'bg-orange-50' : 'bg-sidebar'
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-sidebar px-3">
-      {/* Page title area - contextual based on route */}
-      <div className="flex items-baseline gap-4">
+    <header className={`relative flex h-14 items-center border-b border-border px-3 ${headerBgClass}`}>
+      {/* Left area - Back button when on detail pages OR Back to Today when viewing other dates */}
+      <div className="flex-shrink-0">
         {header.showBackButton ? (
-          <>
-            <button
-              onClick={() => {
-                // Trigger back animation
-                startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back')
-                // Navigate back to Today with patient selection preserved
-                if (header.currentPatientId) {
-                  router.push(`/?patient=${header.currentPatientId}`)
-                } else {
-                  router.push('/')
-                }
-              }}
-              className="flex h-14 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Today</span>
-            </button>
-          </>
-        ) : (
-          <motion.div
-            className="flex items-baseline gap-4"
-            initial={isTransitioning && transitionSource === 'back' ? { x: -50, opacity: 0 } : false}
-            animate={{ x: 0, opacity: 1 }}
-            transition={CONTENT_SLIDE_ANIMATION.transition}
+          <button
+            onClick={() => {
+              // Trigger back animation
+              startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'back')
+              // Build URL with patient selection and date preserved
+              const params = new URLSearchParams()
+              if (header.currentPatientId) {
+                params.set('patient', header.currentPatientId)
+              }
+              if (header.currentDate && !isToday(header.currentDate)) {
+                params.set('date', formatDateForUrl(header.currentDate))
+              }
+              const url = params.toString() ? `/?${params.toString()}` : '/'
+              router.push(url)
+            }}
+            className="flex h-14 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <h1 className="text-xl font-semibold">{header.title || 'Today'}</h1>
-            <span className="text-sm text-muted-foreground">
-              {header.subtitle || new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </span>
-          </motion.div>
-        )}
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Today</span>
+          </button>
+        ) : showBackToToday ? (
+          <button
+            onClick={() => {
+              router.replace('/', { scroll: false })
+            }}
+            className="flex h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Today</span>
+          </button>
+        ) : null}
       </div>
 
-      {/* Search area */}
-      <div className="relative">
-        {!isSearchOpen ? (
-          <button
-            onClick={() => setIsSearchOpen(true)}
-            className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            <Search className="h-4 w-4" />
-            <span>Search patients...</span>
-            <kbd className="ml-2 hidden rounded bg-muted px-1.5 py-0.5 text-xs font-medium sm:inline-block">
-              ⌘K
-            </kbd>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            {/* Search mode toggle */}
-            <div className="flex rounded-lg border border-input bg-background p-1">
-              <button
-                onClick={() => {
-                  setSearchMode('patient')
-                  setResults([])
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  searchMode === 'patient'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <User className="h-3.5 w-3.5" />
-                Patient
-              </button>
-              <button
-                onClick={() => {
-                  setSearchMode('date')
-                  setResults([])
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                  searchMode === 'date'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Date
-              </button>
-            </div>
-
-            {/* Search input */}
-            <div className="relative">
-              {searchMode === 'patient' ? (
-                <div className="flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Name, phone, or email..."
-                    className="h-10 w-72 rounded-lg border border-input bg-background pl-9 pr-9 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              ) : (
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-10 w-72 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              )}
-
-              {/* Results dropdown */}
-              {results.length > 0 && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-border bg-popover p-2 shadow-lg">
-                  <div className="max-h-80 overflow-y-auto">
-                    {results.map((result, index) => (
-                      <button
-                        key={`${result.patient.id}-${index}`}
-                        onClick={() => handlePatientClick(result.patient)}
-                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent"
-                      >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
-                          <span className="text-sm font-medium">
-                            {result.patient.firstName[0]}
-                            {result.patient.lastName[0]}
-                          </span>
-                        </div>
-                        <div className="flex-1 overflow-hidden">
-                          <p className="truncate text-sm font-medium">
-                            {getPatientDisplayName(result.patient)}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {result.type === 'appointment' && result.appointment ? (
-                              <>
-                                {formatTime(result.appointment.scheduledStart)} -{' '}
-                                {result.appointment.appointmentType?.name}
-                              </>
-                            ) : (
-                              <>
-                                {calculateAge(result.patient.dateOfBirth)}yo •{' '}
-                                {result.patient.phone}
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* No results message */}
-              {((searchMode === 'patient' && query.length >= 2 && results.length === 0) ||
-                (searchMode === 'date' && selectedDate && results.length === 0)) && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-border bg-popover p-4 text-center shadow-lg">
-                  <p className="text-sm text-muted-foreground">No results found</p>
-                </div>
-              )}
-            </div>
-
-            {/* Close button */}
+      {/* Center area - Navigation controls and title (on Today screen) */}
+      {!header.showBackButton && header.showDateNavigation && (
+        <motion.div
+          className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center"
+          initial={isTransitioning && transitionSource === 'back' ? { y: -20, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={CONTENT_SLIDE_ANIMATION.transition}
+        >
+          {/* Navigation row */}
+          <div className="flex items-center gap-1">
+            {/* Week back */}
             <button
-              onClick={handleClose}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => header.onNavigateDate?.(-7)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Previous week"
             >
-              <X className="h-4 w-4" />
+              <ChevronsLeft className="h-5 w-5" />
+            </button>
+
+            {/* Day back */}
+            <button
+              onClick={() => header.onNavigateDate?.(-1)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Previous day"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            {/* Title - fixed width to prevent arrow shifting */}
+            <div className="flex flex-col items-center w-[200px]">
+              <h1 className="text-xl font-semibold">{header.title || 'Today'}</h1>
+              <span className="text-sm text-muted-foreground">
+                {header.subtitle || new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </span>
+            </div>
+
+            {/* Day forward */}
+            <button
+              onClick={() => header.onNavigateDate?.(1)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Next day"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+
+            {/* Week forward */}
+            <button
+              onClick={() => header.onNavigateDate?.(7)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Next week"
+            >
+              <ChevronsRight className="h-5 w-5" />
             </button>
           </div>
-        )}
+        </motion.div>
+      )}
+
+      {/* Center area - Simple title (for non-date-nav pages without back button) */}
+      {!header.showBackButton && !header.showDateNavigation && (
+        <motion.div
+          className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center"
+          initial={isTransitioning && transitionSource === 'back' ? { y: -20, opacity: 0 } : false}
+          animate={{ y: 0, opacity: 1 }}
+          transition={CONTENT_SLIDE_ANIMATION.transition}
+        >
+          <h1 className="text-xl font-semibold">{header.title || 'Today'}</h1>
+          <span className="text-sm text-muted-foreground">
+            {header.subtitle || new Date().toLocaleDateString('en-US', {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </span>
+        </motion.div>
+      )}
+
+      {/* Right area - Search button */}
+      <div className="ml-auto flex-shrink-0">
+        <button
+          onClick={openSearch}
+          className="flex h-10 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <Search className="h-4 w-4" />
+          <span>Search patients...</span>
+          <kbd className="ml-2 hidden rounded bg-muted px-1.5 py-0.5 text-xs font-medium sm:inline-block">
+            ⌘K
+          </kbd>
+        </button>
       </div>
     </header>
   )

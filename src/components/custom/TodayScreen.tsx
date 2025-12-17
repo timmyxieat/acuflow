@@ -6,9 +6,12 @@ import { motion } from 'framer-motion'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { useTransition } from '@/contexts/TransitionContext'
+import { useSearch } from '@/contexts/SearchContext'
+import { useHeader } from '@/contexts/HeaderContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
-import { getAppointmentsByStatus, getPatientTodayAppointmentId, type AppointmentWithRelations } from '@/data/mock-data'
+import { getAppointmentsByStatusForDate, getPatientTodayAppointmentId, type AppointmentWithRelations } from '@/data/mock-data'
+import { isToday, getDateTitle, getDateSubtitle, formatDateForUrl, parseDateFromUrl } from '@/lib/date-utils'
 
 // CSS clamp value for consistent responsive width
 const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
@@ -26,8 +29,46 @@ export function TodayScreen() {
     transitionSource,
     completeTransition,
   } = useTransition()
+  const { isOpen: isSearchOpen } = useSearch()
+  const { setHeader, resetHeader } = useHeader()
   const [, setHoveredAppointmentId, effectiveHoveredId] = useHoverWithKeyboardNav<string>()
   const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Parse selected date from URL (default to today)
+  const selectedDate = useMemo(() => {
+    const dateStr = searchParams.get('date')
+    return parseDateFromUrl(dateStr) ?? new Date()
+  }, [searchParams])
+
+  // Navigate to a different date
+  const navigateDate = useCallback((offset: number) => {
+    const newDate = new Date(selectedDate)
+    newDate.setDate(newDate.getDate() + offset)
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (isToday(newDate)) {
+      params.delete('date')
+    } else {
+      params.set('date', formatDateForUrl(newDate))
+    }
+
+    // Preserve patient selection if any
+    const newUrl = params.toString() ? `?${params.toString()}` : '/'
+    router.replace(newUrl, { scroll: false })
+  }, [selectedDate, searchParams, router])
+
+  // Update header with date navigation info
+  useEffect(() => {
+    setHeader({
+      title: getDateTitle(selectedDate),
+      subtitle: getDateSubtitle(selectedDate),
+      selectedDate,
+      onNavigateDate: navigateDate,
+      showDateNavigation: true,
+    })
+    return () => resetHeader()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]) // Only re-run when date changes
 
   // Read patient selection from URL query param
   // This runs when URL changes (e.g., navigating back from appointment detail)
@@ -58,7 +99,7 @@ export function TodayScreen() {
 
   // Get flat ordered list of all appointments (same order as PatientCards)
   const orderedAppointments = useMemo(() => {
-    const grouped = getAppointmentsByStatus()
+    const grouped = getAppointmentsByStatusForDate(selectedDate)
     return [
       ...grouped.inProgress,
       ...grouped.checkedIn,
@@ -66,7 +107,7 @@ export function TodayScreen() {
       ...grouped.unsigned,
       ...grouped.completed,
     ]
-  }, [])
+  }, [selectedDate])
 
   // Get flat ordered list of all appointment IDs (same order as PatientCards)
   const orderedAppointmentIds = useMemo(() => {
@@ -104,6 +145,12 @@ export function TodayScreen() {
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Don't handle keyboard events when search dialog is open
+    // Check both React state and DOM (DOM check is more reliable for timing)
+    if (isSearchOpen) return
+    const target = event.target as HTMLElement
+    if (target.closest('[role="dialog"]')) return
+
     // ESC: deselect the card and stay on Today
     if (event.key === 'Escape' && selectedAppointmentId) {
       setSelectedAppointmentId(null)
@@ -159,7 +206,7 @@ export function TodayScreen() {
       const patientId = appointmentToPatientId.get(newId)
       updateUrlSelection(newId, patientId)
     }
-  }, [selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode, updateUrlSelection, appointmentToPatientId])
+  }, [isSearchOpen, selectedAppointmentId, setSelectedAppointmentId, lastSelectedAppointmentId, router, orderedAppointmentIds, setKeyboardNavMode, updateUrlSelection, appointmentToPatientId])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -190,6 +237,7 @@ export function TodayScreen() {
       >
         <div className="h-full overflow-hidden">
           <PatientCards
+            date={selectedDate}
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={handleAppointmentHover}
             hoveredAppointmentId={effectiveHoveredId}
@@ -211,6 +259,7 @@ export function TodayScreen() {
         transition={CONTENT_SLIDE_ANIMATION.transition}
       >
         <Timeline
+          date={selectedDate}
           onAppointmentClick={handleAppointmentClick}
           onAppointmentHover={handleAppointmentHover}
           hoveredAppointmentId={effectiveHoveredId}

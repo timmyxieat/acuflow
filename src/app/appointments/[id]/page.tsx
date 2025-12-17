@@ -3,7 +3,7 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, ScheduleTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
+import { ScrollableArea, PatientCards, PatientContextAdaptive, BillingTab, CommsTab, ScheduleTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
 import { getBillingDataForAppointment, getPatientBillingHistory, type PatientBillingHistory } from '@/data/mock-billing'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
@@ -33,6 +33,7 @@ import {
   type SOAPData,
   type SOAPKey,
   type TabType,
+  type FocusedSection,
 } from './components'
 import { useTimer, usePageAnimations } from './hooks'
 import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS } from './lib/helpers'
@@ -130,6 +131,9 @@ export default function AppointmentDetailPage() {
   const [focusedSoapIndex, setFocusedSoapIndex] = useState(0)
   const [focusedVisitIndex, setFocusedVisitIndex] = useState(0)
   const [isEditingField, setIsEditingField] = useState(false)
+
+  // Focused SOAP section for adaptive Patient Context panel
+  const [focusedSection, setFocusedSection] = useState<FocusedSection>(null)
 
   // Refs for SOAP textareas
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
@@ -308,9 +312,14 @@ export default function AppointmentDetailPage() {
   }, [appointment?.status, appointment?.scheduledStart, appointment?.scheduledEnd, appointment?.appointmentType?.name])
 
   // Set the global header when this page mounts
+  // Include currentDate so back button returns to the correct day's view
   useEffect(() => {
     if (appointment) {
-      setHeader({ showBackButton: true, currentPatientId: appointment.patient?.id })
+      setHeader({
+        showBackButton: true,
+        currentPatientId: appointment.patient?.id,
+        currentDate: appointment.scheduledStart,
+      })
     }
     return () => { resetHeader() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,6 +485,16 @@ export default function AppointmentDetailPage() {
     setFocusedSoapIndex(index)
     setFocusZone('soap')
     setIsEditingField(true)
+  }, [])
+
+  // Handle SOAP section focus (for adaptive Patient Context)
+  const handleSectionFocus = useCallback((section: FocusedSection) => {
+    setFocusedSection(section)
+  }, [])
+
+  // Handle SOAP section blur (for adaptive Patient Context)
+  const handleSectionBlur = useCallback(() => {
+    setFocusedSection(null)
   }, [])
 
   // Handle "Use past treatment" button
@@ -644,6 +663,8 @@ export default function AppointmentDetailPage() {
                               isEditing={isEditingField}
                               textareaRefs={soapTextareaRefs}
                               onTextareaFocus={handleTextareaFocus}
+                              onSectionFocus={handleSectionFocus}
+                              onSectionBlur={handleSectionBlur}
                               saveStatus={saveStatus}
                               previewSlideDirection={previewSlideDirection}
                             />
@@ -664,10 +685,13 @@ export default function AppointmentDetailPage() {
                       transition={animations.transition}
                     >
                       {appointment.patient && (
-                        <PatientContext
+                        <PatientContextAdaptive
                           patient={appointment.patient}
-                          conditions={appointment.conditions}
+                          conditions={appointment.conditions ?? []}
                           contextData={getPatientContextData(appointment.patient.id)}
+                          focusedSection={focusedSection}
+                          appointmentId={appointmentId}
+                          visitHistory={getPatientVisitHistory(appointment.patient.id)}
                         />
                       )}
                     </motion.div>

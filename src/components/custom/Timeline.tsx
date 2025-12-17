@@ -6,12 +6,13 @@ import { getStatusColor } from '@/lib/constants'
 import { ClipboardCheck, RefreshCw, Sparkles, Calendar, Mars, Venus, ChevronUp, ChevronDown } from 'lucide-react'
 import { ScrollableArea, ScrollableAreaRef, ScrollPosition } from './ScrollableArea'
 import {
-  getEnrichedAppointments,
+  getAppointmentsForDate,
   getPatientDisplayName,
   calculateAge,
   type AppointmentWithRelations,
   AppointmentStatus,
 } from '@/data/mock-data'
+import { isToday } from '@/lib/date-utils'
 
 // Map appointment type IDs to icons
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -27,6 +28,8 @@ const DEFAULT_END_HOUR = 18 // 6 PM - business hours end
 const TOP_PADDING = 13 // h-3 (12px) + border (1px)
 
 interface TimelineProps {
+  /** The date to show appointments for (defaults to today) */
+  date?: Date
   onAppointmentClick?: (appointment: AppointmentWithRelations, rect?: DOMRect) => void
   onAppointmentDoubleClick?: (appointment: AppointmentWithRelations) => void
   onAppointmentHover?: (appointmentId: string | null) => void
@@ -116,17 +119,18 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
   return result
 }
 
-export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
+export function Timeline({ date, onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
   const scrollableRef = useRef<ScrollableAreaRef>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
   const [scrollPosition, setScrollPosition] = useState<ScrollPosition>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 })
 
+  const selectedDate = date ?? new Date()
   const appointments = useMemo(() => {
-    return getEnrichedAppointments().filter(
+    return getAppointmentsForDate(selectedDate).filter(
       (a) => a.status !== AppointmentStatus.CANCELLED && a.status !== AppointmentStatus.NO_SHOW
     )
-  }, [])
+  }, [selectedDate])
 
   // Calculate dynamic start/end hours based on appointments
   // Extends beyond business hours if appointments exist outside that range
@@ -251,11 +255,12 @@ export function Timeline({ onAppointmentClick, onAppointmentDoubleClick, onAppoi
   }, [])
 
   // Current time indicator (uses dev time in development)
+  // Only show for today's date
   const now = getDevDate()
   const currentHour = now.getHours()
   const currentMinutes = now.getMinutes()
   const currentTimeOffset = (currentHour - startHour) + (currentMinutes / 60)
-  const showCurrentTime = currentHour >= startHour && currentHour < endHour
+  const showCurrentTime = isToday(selectedDate) && currentHour >= startHour && currentHour < endHour
 
   // Handle scroll position updates from ScrollableArea
   const handleScroll = (position: ScrollPosition) => {
