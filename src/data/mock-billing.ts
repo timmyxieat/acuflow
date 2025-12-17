@@ -544,3 +544,95 @@ export function getBillingStatusPreview(billingData: BillingData): BillingStatus
   // pending
   return { text: `$${totalCharges.toFixed(0)} · Due`, color: 'text-amber-600' }
 }
+
+// =============================================================================
+// All Billing History Types & Functions
+// =============================================================================
+
+export interface BillingHistoryInvoice {
+  id: string
+  date: Date
+  appointmentType: string
+  total: number
+  status: InvoiceStatus
+  amountPaid: number
+  amountDue: number
+}
+
+export interface PatientBillingHistory {
+  invoices: BillingHistoryInvoice[]
+  totalOutstanding: number
+  totalPaid: number
+  packageCredits: number
+}
+
+/**
+ * Get all billing history for a patient (for "All" view)
+ */
+export function getPatientBillingHistory(patientId: string): PatientBillingHistory {
+  // Mock historical invoices for each patient
+  const now = new Date()
+  const mockHistories: Record<string, PatientBillingHistory> = {
+    'patient_001': {
+      invoices: [
+        { id: 'inv_001_1', date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+        { id: 'inv_001_2', date: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+        { id: 'inv_001_3', date: new Date(now.getTime() - 35 * 24 * 60 * 60 * 1000), appointmentType: 'Initial Consultation', total: 175, status: 'paid', amountPaid: 175, amountDue: 0 },
+      ],
+      totalOutstanding: 0,
+      totalPaid: 415,
+      packageCredits: 0,
+    },
+    'patient_002': {
+      invoices: [
+        { id: 'inv_002_1', date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'sent', amountPaid: 0, amountDue: 120 },
+        { id: 'inv_002_2', date: new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000), appointmentType: 'Initial Consultation', total: 175, status: 'partial', amountPaid: 75, amountDue: 100 },
+      ],
+      totalOutstanding: 220,
+      totalPaid: 75,
+      packageCredits: 0,
+    },
+    'patient_003': {
+      invoices: [
+        { id: 'inv_003_1', date: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+        { id: 'inv_003_2', date: new Date(now.getTime() - 24 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+      ],
+      totalOutstanding: 0,
+      totalPaid: 240,
+      packageCredits: 5,
+    },
+    'patient_004': {
+      invoices: [
+        { id: 'inv_004_1', date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'partial', amountPaid: 50, amountDue: 70 },
+        { id: 'inv_004_2', date: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000), appointmentType: 'Initial Consultation', total: 175, status: 'paid', amountPaid: 175, amountDue: 0 },
+      ],
+      totalOutstanding: 70,
+      totalPaid: 225,
+      packageCredits: 3,
+    },
+    'patient_005': {
+      invoices: [],
+      totalOutstanding: 0,
+      totalPaid: 0,
+      packageCredits: 0,
+    },
+    'patient_006': {
+      invoices: [
+        { id: 'inv_006_1', date: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), appointmentType: 'Brief Follow-up', total: 85, status: 'paid', amountPaid: 85, amountDue: 0 },
+        { id: 'inv_006_2', date: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+        { id: 'inv_006_3', date: new Date(now.getTime() - 26 * 24 * 60 * 60 * 1000), appointmentType: 'Follow-up Treatment', total: 120, status: 'paid', amountPaid: 120, amountDue: 0 },
+        { id: 'inv_006_4', date: new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000), appointmentType: 'Initial Consultation', total: 175, status: 'paid', amountPaid: 175, amountDue: 0 },
+      ],
+      totalOutstanding: 0,
+      totalPaid: 500,
+      packageCredits: 8,
+    },
+  }
+
+  return mockHistories[patientId] || {
+    invoices: [],
+    totalOutstanding: 0,
+    totalPaid: 0,
+    packageCredits: 0,
+  }
+}

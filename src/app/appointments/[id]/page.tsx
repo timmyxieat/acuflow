@@ -3,8 +3,8 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, ScheduleTab, type BillingData, type CommsData, type ScheduleData } from '@/components/custom'
-import { getBillingDataForAppointment } from '@/data/mock-billing'
+import { ScrollableArea, PatientCards, PatientContext, BillingTab, CommsTab, ScheduleTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
+import { getBillingDataForAppointment, getPatientBillingHistory, type PatientBillingHistory } from '@/data/mock-billing'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
@@ -112,6 +112,9 @@ export default function AppointmentDetailPage() {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>('medical')
+
+  // View scope state for tabs (This Visit / All toggle)
+  const [viewScope, setViewScope] = useState<ViewScope>('thisVisit')
 
   // State for SOAP note content
   const [soapData, setSoapData] = useState<SOAPData>({
@@ -225,6 +228,23 @@ export default function AppointmentDetailPage() {
     return getBillingDataForAppointment(appointmentId, patientId, isCompleted, usedEstim)
   }, [appointmentId, appointment?.patient?.id, appointment?.status, appointment?.usedEstim])
 
+  // Billing history for "All" view
+  const billingHistory: PatientBillingHistory = useMemo(() => {
+    const patientId = appointment?.patient?.id || ''
+    return getPatientBillingHistory(patientId)
+  }, [appointment?.patient?.id])
+
+  // Handle tab change - reset viewScope to "This Visit"
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab)
+    setViewScope('thisVisit')
+  }, [])
+
+  // Reset viewScope when appointment changes
+  useEffect(() => {
+    setViewScope('thisVisit')
+  }, [appointmentId])
+
   // Mock comms data
   const commsData: CommsData = useMemo(() => {
     const now = new Date()
@@ -279,9 +299,9 @@ export default function AppointmentDetailPage() {
       currentAppointment: { date: appointmentStart, startTime: appointmentStart, endTime: appointmentEnd, type: appointment?.appointmentType?.name ?? 'Follow-up Treatment', duration, confirmedAt },
       followUp: { recommendedInterval: '1 week', nextAvailable: new Date(oneWeekFromNow.setHours(10, 30, 0, 0)) },
       recentVisits: [
-        { date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
-        { date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
-        { date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), type: 'Initial Consultation', status: 'Completed' },
+        { id: 'visit_001', date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
+        { id: 'visit_002', date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
+        { id: 'visit_003', date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), type: 'Initial Consultation', status: 'Completed' },
       ],
       upcomingAppointments: [],
     }
@@ -665,7 +685,13 @@ export default function AppointmentDetailPage() {
 
               {activeTab === 'billing' && (
                 <div className="flex-1 overflow-hidden bg-background">
-                  <BillingTab appointmentId={appointmentId} billingData={billingData} />
+                  <BillingTab
+                    appointmentId={appointmentId}
+                    billingData={billingData}
+                    billingHistory={billingHistory}
+                    viewScope={viewScope}
+                    onViewScopeChange={setViewScope}
+                  />
                 </div>
               )}
 
@@ -675,6 +701,8 @@ export default function AppointmentDetailPage() {
                     appointmentId={appointmentId}
                     scheduleData={scheduleData}
                     patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                    viewScope={viewScope}
+                    onViewScopeChange={setViewScope}
                   />
                 </div>
               )}
@@ -685,6 +713,8 @@ export default function AppointmentDetailPage() {
                     appointmentId={appointmentId}
                     commsData={commsData}
                     patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
+                    viewScope={viewScope}
+                    onViewScopeChange={setViewScope}
                   />
                 </div>
               )}
@@ -693,7 +723,7 @@ export default function AppointmentDetailPage() {
             {/* Tab Bar */}
             <TabBar
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={handleTabChange}
               appointment={appointment}
               billingData={billingData}
               scheduleData={scheduleData}
