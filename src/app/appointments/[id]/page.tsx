@@ -726,6 +726,8 @@ interface AppointmentHeaderProps {
   visitCount: number
   firstVisitDate: Date | null
   activeTab: 'medical' | 'billing' | 'schedule' | 'comms'
+  slideDirection: 'up' | 'down' | null
+  transitionSource: 'today' | 'appointment' | 'scheduled' | 'back'
 }
 
 function getRelativeDay(date: Date): string {
@@ -754,7 +756,7 @@ function getRelativeDay(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-function AppointmentHeader({ appointment, visitCount, firstVisitDate, activeTab }: AppointmentHeaderProps) {
+function AppointmentHeader({ appointment, visitCount, firstVisitDate, activeTab, slideDirection, transitionSource }: AppointmentHeaderProps) {
   const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
   const statusColor = getStatusColor(appointment.status, appointment.isSigned)
 
@@ -778,6 +780,7 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate, activeTab 
   return (
     <div className="flex h-14 items-stretch border-b border-border">
       {/* Left section: Avatar + Patient name + demographics (matches Visit History panel width + border-r) */}
+      {/* This section does NOT animate for same-patient navigation */}
       <div className={`flex items-center gap-2 px-3 border-r border-border flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}>
         {/* Avatar */}
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
@@ -794,35 +797,75 @@ function AppointmentHeader({ appointment, visitCount, firstVisitDate, activeTab 
         </div>
       </div>
 
-      {/* Center section: Date + Time + Status + Action (matches SOAP Editor - flex-1, no borders) */}
-      <div className="flex flex-1 items-center justify-between px-3">
-        {/* Date · Relative on row 1, Time Range on row 2 */}
-        <div className="flex flex-col justify-center">
-          <div className="flex items-center gap-1.5 text-sm">
-            <span className="font-semibold">{dateStr}</span>
-            <span className="text-muted-foreground">· {relativeDay}</span>
+      {/* Center section: Date + Time + Status (animates on appointment change) */}
+      <AnimatePresence mode="wait" initial={true}>
+        <motion.div
+          key={`header-center-${appointment.id}`}
+          className="flex flex-1 items-center justify-between px-3"
+          initial={{
+            x: transitionSource === 'today' ? 100 : 0,
+            y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+              ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+              : 0,
+            opacity: 0,
+          }}
+          animate={{ x: 0, y: 0, opacity: 1 }}
+          exit={{
+            y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+              ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+              : 0,
+            opacity: 0,
+          }}
+          transition={SIDEBAR_ANIMATION.transition}
+        >
+          {/* Date · Relative on row 1, Time Range on row 2 */}
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="font-semibold">{dateStr}</span>
+              <span className="text-muted-foreground">· {relativeDay}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">{timeRange}</span>
           </div>
-          <span className="text-xs text-muted-foreground">{timeRange}</span>
-        </div>
 
-        {/* Status badge only - actions moved to FAB */}
-        <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
-          <div
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: statusColor }}
-          />
-          <span className="text-xs font-medium text-foreground">
-            {statusDisplay.label}
-          </span>
-        </div>
-      </div>
+          {/* Status badge only - actions moved to FAB */}
+          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: statusColor }}
+            />
+            <span className="text-xs font-medium text-foreground">
+              {statusDisplay.label}
+            </span>
+          </div>
+        </motion.div>
+      </AnimatePresence>
 
-      {/* Right section: Visit count + First visit date (only on Medical tab, matches Patient Context panel width) */}
+      {/* Right section: Visit count + First visit date (only on Medical tab, animates on appointment change) */}
       {activeTab === 'medical' && (
-        <div className={`flex flex-col justify-center px-3 border-l border-border flex-shrink-0 ${PANEL_WIDTH_CLASS}`}>
-          <span className="text-sm font-semibold">Visits ({visitCount})</span>
-          <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
-        </div>
+        <AnimatePresence mode="wait" initial={true}>
+          <motion.div
+            key={`header-right-${appointment.id}`}
+            className={`flex flex-col justify-center px-3 border-l border-border flex-shrink-0 ${PANEL_WIDTH_CLASS}`}
+            initial={{
+              x: transitionSource === 'today' ? 100 : 0,
+              y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
+                : 0,
+              opacity: 0,
+            }}
+            animate={{ x: 0, y: 0, opacity: 1 }}
+            exit={{
+              y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
+                ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
+                : 0,
+              opacity: 0,
+            }}
+            transition={SIDEBAR_ANIMATION.transition}
+          >
+            <span className="text-sm font-semibold">Visits ({visitCount})</span>
+            <span className="text-xs text-muted-foreground">{firstVisitStr}</span>
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   )
@@ -1740,6 +1783,8 @@ export default function AppointmentDetailPage() {
           visitCount={visitCount}
           firstVisitDate={firstVisitDate}
           activeTab={activeTab}
+          slideDirection={slideDirection}
+          transitionSource={transitionSource}
         />
 
         {/* Content columns below header */}
@@ -1852,21 +1897,21 @@ export default function AppointmentDetailPage() {
                   {/* Patient Context Panel */}
                   <AnimatePresence mode="wait" initial={true}>
                     <motion.div
-                      key={`context-${middlePanelKey}`}
+                      key={`context-${appointmentId}`}
                       className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
                       initial={{
-                        x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
-                        y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                        x: transitionSource === 'today' ? 100 : 0,
+                        y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
                           ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
                           : 0,
-                        opacity: shouldAnimateMiddlePanel ? 0 : 1,
+                        opacity: 0,
                       }}
                       animate={{ x: 0, y: 0, opacity: 1 }}
                       exit={{
-                        y: shouldAnimateMiddlePanel && transitionSource !== 'today'
+                        y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
                           ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
                           : 0,
-                        opacity: shouldAnimateMiddlePanel ? 0 : 1,
+                        opacity: 0,
                       }}
                       transition={SIDEBAR_ANIMATION.transition}
                     >
