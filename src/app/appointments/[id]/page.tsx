@@ -25,10 +25,9 @@ import {
 // Local components and hooks
 import {
   VisitTimeline,
-  AppointmentHeader,
   SOAPSections,
   FABPanel,
-  TabBar,
+  TopTabBar,
   type SOAPData,
   type SOAPKey,
   type TabType,
@@ -310,12 +309,28 @@ export default function AppointmentDetailPage() {
 
   // Set the global header when this page mounts
   // Include currentDate so back button returns to the correct day's view
+  // Include patient and appointment info for topbar display
   useEffect(() => {
     if (appointment) {
       setHeader({
         showBackButton: true,
         currentPatientId: appointment.patient?.id,
         currentDate: appointment.scheduledStart,
+        patient: appointment.patient ? {
+          id: appointment.patient.id,
+          firstName: appointment.patient.firstName,
+          lastName: appointment.patient.lastName,
+          preferredName: appointment.patient.preferredName ?? undefined,
+          dateOfBirth: new Date(appointment.patient.dateOfBirth),
+          sex: appointment.patient.sex ?? undefined,
+        } : undefined,
+        appointment: {
+          id: appointment.id,
+          scheduledStart: new Date(appointment.scheduledStart),
+          scheduledEnd: new Date(appointment.scheduledEnd),
+          status: appointment.status,
+          isSigned: appointment.isSigned,
+        },
       })
     }
     return () => { resetHeader() }

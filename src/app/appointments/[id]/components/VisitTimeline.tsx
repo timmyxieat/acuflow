@@ -21,40 +21,6 @@ import {
 } from '../lib/helpers'
 
 // =============================================================================
-// Timeline Section Component
-// =============================================================================
-
-interface TimelineSectionProps {
-  title: string
-  color: string
-  count: number
-  children: React.ReactNode
-}
-
-function TimelineSection({ title, color, count, children }: TimelineSectionProps) {
-  if (count === 0) return null
-
-  return (
-    <div className="flex flex-col gap-2">
-      {/* Section header - dot + title + count */}
-      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground pl-3">
-        <div
-          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: color }}
-        />
-        <span className="whitespace-nowrap">{title}</span>
-        <span>({count})</span>
-      </div>
-
-      {/* Cards container */}
-      <div className="flex flex-col">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// =============================================================================
 // Timeline Card Component
 // =============================================================================
 
@@ -73,6 +39,7 @@ interface TimelineCardProps {
   onClick?: () => void
   onHover?: (isHovered: boolean) => void
   color: string
+  statusDot?: { color: string; label: string }
 }
 
 function TimelineCard({
@@ -90,6 +57,7 @@ function TimelineCard({
   onClick,
   onHover,
   color,
+  statusDot,
 }: TimelineCardProps) {
   // Get appointment type icon
   const IconComponent = appointmentTypeId
@@ -147,8 +115,21 @@ function TimelineCard({
           <span className={`text-xs flex-shrink-0 ${isLocked ? 'text-muted-foreground/30' : 'text-muted-foreground'}`}>
             · {relativeDate}
           </span>
-          {/* Right side: icon + status indicators */}
-          <div className="ml-auto flex items-center gap-1">
+          {/* Right side: status dot + icon + lock indicator */}
+          <div className="ml-auto flex items-center gap-1.5">
+            {statusDot && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className="h-2 w-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: statusDot.color }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p className="text-xs">{statusDot.label}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             <IconComponent className={`h-3.5 w-3.5 flex-shrink-0 ${
               isEditing ? 'text-blue-600' :
               isLocked ? 'text-muted-foreground/30' :
@@ -249,58 +230,76 @@ export function VisitTimeline({
   const visitHistory = getPatientVisitHistory(patientId)
   const scheduledAppointments = getPatientScheduledAppointments(patientId, currentAppointmentId)
 
-  // Group scheduled appointments by status
-  const scheduledStatusAppts = scheduledAppointments.filter(a =>
-    a.status === 'SCHEDULED'
-  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+  // ===========================================
+  // UPCOMING: Today's appointments + Future scheduled
+  // ===========================================
 
-  const checkedInAppts = scheduledAppointments.filter(a =>
-    a.status === 'CHECKED_IN'
-  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+  // Today's appointments (any status)
+  const todayAppointments = scheduledAppointments
+    .filter(a => !a.isFuture)
+    .sort((a, b) => {
+      // Sort by status priority: in_progress > checked_in > scheduled > completed
+      const statusOrder: Record<string, number> = {
+        'IN_PROGRESS': 0,
+        'CHECKED_IN': 1,
+        'SCHEDULED': 2,
+        'COMPLETED': 3,
+      }
+      const aOrder = statusOrder[a.status] ?? 4
+      const bOrder = statusOrder[b.status] ?? 4
+      if (aOrder !== bOrder) return aOrder - bOrder
+      // Then by time
+      return new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime()
+    })
 
-  const inProgressAppts = scheduledAppointments.filter(a =>
-    a.status === 'IN_PROGRESS'
-  ).sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
+  // Future scheduled appointments
+  const futureAppointments = scheduledAppointments
+    .filter(a => a.isFuture && a.status === 'SCHEDULED')
+    .sort((a, b) => new Date(a.scheduledStart).getTime() - new Date(b.scheduledStart).getTime())
 
-  // Today's COMPLETED appointments
-  const completedTodayAppts = scheduledAppointments.filter(a =>
-    a.status === 'COMPLETED' && !a.isFuture
-  ).sort((a, b) => {
-    const aTime = a.completedAt?.getTime() ?? new Date(a.scheduledStart).getTime()
-    const bTime = b.completedAt?.getTime() ?? new Date(b.scheduledStart).getTime()
-    return bTime - aTime
-  })
+  // Combined upcoming
+  const upcomingAppointments = [...todayAppointments, ...futureAppointments]
 
-  const unsignedTodayAppts = completedTodayAppts.filter(a => !a.isSigned)
-  const signedTodayAppts = completedTodayAppts.filter(a => a.isSigned)
+  // ===========================================
+  // PAST: Visit history (before today)
+  // ===========================================
 
-  // Separate unsigned and signed visits
-  const unsignedVisits = visitHistory.filter(v => !v.appointment?.isSigned)
-  const completedVisits = visitHistory.filter(v => v.appointment?.isSigned)
+  // Past visits are already sorted by date descending in getPatientVisitHistory
+  const pastVisits = visitHistory
 
-  // Check for active today appointments
-  const todayAppointments = scheduledAppointments.filter(a => !a.isFuture)
+  // ===========================================
+  // Locked appointment logic (for future appointments)
+  // ===========================================
+
   const hasActiveTodayAppointment = todayAppointments.some(a =>
     a.status === 'SCHEDULED' ||
     a.status === 'CHECKED_IN' ||
     a.status === 'IN_PROGRESS'
   )
 
-  // Determine next available future appointment
-  const futureScheduledAppts = scheduledStatusAppts.filter(a => a.isFuture)
   const nextAvailableFutureId = hasActiveTodayAppointment
     ? null
-    : (futureScheduledAppts.length > 0 ? futureScheduledAppts[0].id : null)
+    : (futureAppointments.length > 0 ? futureAppointments[0].id : null)
 
-  // Check if editing a scheduled appointment
-  const isEditingScheduled = scheduledStatusAppts.some(a => a.id === currentAppointmentId)
+  const isAppointmentLocked = (appointment: ScheduledAppointmentWithType): boolean => {
+    if (!appointment.isFuture) return false
+    if (appointment.id === currentAppointmentId) return false
+    return appointment.id !== nextAvailableFutureId
+  }
 
-  // Auto-expand if editing a scheduled appointment
+  // Check if editing a future scheduled appointment
+  const isEditingFuture = futureAppointments.some(a => a.id === currentAppointmentId)
+
+  // Auto-expand if editing a future appointment
   useEffect(() => {
-    if (isEditingScheduled && !showFutureAppointments) {
+    if (isEditingFuture && !showFutureAppointments) {
       setShowFutureAppointments(true)
     }
-  }, [isEditingScheduled, showFutureAppointments, setShowFutureAppointments])
+  }, [isEditingFuture, showFutureAppointments, setShowFutureAppointments])
+
+  // ===========================================
+  // Handlers
+  // ===========================================
 
   const handleScheduledAppointmentClick = (appointmentId: string) => {
     if (onSelectScheduledAppointment) {
@@ -308,39 +307,59 @@ export function VisitTimeline({
     }
   }
 
-  // Track index for keyboard navigation
-  const getGlobalIndex = (section: 'unsigned' | 'completed', localIndex: number): number => {
-    if (section === 'unsigned') return localIndex
-    return unsignedVisits.length + localIndex
+  // ===========================================
+  // Rendering helpers
+  // ===========================================
+
+  const getStatusDot = (appointment: ScheduledAppointmentWithType): { color: string; label: string } | undefined => {
+    if (appointment.status === 'IN_PROGRESS') {
+      return { color: TIMELINE_COLORS.inProgress, label: 'In Progress' }
+    }
+    if (appointment.status === 'CHECKED_IN') {
+      return { color: TIMELINE_COLORS.checkedIn, label: 'Checked In' }
+    }
+    if (appointment.status === 'COMPLETED' && !appointment.isSigned) {
+      return { color: TIMELINE_COLORS.unsigned, label: 'Unsigned' }
+    }
+    return undefined
   }
 
-  // Determine if appointment is locked
-  const isAppointmentLocked = (appointment: ScheduledAppointmentWithType): boolean => {
-    if (!appointment.isFuture) return false
-    if (appointment.id === currentAppointmentId) return false
-    return appointment.id !== nextAvailableFutureId
+  const getCardColor = (appointment: ScheduledAppointmentWithType): string => {
+    if (appointment.id === currentAppointmentId) {
+      return TIMELINE_COLORS.editing
+    }
+    if (appointment.status === 'IN_PROGRESS') {
+      return TIMELINE_COLORS.inProgress
+    }
+    if (appointment.status === 'CHECKED_IN') {
+      return TIMELINE_COLORS.checkedIn
+    }
+    if (appointment.status === 'COMPLETED' && !appointment.isSigned) {
+      return TIMELINE_COLORS.unsigned
+    }
+    return TIMELINE_COLORS.scheduled
   }
 
-  const scheduledCount = scheduledStatusAppts.length
-  const unlockedScheduledAppts = scheduledStatusAppts.filter(a => !isAppointmentLocked(a))
-  const lockedScheduledAppts = scheduledStatusAppts.filter(a => isAppointmentLocked(a))
-  const lockedCount = lockedScheduledAppts.length
+  // Count locked future appointments for expand/collapse
+  const lockedFutureCount = futureAppointments.filter(a => isAppointmentLocked(a)).length
+  const visibleFutureAppointments = showFutureAppointments
+    ? futureAppointments
+    : futureAppointments.filter(a => !isAppointmentLocked(a))
+
+  // Build the visible upcoming list
+  const visibleUpcoming = [...todayAppointments, ...visibleFutureAppointments]
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* 1. Scheduled Section */}
-      {scheduledCount > 0 && (
+    <div className="flex flex-col gap-4">
+      {/* UPCOMING Section */}
+      {upcomingAppointments.length > 0 && (
         <div className="flex flex-col gap-2">
+          {/* Section header */}
           <div className="relative flex items-center px-3">
-            <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <div
-                className="h-2.5 w-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: TIMELINE_COLORS.scheduled }}
-              />
-              <span className="whitespace-nowrap">Scheduled</span>
-              <span>({scheduledCount})</span>
-            </div>
-            {lockedCount > 0 && (
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Upcoming
+            </h3>
+            {lockedFutureCount > 0 && (
               <button
                 onClick={() => setShowFutureAppointments(!showFutureAppointments)}
                 className="absolute right-0 top-1/2 -translate-y-1/2 flex h-11 w-11 items-center justify-end pr-3 text-muted-foreground hover:text-foreground transition-colors"
@@ -356,10 +375,12 @@ export function VisitTimeline({
             )}
           </div>
 
+          {/* Cards */}
           <div className="flex flex-col">
-            {(showFutureAppointments ? scheduledStatusAppts : unlockedScheduledAppts).map((appointment) => {
-              const isLocked = isAppointmentLocked(appointment)
+            {visibleUpcoming.map((appointment) => {
               const isEditing = appointment.id === currentAppointmentId
+              const isLocked = isAppointmentLocked(appointment)
+
               return (
                 <TimelineCard
                   key={appointment.id}
@@ -373,7 +394,8 @@ export function VisitTimeline({
                   onClick={!isEditing && !isLocked
                     ? () => handleScheduledAppointmentClick(appointment.id)
                     : undefined}
-                  color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.scheduled}
+                  color={getCardColor(appointment)}
+                  statusDot={!isEditing ? getStatusDot(appointment) : undefined}
                 />
               )
             })}
@@ -381,169 +403,66 @@ export function VisitTimeline({
         </div>
       )}
 
-      {/* 2. Checked In Section */}
-      {checkedInAppts.length > 0 && (
-        <TimelineSection
-          title="Checked In"
-          color={TIMELINE_COLORS.checkedIn}
-          count={checkedInAppts.length}
-        >
-          {checkedInAppts.map((appointment) => (
-            <TimelineCard
-              key={appointment.id}
-              id={appointment.id}
-              date={new Date(appointment.scheduledStart)}
-              startTime={new Date(appointment.scheduledStart)}
-              endTime={new Date(appointment.scheduledEnd)}
-              appointmentTypeId={appointment.appointmentType?.id}
-              isEditing={appointment.id === currentAppointmentId}
-              onClick={appointment.id !== currentAppointmentId
-                ? () => handleScheduledAppointmentClick(appointment.id)
-                : undefined}
-              color={appointment.id === currentAppointmentId
-                ? TIMELINE_COLORS.editing
-                : TIMELINE_COLORS.checkedIn}
-            />
-          ))}
-        </TimelineSection>
-      )}
+      {/* PAST Section */}
+      {pastVisits.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {/* Section header */}
+          <div className="flex items-center px-3">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Past
+            </h3>
+            <span className="ml-1.5 text-xs text-muted-foreground">
+              ({pastVisits.length})
+            </span>
+          </div>
 
-      {/* 3. In Progress Section */}
-      {inProgressAppts.length > 0 && (
-        <TimelineSection
-          title="In Progress"
-          color={TIMELINE_COLORS.inProgress}
-          count={inProgressAppts.length}
-        >
-          {inProgressAppts.map((appointment) => (
-            <TimelineCard
-              key={appointment.id}
-              id={appointment.id}
-              date={new Date(appointment.scheduledStart)}
-              startTime={new Date(appointment.scheduledStart)}
-              endTime={new Date(appointment.scheduledEnd)}
-              appointmentTypeId={appointment.appointmentType?.id}
-              isEditing={appointment.id === currentAppointmentId}
-              onClick={appointment.id !== currentAppointmentId
-                ? () => handleScheduledAppointmentClick(appointment.id)
-                : undefined}
-              color={appointment.id === currentAppointmentId
-                ? TIMELINE_COLORS.editing
-                : TIMELINE_COLORS.inProgress}
-            />
-          ))}
-        </TimelineSection>
-      )}
+          {/* Cards */}
+          <div className="flex flex-col">
+            {pastVisits.map((visit, index) => {
+              const isEditing = visit.appointment?.id === currentAppointmentId
+              const isUnsigned = !visit.appointment?.isSigned
 
-      {/* 4. Unsigned Section */}
-      {(unsignedTodayAppts.length > 0 || unsignedVisits.length > 0) && (
-        <TimelineSection
-          title="Unsigned"
-          color={TIMELINE_COLORS.unsigned}
-          count={unsignedTodayAppts.length + unsignedVisits.length}
-        >
-          {unsignedTodayAppts.map((appointment) => {
-            const isEditing = appointment.id === currentAppointmentId
-            return (
-              <TimelineCard
-                key={appointment.id}
-                id={appointment.id}
-                date={new Date(appointment.scheduledStart)}
-                startTime={new Date(appointment.scheduledStart)}
-                endTime={new Date(appointment.scheduledEnd)}
-                appointmentTypeId={appointment.appointmentType?.id}
-                isEditing={isEditing}
-                isUnsigned={true}
-                onClick={!isEditing
-                  ? () => handleScheduledAppointmentClick(appointment.id)
-                  : undefined}
-                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.unsigned}
-              />
-            )
-          })}
-          {unsignedVisits.map((visit, index) => (
-            <TimelineCard
-              key={visit.id}
-              id={visit.id}
-              date={visit.appointment?.scheduledStart
-                ? new Date(visit.appointment.scheduledStart)
-                : new Date(visit.createdAt)}
-              startTime={visit.appointment?.scheduledStart
-                ? new Date(visit.appointment.scheduledStart)
-                : new Date(visit.createdAt)}
-              endTime={visit.appointment?.scheduledEnd
-                ? new Date(visit.appointment.scheduledEnd)
-                : new Date(visit.createdAt)}
-              appointmentTypeId={visit.appointment?.appointmentType?.id}
-              isUnsigned={true}
-              isSelected={selectedVisitId === visit.id}
-              isHovered={hoveredVisitId === visit.id}
-              isFocused={isZoneFocused && focusedIndex === getGlobalIndex('unsigned', index)}
-              onClick={() => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('unsigned', index))}
-              onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-              color={TIMELINE_COLORS.unsigned}
-            />
-          ))}
-        </TimelineSection>
-      )}
-
-      {/* 5. Completed Section */}
-      {(signedTodayAppts.length > 0 || completedVisits.length > 0) && (
-        <TimelineSection
-          title="Completed"
-          color={TIMELINE_COLORS.completed}
-          count={signedTodayAppts.length + completedVisits.length}
-        >
-          {signedTodayAppts.map((appointment) => {
-            const isEditing = appointment.id === currentAppointmentId
-            return (
-              <TimelineCard
-                key={appointment.id}
-                id={appointment.id}
-                date={new Date(appointment.scheduledStart)}
-                startTime={new Date(appointment.scheduledStart)}
-                endTime={new Date(appointment.scheduledEnd)}
-                appointmentTypeId={appointment.appointmentType?.id}
-                isEditing={isEditing}
-                onClick={!isEditing
-                  ? () => handleScheduledAppointmentClick(appointment.id)
-                  : undefined}
-                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.completed}
-              />
-            )
-          })}
-          {completedVisits.map((visit, index) => {
-            const isEditing = visit.appointment?.id === currentAppointmentId
-            return (
-              <TimelineCard
-                key={visit.id}
-                id={visit.id}
-                date={visit.appointment?.scheduledStart
-                  ? new Date(visit.appointment.scheduledStart)
-                  : new Date(visit.createdAt)}
-                startTime={visit.appointment?.scheduledStart
-                  ? new Date(visit.appointment.scheduledStart)
-                  : new Date(visit.createdAt)}
-                endTime={visit.appointment?.scheduledEnd
-                  ? new Date(visit.appointment.scheduledEnd)
-                  : new Date(visit.createdAt)}
-                appointmentTypeId={visit.appointment?.appointmentType?.id}
-                isEditing={isEditing}
-                isSelected={selectedVisitId === visit.id}
-                isHovered={hoveredVisitId === visit.id}
-                isFocused={isZoneFocused && focusedIndex === getGlobalIndex('completed', index)}
-                onClick={!isEditing ? () => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, getGlobalIndex('completed', index)) : undefined}
-                onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
-                color={isEditing ? TIMELINE_COLORS.editing : TIMELINE_COLORS.completed}
-              />
-            )
-          })}
-        </TimelineSection>
+              return (
+                <TimelineCard
+                  key={visit.id}
+                  id={visit.id}
+                  date={visit.appointment?.scheduledStart
+                    ? new Date(visit.appointment.scheduledStart)
+                    : new Date(visit.createdAt)}
+                  startTime={visit.appointment?.scheduledStart
+                    ? new Date(visit.appointment.scheduledStart)
+                    : new Date(visit.createdAt)}
+                  endTime={visit.appointment?.scheduledEnd
+                    ? new Date(visit.appointment.scheduledEnd)
+                    : new Date(visit.createdAt)}
+                  appointmentTypeId={visit.appointment?.appointmentType?.id}
+                  isEditing={isEditing}
+                  isUnsigned={isUnsigned}
+                  isSelected={selectedVisitId === visit.id}
+                  isHovered={hoveredVisitId === visit.id}
+                  isFocused={isZoneFocused && focusedIndex === index}
+                  onClick={!isEditing
+                    ? () => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)
+                    : undefined}
+                  onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
+                  color={isEditing
+                    ? TIMELINE_COLORS.editing
+                    : isUnsigned
+                      ? TIMELINE_COLORS.unsigned
+                      : TIMELINE_COLORS.completed}
+                  statusDot={isUnsigned && !isEditing
+                    ? { color: TIMELINE_COLORS.unsigned, label: 'Unsigned' }
+                    : undefined}
+                />
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {/* Empty state */}
-      {visitHistory.length === 0 && scheduledAppointments.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center">
+      {upcomingAppointments.length === 0 && pastVisits.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-center mx-3">
           <p className="text-sm text-muted-foreground">
             First visit for this patient
           </p>

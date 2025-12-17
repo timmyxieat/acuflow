@@ -2,6 +2,25 @@
 
 import { createContext, useContext, useState, useCallback, useMemo, useRef, ReactNode } from 'react'
 
+// Patient info for appointment detail header
+interface PatientInfo {
+  id: string
+  firstName: string
+  lastName: string
+  preferredName?: string
+  dateOfBirth: Date
+  sex?: 'MALE' | 'FEMALE' | 'OTHER'
+}
+
+// Appointment info for appointment detail header
+interface AppointmentInfo {
+  id: string
+  scheduledStart: Date
+  scheduledEnd: Date
+  status: string
+  isSigned?: boolean
+}
+
 interface HeaderContent {
   // For default header (Today screen)
   title?: string
@@ -16,6 +35,9 @@ interface HeaderContent {
   selectedDate?: Date
   onNavigateDate?: (offset: number) => void
   showDateNavigation?: boolean
+  // Appointment detail page info
+  patient?: PatientInfo
+  appointment?: AppointmentInfo
 }
 
 interface HeaderContextType {
