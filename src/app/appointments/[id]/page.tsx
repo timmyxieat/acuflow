@@ -558,7 +558,7 @@ export default function AppointmentDetailPage() {
       >
         <div className="h-full">
           <PatientCards
-            date={new Date(appointment.scheduledStart)}
+            date={contextDate}
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={setHoveredAppointmentId}
             hoveredAppointmentId={effectiveHoveredAppointmentId}
