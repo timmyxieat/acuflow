@@ -10,7 +10,7 @@ import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { saveVisitSOAP, loadVisitSOAP } from '@/lib/api/visits'
-import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
+import { SIDEBAR_ANIMATION } from '@/lib/animations'
 import {
   getAppointmentById,
   getAppointmentsByStatus,
@@ -34,7 +34,7 @@ import {
   type SOAPKey,
   type TabType,
 } from './components'
-import { useTimer } from './hooks/useTimer'
+import { useTimer, usePageAnimations } from './hooks'
 import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS } from './lib/helpers'
 
 // =============================================================================
@@ -48,9 +48,6 @@ export default function AppointmentDetailPage() {
   const { setHeader, resetHeader } = useHeader()
   const {
     isTransitioning,
-    transitionSource,
-    transitionPatientId,
-    slideDirection,
     startTransition,
     setSlideDirection,
     setSelectedAppointmentId,
@@ -168,6 +165,12 @@ export default function AppointmentDetailPage() {
 
   // Find the appointment from mock data
   const appointment = getAppointmentById(appointmentId)
+
+  // Animation configurations from centralized hook
+  const animations = usePageAnimations({
+    appointmentId,
+    currentPatientId: appointment?.patient?.id ?? null,
+  })
 
   // Get flat ordered list of all appointments
   const orderedAppointmentIds = useMemo(() => {
@@ -509,24 +512,6 @@ export default function AppointmentDetailPage() {
     }
   }
 
-  // Animation flags
-  const shouldAnimateMiddlePanel = isTransitioning && (
-    transitionSource === 'today' ||
-    transitionSource === 'appointment' ||
-    (transitionSource === 'scheduled' && transitionPatientId !== null && transitionPatientId !== appointment?.patient?.id)
-  )
-
-  // Same patient navigation: either 'appointment' (Visit History click) or 'scheduled' with matching patient
-  const isSamePatientNavigation = transitionSource === 'appointment' || (
-    transitionSource === 'scheduled' &&
-    transitionPatientId !== null &&
-    transitionPatientId === appointment?.patient?.id
-  )
-
-  const middlePanelKey = isSamePatientNavigation
-    ? `patient-${appointment?.patient?.id}`
-    : appointmentId
-
   return (
     <div className="flex h-full overflow-hidden">
       {/* Patient Cards */}
@@ -559,39 +544,28 @@ export default function AppointmentDetailPage() {
 
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Header - animations handled internally by AppointmentHeader */}
+        {/* Header - receives animation configs from usePageAnimations hook */}
         <AppointmentHeader
           appointment={appointment}
           visitCount={visitCount}
           firstVisitDate={firstVisitDate}
           activeTab={activeTab}
-          transitionSource={transitionSource}
-          slideDirection={slideDirection}
-          isSamePatientNavigation={isSamePatientNavigation}
+          headerLeftConfig={animations.headerLeft}
+          headerCenterConfig={animations.headerCenter}
+          headerRightConfig={animations.headerRight}
         />
 
         {/* Content columns below header */}
         <div className="flex flex-1 overflow-hidden">
           {/* Visit History Panel */}
-          <AnimatePresence mode="wait" initial={true}>
+          <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
             <motion.div
-              key={middlePanelKey}
+              key={animations.visitHistory.key}
               className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
-              initial={{
-                x: shouldAnimateMiddlePanel && transitionSource === 'today' ? 100 : 0,
-                y: shouldAnimateMiddlePanel && transitionSource !== 'today'
-                  ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                  : 0,
-                opacity: shouldAnimateMiddlePanel ? 0 : 1,
-              }}
+              initial={animations.visitHistory.shouldAnimate ? animations.visitHistory.initial : false}
               animate={{ x: 0, y: 0, opacity: 1 }}
-              exit={{
-                y: shouldAnimateMiddlePanel && transitionSource !== 'today'
-                  ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                  : 0,
-                opacity: shouldAnimateMiddlePanel ? 0 : 1,
-              }}
-              transition={SIDEBAR_ANIMATION.transition}
+              exit={animations.visitHistory.shouldAnimate ? animations.visitHistory.exit : undefined}
+              transition={animations.transition}
             >
               <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
                 {appointment.patient && (
@@ -629,25 +603,14 @@ export default function AppointmentDetailPage() {
                 <>
                   {/* SOAP Notes Panel */}
                   <div className="flex flex-1 flex-col overflow-hidden bg-background">
-                    <AnimatePresence mode="wait" initial={true}>
+                    <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
                       <motion.div
-                        key={appointmentId}
+                        key={animations.soapPanel.key}
                         className="flex flex-1 flex-col overflow-hidden"
-                        initial={{
-                          x: transitionSource === 'today' ? 100 : 0,
-                          y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                            ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                            : 0,
-                          opacity: 0,
-                        }}
+                        initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
                         animate={{ x: 0, y: 0, opacity: 1 }}
-                        exit={{
-                          y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                            ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                            : 0,
-                          opacity: 0,
-                        }}
-                        transition={SIDEBAR_ANIMATION.transition}
+                        exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
+                        transition={animations.transition}
                       >
                         <ScrollableArea className="flex-1 pt-2 pb-4 px-3" deps={[appointmentId]}>
                           <div className="flex flex-col gap-4">
@@ -671,25 +634,14 @@ export default function AppointmentDetailPage() {
                   </div>
 
                   {/* Patient Context Panel */}
-                  <AnimatePresence mode="wait" initial={true}>
+                  <AnimatePresence mode="wait" initial={animations.patientContext.shouldAnimate}>
                     <motion.div
-                      key={`context-${appointmentId}`}
+                      key={animations.patientContext.key}
                       className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
-                      initial={{
-                        x: transitionSource === 'today' ? 100 : 0,
-                        y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                          ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                          : 0,
-                        opacity: 0,
-                      }}
+                      initial={animations.patientContext.shouldAnimate ? animations.patientContext.initial : false}
                       animate={{ x: 0, y: 0, opacity: 1 }}
-                      exit={{
-                        y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                          ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                          : 0,
-                        opacity: 0,
-                      }}
-                      transition={SIDEBAR_ANIMATION.transition}
+                      exit={animations.patientContext.shouldAnimate ? animations.patientContext.exit : undefined}
+                      transition={animations.transition}
                     >
                       {appointment.patient && (
                         <PatientContext
