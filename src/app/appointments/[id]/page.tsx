@@ -516,9 +516,12 @@ export default function AppointmentDetailPage() {
     (transitionSource === 'scheduled' && transitionPatientId !== null && transitionPatientId !== appointment?.patient?.id)
   )
 
-  const isSamePatientNavigation = transitionSource === 'scheduled' &&
+  // Same patient navigation: either 'appointment' (Visit History click) or 'scheduled' with matching patient
+  const isSamePatientNavigation = transitionSource === 'appointment' || (
+    transitionSource === 'scheduled' &&
     transitionPatientId !== null &&
     transitionPatientId === appointment?.patient?.id
+  )
 
   const middlePanelKey = isSamePatientNavigation
     ? `patient-${appointment?.patient?.id}`
@@ -556,34 +559,16 @@ export default function AppointmentDetailPage() {
 
       {/* Main content area */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <AnimatePresence mode="wait" initial={true}>
-          <motion.div
-            key={`header-${appointmentId}`}
-            initial={{
-              x: transitionSource === 'today' ? 100 : 0,
-              y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                ? CONTENT_SLIDE_ANIMATION.vertical.getInitial(slideDirection).y
-                : 0,
-              opacity: 0,
-            }}
-            animate={{ x: 0, y: 0, opacity: 1 }}
-            exit={{
-              y: (transitionSource === 'appointment' || transitionSource === 'scheduled')
-                ? CONTENT_SLIDE_ANIMATION.vertical.getExit(slideDirection).y
-                : 0,
-              opacity: 0,
-            }}
-            transition={SIDEBAR_ANIMATION.transition}
-          >
-            <AppointmentHeader
-              appointment={appointment}
-              visitCount={visitCount}
-              firstVisitDate={firstVisitDate}
-              activeTab={activeTab}
-            />
-          </motion.div>
-        </AnimatePresence>
+        {/* Header - animations handled internally by AppointmentHeader */}
+        <AppointmentHeader
+          appointment={appointment}
+          visitCount={visitCount}
+          firstVisitDate={firstVisitDate}
+          activeTab={activeTab}
+          transitionSource={transitionSource}
+          slideDirection={slideDirection}
+          isSamePatientNavigation={isSamePatientNavigation}
+        />
 
         {/* Content columns below header */}
         <div className="flex flex-1 overflow-hidden">
