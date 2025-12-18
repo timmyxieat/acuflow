@@ -175,3 +175,45 @@ export function formatTimer(seconds: number): string {
   const sign = seconds < 0 ? '-' : ''
   return `${sign}${mins}:${secs.toString().padStart(2, '0')}`
 }
+
+// =============================================================================
+// Patient Name Helpers
+// =============================================================================
+
+/**
+ * Get compact patient name that fits within maxLength
+ * Strategy:
+ * 1. If full name fits → return full name
+ * 2. If "FirstName L." fits → return that
+ * 3. If first name is too long → truncate first name + "L."
+ */
+export function getCompactPatientName(
+  firstName: string,
+  lastName: string,
+  preferredName?: string | null,
+  maxLength: number = 12
+): { display: string; full: string; isTruncated: boolean } {
+  const displayFirst = preferredName || firstName
+  const fullName = `${displayFirst} ${lastName}`
+
+  // Case 1: Full name fits
+  if (fullName.length <= maxLength) {
+    return { display: fullName, full: fullName, isTruncated: false }
+  }
+
+  const lastInitial = lastName.charAt(0).toUpperCase()
+  const compactName = `${displayFirst} ${lastInitial}.`
+
+  // Case 2: "FirstName L." fits
+  if (compactName.length <= maxLength) {
+    return { display: compactName, full: fullName, isTruncated: true }
+  }
+
+  // Case 3: First name too long - truncate it
+  // Reserve 3 chars for " L." and leave room for at least a few chars of first name
+  const maxFirstLen = maxLength - 3 // " L." = 3 chars
+  const truncatedFirst = displayFirst.slice(0, maxFirstLen)
+  const shortCompact = `${truncatedFirst} ${lastInitial}.`
+
+  return { display: shortCompact, full: fullName, isTruncated: true }
+}

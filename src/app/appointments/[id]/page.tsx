@@ -17,6 +17,8 @@ import {
   getPatientDisplayName,
   getPatientVisitHistory,
   getPatientContextData,
+  updateAppointmentStatus,
+  AppointmentStatus,
   type AppointmentWithRelations,
 } from '@/data/mock-data'
 import { parseDateFromUrl, formatDateForUrl } from '@/lib/date-utils'
@@ -33,7 +35,8 @@ import {
   type FocusedSection,
 } from './components'
 import { useTimer, usePageAnimations } from './hooks'
-import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, APPOINTMENT_INFO_WIDTH } from './lib/helpers'
+import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, APPOINTMENT_INFO_WIDTH, getCompactPatientName } from './lib/helpers'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 // =============================================================================
 // Main Page Component
@@ -139,8 +142,12 @@ export default function AppointmentDetailPage() {
   // Hover state with keyboard nav awareness
   const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
 
-  // Find the appointment from mock data
-  const appointment = getAppointmentById(appointmentId)
+  // Force re-render when status changes (for mock data mutations)
+  const [statusUpdateKey, setStatusUpdateKey] = useState(0)
+
+  // Find the appointment from mock data (re-fetch when statusUpdateKey changes)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const appointment = useMemo(() => getAppointmentById(appointmentId), [appointmentId, statusUpdateKey])
 
   // Animation configurations from centralized hook
   const animations = usePageAnimations({
@@ -183,6 +190,15 @@ export default function AppointmentDetailPage() {
     setActiveTab(tab)
     setViewScope('thisVisit')
   }, [])
+
+  // Handle status change from TopTabBar
+  const handleStatusChange = useCallback((newStatus: AppointmentStatus, newIsSigned: boolean) => {
+    const success = updateAppointmentStatus(appointmentId, newStatus, newIsSigned)
+    if (success) {
+      // Force re-render to pick up the updated mock data
+      setStatusUpdateKey(prev => prev + 1)
+    }
+  }, [appointmentId])
 
   // Reset viewScope when appointment changes
   useEffect(() => {
@@ -469,23 +485,54 @@ export default function AppointmentDetailPage() {
             transition={animations.transition}
           >
             {/* Patient Info Header */}
-            {appointment.patient && (
-              <div className="flex items-center gap-2 px-3 h-14 border-b border-border flex-shrink-0">
-                {/* Avatar */}
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                  {`${appointment.patient.firstName?.[0] || ''}${appointment.patient.lastName?.[0] || ''}`.toUpperCase()}
+            {appointment.patient && (() => {
+              const patient = appointment.patient
+              const { display, full, isTruncated } = getCompactPatientName(
+                patient.firstName,
+                patient.lastName,
+                patient.preferredName
+              )
+              const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
+              const age = patient.dateOfBirth
+                ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                : null
+              const sex = patient.sex === 'FEMALE' ? 'Female' : patient.sex === 'MALE' ? 'Male' : null
+              const demographics = [age ? `${age} yo` : null, sex].filter(Boolean).join(', ')
+
+              return (
+                <div className="flex items-center gap-2 px-3 h-14 border-b border-border flex-shrink-0">
+                  {/* Avatar */}
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                    {initials}
+                  </div>
+                  {/* Patient name + demographics */}
+                  <div className="flex flex-col min-w-0">
+                    {isTruncated ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
+                            {display}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent side="bottom" align="start" className="w-auto p-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-sm font-semibold">{full}</span>
+                            {demographics && (
+                              <span className="text-xs text-muted-foreground">{demographics}</span>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <span className="text-sm font-semibold">{display}</span>
+                    )}
+                    {demographics && (
+                      <span className="text-xs text-muted-foreground">{demographics}</span>
+                    )}
+                  </div>
                 </div>
-                {/* Patient name + demographics */}
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-semibold truncate">{getPatientDisplayName(appointment.patient)}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {appointment.patient.dateOfBirth ? `${Math.floor((Date.now() - new Date(appointment.patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} yo` : ''}
-                    {appointment.patient.sex && appointment.patient.dateOfBirth ? ', ' : ''}
-                    {appointment.patient.sex === 'FEMALE' ? 'Female' : appointment.patient.sex === 'MALE' ? 'Male' : ''}
-                  </span>
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Visit Timeline */}
             <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
@@ -510,6 +557,7 @@ export default function AppointmentDetailPage() {
             billingData={billingData}
             scheduleData={scheduleData}
             commsData={commsData}
+            onStatusChange={handleStatusChange}
           />
 
           {/* Tab Content Area */}

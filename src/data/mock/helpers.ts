@@ -977,3 +977,62 @@ export function getConditionPainScores(conditionId: string): PainScoreEntry[] {
     conditionId: m.conditionId,
   }));
 }
+
+// =============================================================================
+// MOCK DATA MUTATIONS (for UI state changes - not persisted)
+// =============================================================================
+
+/**
+ * Update appointment status in mock data
+ * This mutates the mock data in-memory (not persisted across reloads)
+ */
+export function updateAppointmentStatus(
+  appointmentId: string,
+  newStatus: AppointmentStatus,
+  isSigned: boolean
+): boolean {
+  // Search in today's appointments
+  const todayIndex = mockAppointments.findIndex((a) => a.id === appointmentId);
+  if (todayIndex !== -1) {
+    const now = new Date();
+    const appt = mockAppointments[todayIndex];
+
+    // Update status and related timestamps based on transition
+    appt.status = newStatus;
+    appt.isSigned = isSigned;
+
+    // Set timestamps based on status
+    if (newStatus === AppointmentStatus.CHECKED_IN && !appt.checkedInAt) {
+      appt.checkedInAt = now;
+    }
+    if (newStatus === AppointmentStatus.IN_PROGRESS && !appt.startedAt) {
+      appt.startedAt = now;
+    }
+    if (newStatus === AppointmentStatus.COMPLETED && !appt.completedAt) {
+      appt.completedAt = now;
+    }
+
+    appt.updatedAt = now;
+    return true;
+  }
+
+  // Search in future appointments
+  const futureIndex = mockFutureAppointments.findIndex((a) => a.id === appointmentId);
+  if (futureIndex !== -1) {
+    mockFutureAppointments[futureIndex].status = newStatus;
+    mockFutureAppointments[futureIndex].isSigned = isSigned;
+    mockFutureAppointments[futureIndex].updatedAt = new Date();
+    return true;
+  }
+
+  // Search in past appointments
+  const pastIndex = mockPastAppointments.findIndex((a) => a.id === appointmentId);
+  if (pastIndex !== -1) {
+    mockPastAppointments[pastIndex].status = newStatus;
+    mockPastAppointments[pastIndex].isSigned = isSigned;
+    mockPastAppointments[pastIndex].updatedAt = new Date();
+    return true;
+  }
+
+  return false;
+}

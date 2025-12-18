@@ -2,10 +2,11 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatTime } from '@/lib/dev-time'
-import { getStatusDisplay, getPatientDisplayName, calculateAge, type AppointmentWithRelations } from '@/data/mock-data'
+import { getStatusDisplay, calculateAge, type AppointmentWithRelations } from '@/data/mock-data'
 import { getStatusColor } from '@/lib/constants'
-import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, getRelativeDay } from '../lib/helpers'
+import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, getRelativeDay, getCompactPatientName } from '../lib/helpers'
 import { type AnimationConfig, pageTransition } from '../lib/animation-config'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 // =============================================================================
 // Appointment Header Component
@@ -41,7 +42,9 @@ export function AppointmentHeader({
 
   // Patient info
   const patient = appointment.patient
-  const patientName = patient ? getPatientDisplayName(patient) : 'Unknown Patient'
+  const { display: displayName, full: fullName, isTruncated } = patient
+    ? getCompactPatientName(patient.firstName, patient.lastName, patient.preferredName)
+    : { display: 'Unknown Patient', full: 'Unknown Patient', isTruncated: false }
   const initials = patient
     ? `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
     : '??'
@@ -70,7 +73,31 @@ export function AppointmentHeader({
           </div>
           {/* Patient name + demographics */}
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold truncate">{patientName}</span>
+            {isTruncated ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
+                    {displayName}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="bottom"
+                  align="start"
+                  className="w-auto p-3"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold">{fullName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {patient?.dateOfBirth ? `${calculateAge(patient.dateOfBirth)} yo` : ''}
+                      {patient?.sex && patient?.dateOfBirth ? ', ' : ''}
+                      {patient?.sex === 'FEMALE' ? 'Female' : patient?.sex === 'MALE' ? 'Male' : ''}
+                    </span>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <span className="text-sm font-semibold">{displayName}</span>
+            )}
             <span className="text-xs text-muted-foreground">
               {patient?.dateOfBirth ? `${calculateAge(patient.dateOfBirth)} yo` : ''}
               {patient?.sex && patient?.dateOfBirth ? ', ' : ''}

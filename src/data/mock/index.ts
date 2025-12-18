@@ -103,6 +103,8 @@ export {
   getPatientICDCodes,
   getPatientTreatmentHistory,
   getConditionPainScores,
+  // Mock data mutations
+  updateAppointmentStatus,
   type SubjectiveHistory,
   type VitalsHistory,
   type TonguePulseHistory,

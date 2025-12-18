@@ -1,6 +1,7 @@
 'use client'
 
-import { ClipboardCheck, CreditCard, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ClipboardCheck, CreditCard, MessageSquare, ChevronDown, Check, ArrowRight } from 'lucide-react'
 import { formatTime } from '@/lib/dev-time'
 import { type AppointmentWithRelations } from '@/data/mock-data'
 import { AppointmentStatus } from '@/generated/prisma/browser'
@@ -25,14 +26,14 @@ export interface TopTabBarProps {
   billingData: BillingData
   scheduleData: ScheduleData
   commsData: CommsData
-  onStatusChange?: (direction: 'prev' | 'next') => void
+  onStatusChange?: (newStatus: AppointmentStatus, newIsSigned: boolean) => void
 }
 
 // =============================================================================
-// Status Slider Component
+// Status Dropdown & Action Button Components
 // =============================================================================
 
-// Status order for the slider
+// Status order for dropdown and action button
 const STATUS_ORDER = [
   { label: 'Scheduled', status: AppointmentStatus.SCHEDULED, isSigned: false },
   { label: 'Checked In', status: AppointmentStatus.CHECKED_IN, isSigned: false },
@@ -40,6 +41,14 @@ const STATUS_ORDER = [
   { label: 'Unsigned', status: AppointmentStatus.COMPLETED, isSigned: false },
   { label: 'Completed', status: AppointmentStatus.COMPLETED, isSigned: true },
 ]
+
+// Action button labels for advancing to next status
+const NEXT_ACTION_LABELS: Record<string, string> = {
+  'Scheduled': 'Check In',
+  'Checked In': 'Start',
+  'In Progress': 'Complete',
+  'Unsigned': 'Sign Note',
+}
 
 function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
   if (status === AppointmentStatus.SCHEDULED) return 0
@@ -50,62 +59,108 @@ function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
   return 0 // Default for CANCELLED, NO_SHOW
 }
 
-interface StatusSliderProps {
+interface StatusControlsProps {
   status: AppointmentStatus
   isSigned: boolean
-  onPrev?: () => void
-  onNext?: () => void
+  onStatusChange?: (newStatus: AppointmentStatus, newIsSigned: boolean) => void
 }
 
-function StatusSlider({ status, isSigned, onPrev, onNext }: StatusSliderProps) {
+function StatusControls({ status, isSigned, onStatusChange }: StatusControlsProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   const currentIndex = getStatusIndex(status, isSigned)
   const statusColor = getStatusColor(status, isSigned)
   const currentLabel = STATUS_ORDER[currentIndex]?.label ?? 'Unknown'
 
-  const canGoPrev = currentIndex > 0
-  const canGoNext = currentIndex < STATUS_ORDER.length - 1
+  const canAdvance = currentIndex < STATUS_ORDER.length - 1
+  const nextActionLabel = NEXT_ACTION_LABELS[currentLabel]
 
-  const prevLabel = canGoPrev ? STATUS_ORDER[currentIndex - 1].label : null
-  const nextLabel = canGoNext ? STATUS_ORDER[currentIndex + 1].label : null
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleStatusSelect = (index: number) => {
+    const selected = STATUS_ORDER[index]
+    onStatusChange?.(selected.status, selected.isSigned)
+    setIsOpen(false)
+  }
+
+  const handleAdvance = () => {
+    if (canAdvance) {
+      const next = STATUS_ORDER[currentIndex + 1]
+      onStatusChange?.(next.status, next.isSigned)
+    }
+  }
 
   return (
-    <div className="flex items-center gap-1">
-      {/* Previous button */}
-      <button
-        onClick={onPrev}
-        disabled={!canGoPrev}
-        className={`flex items-center justify-center h-11 w-8 rounded-l-md transition-colors ${
-          canGoPrev
-            ? 'hover:bg-muted/70 text-muted-foreground hover:text-foreground'
-            : 'text-muted-foreground/30 cursor-not-allowed'
-        }`}
-        title={prevLabel ? `Back to ${prevLabel}` : undefined}
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
+    <div className="flex items-center gap-2">
+      {/* Status dropdown - 44px touch target with 8px visual padding */}
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="h-11 flex items-center"
+        >
+          <span className="flex items-center gap-1.5 px-2 py-2 rounded-md hover:bg-muted/70 transition-colors">
+            <span
+              className="h-2 w-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: statusColor }}
+            />
+            <span className="text-xs font-medium whitespace-nowrap">{currentLabel}</span>
+            <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
 
-      {/* Current status */}
-      <div className="flex items-center gap-1.5 px-2 min-w-[100px] justify-center">
-        <div
-          className="h-2 w-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: statusColor }}
-        />
-        <span className="text-xs font-medium whitespace-nowrap">{currentLabel}</span>
+        {/* Dropdown menu */}
+        {isOpen && (
+          <div className="absolute top-full left-0 mt-1 bg-popover border border-border rounded-md shadow-md py-1 z-50 min-w-[140px]">
+            {STATUS_ORDER.map((item, index) => {
+              const isCurrentStatus = index === currentIndex
+              const itemColor = getStatusColor(item.status, item.isSigned)
+              return (
+                <button
+                  key={`${item.status}-${item.isSigned}`}
+                  onClick={() => handleStatusSelect(index)}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/70 transition-colors ${
+                    isCurrentStatus ? 'bg-muted/50' : ''
+                  }`}
+                >
+                  <div
+                    className="h-2 w-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: itemColor }}
+                  />
+                  <span className="text-xs font-medium flex-1">{item.label}</span>
+                  {isCurrentStatus && <Check className="h-3 w-3 text-primary" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Next button */}
-      <button
-        onClick={onNext}
-        disabled={!canGoNext}
-        className={`flex items-center justify-center h-11 w-8 rounded-r-md transition-colors ${
-          canGoNext
-            ? 'hover:bg-muted/70 text-muted-foreground hover:text-foreground'
-            : 'text-muted-foreground/30 cursor-not-allowed'
-        }`}
-        title={nextLabel ? `Advance to ${nextLabel}` : undefined}
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
+      {/* Action button to advance - 44px touch target with 8px visual padding */}
+      {canAdvance && (
+        <button
+          onClick={handleAdvance}
+          className="h-11 flex items-center"
+        >
+          <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+            <ArrowRight className="h-3 w-3" />
+            <span
+              className="h-2 w-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: getStatusColor(STATUS_ORDER[currentIndex + 1].status, STATUS_ORDER[currentIndex + 1].isSigned) }}
+            />
+            <span>{STATUS_ORDER[currentIndex + 1].label}</span>
+          </span>
+        </button>
+      )}
     </div>
   )
 }
@@ -153,12 +208,11 @@ export function TopTabBar({
           <span className="text-xs text-muted-foreground">{timeRange}</span>
         </div>
 
-        {/* Status slider on right */}
-        <StatusSlider
+        {/* Status controls on right */}
+        <StatusControls
           status={appointment.status}
           isSigned={appointment.isSigned}
-          onPrev={() => onStatusChange?.('prev')}
-          onNext={() => onStatusChange?.('next')}
+          onStatusChange={onStatusChange}
         />
       </div>
 
