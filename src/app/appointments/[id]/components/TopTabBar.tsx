@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ClipboardCheck, CreditCard, MessageSquare, ChevronDown, Check, ArrowRight } from 'lucide-react'
+import { ClipboardCheck, CreditCard, MessageSquare, ChevronDown, Check } from 'lucide-react'
 import { formatTime } from '@/lib/dev-time'
 import { type AppointmentWithRelations } from '@/data/mock-data'
 import { AppointmentStatus } from '@/generated/prisma/browser'
@@ -47,7 +47,7 @@ const NEXT_ACTION_LABELS: Record<string, string> = {
   'Scheduled': 'Check In',
   'Checked In': 'Start',
   'In Progress': 'Complete',
-  'Unsigned': 'Sign Note',
+  'Unsigned': 'Sign',
 }
 
 function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
@@ -108,13 +108,15 @@ function StatusControls({ status, isSigned, onStatusChange }: StatusControlsProp
           onClick={() => setIsOpen(!isOpen)}
           className="h-11 flex items-center"
         >
-          <span className="flex items-center gap-1.5 px-2 py-2 rounded-md hover:bg-muted/70 transition-colors">
-            <span
-              className="h-2 w-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: statusColor }}
-            />
-            <span className="text-xs font-medium whitespace-nowrap">{currentLabel}</span>
-            <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <span className="flex items-center justify-between gap-1.5 w-[100px] px-2 py-2 rounded-md hover:bg-muted/70 transition-colors">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: statusColor }}
+              />
+              <span className="text-xs font-medium whitespace-nowrap">{currentLabel}</span>
+            </span>
+            <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
           </span>
         </button>
 
@@ -146,18 +148,17 @@ function StatusControls({ status, isSigned, onStatusChange }: StatusControlsProp
       </div>
 
       {/* Action button to advance - 44px touch target with 8px visual padding */}
-      {canAdvance && (
+      {canAdvance && nextActionLabel && (
         <button
           onClick={handleAdvance}
           className="h-11 flex items-center"
         >
-          <span className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <ArrowRight className="h-3 w-3" />
+          <span className="flex items-center justify-center gap-1.5 w-[90px] px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+            <span>{nextActionLabel}</span>
             <span
               className="h-2 w-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: getStatusColor(STATUS_ORDER[currentIndex + 1].status, STATUS_ORDER[currentIndex + 1].isSigned) }}
             />
-            <span>{STATUS_ORDER[currentIndex + 1].label}</span>
           </span>
         </button>
       )}
