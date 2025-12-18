@@ -59,6 +59,8 @@ interface PatientCardsProps {
   compact?: boolean;
   /** Callback to toggle compact/expanded mode */
   onToggleCompact?: () => void;
+  /** Hide the header (date display and collapse button) */
+  hideHeader?: boolean;
   /** Active timer state from FAB - synced across components */
   activeTimerAppointmentId?: string;
   activeTimerSeconds?: number | null;
@@ -386,6 +388,7 @@ export function PatientCards({
   selectedPatientId,
   compact,
   onToggleCompact,
+  hideHeader,
   activeTimerAppointmentId,
   activeTimerSeconds,
   isTimerRunning,
@@ -449,26 +452,38 @@ export function PatientCards({
   return (
     <LayoutGroup>
       <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
-        {/* Header row with collapse/expand button */}
-        {onToggleCompact && (
-          <div className="flex items-center flex-shrink-0">
+        {/* Header row with date info and collapse/expand button */}
+        {onToggleCompact && !hideHeader && (
+          <div className="flex items-center justify-between flex-shrink-0 h-11 px-3">
+            {/* Date display - only show in expanded mode */}
+            {!compact && (
+              <span className="text-sm font-medium text-muted-foreground">
+                {isToday(selectedDate) ? "Today" : selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                {" "}
+                <span className="font-normal">
+                  ({groupedAppointments.inProgress.length +
+                   groupedAppointments.checkedIn.length +
+                   groupedAppointments.scheduled.length +
+                   groupedAppointments.unsigned.length +
+                   groupedAppointments.completed.length})
+                </span>
+              </span>
+            )}
+            {/* Collapse/expand button */}
             <button
               onClick={onToggleCompact}
-              className="flex h-12 w-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
+              className={`flex h-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${
+                compact ? "w-full" : "w-11"
+              }`}
               aria-label={compact ? "Expand patient cards" : "Collapse patient cards"}
             >
-              {/* Chevron animation:
-                  - x: 0 = left aligned (expanded), 12 = centered in 64px collapsed panel
-                  - Only animate during navigation if collapsed state is actually changing
-                  - On fresh page load or same collapsed state, skip animation */}
               <motion.div
                 initial={
                   shouldAnimateChevron
-                    ? { x: compact ? 0 : 12, rotate: compact ? 0 : 180 }
+                    ? { rotate: compact ? 0 : 180 }
                     : false
                 }
                 animate={{
-                  x: compact ? 12 : 0,
                   rotate: compact ? 180 : 0
                 }}
                 transition={SPRING_TRANSITION}
@@ -479,7 +494,7 @@ export function PatientCards({
           </div>
         )}
         <ScrollableArea
-          className="flex flex-col gap-3 pb-3"
+          className="flex flex-col gap-3 py-3"
           deps={[groupedAppointments]}
           hideScrollbar
         >

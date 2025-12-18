@@ -45,7 +45,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
   const [isKeyboardNavMode, setIsKeyboardNavMode] = useState(false)
   const [showFutureAppointments, setShowFutureAppointments] = useState(false)
   const [transitionPatientId, setTransitionPatientId] = useState<string | null>(null)
-  const [isPatientCardsCollapsed, setPatientCardsCollapsedState] = useState(true) // Start collapsed on appointment detail
+  const [isPatientCardsCollapsed, setPatientCardsCollapsedState] = useState(false) // Start expanded, preserve across navigation
   const [previousPatientCardsCollapsed, setPreviousPatientCardsCollapsed] = useState<boolean | null>(null)
 
   // Global mouse move listener to exit keyboard nav mode

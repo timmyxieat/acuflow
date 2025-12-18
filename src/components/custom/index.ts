@@ -19,3 +19,5 @@ export { CommsTab, getCommsStatusPreview, type CommsData, type ConfirmationStatu
 export { ScheduleTab, getScheduleStatusPreview, type ScheduleData, type ScheduleAppointment, type FollowUpInfo, type RecentVisit, type UpcomingAppointment, type ScheduleStatusPreview } from './ScheduleTab'
 export { SegmentedToggle, type ViewScope, type SegmentedToggleProps } from './SegmentedToggle'
 export { DatePicker } from './DatePicker'
+export { TimelineHeader } from './TimelineHeader'
+export { PatientNavHeader } from './PatientNavHeader'

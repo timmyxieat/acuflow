@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
+import { TimelineHeader } from './TimelineHeader'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useSearch } from '@/contexts/SearchContext'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { SIDEBAR_ANIMATION, CONTENT_SLIDE_ANIMATION } from '@/lib/animations'
 import { getAppointmentsByStatusForDate, getPatientTodayAppointmentId, type AppointmentWithRelations } from '@/data/mock-data'
-import { isToday, getDateTitle, getDateSubtitle, formatDateForUrl, parseDateFromUrl } from '@/lib/date-utils'
+import { isToday, formatDateForUrl, parseDateFromUrl } from '@/lib/date-utils'
 
 // CSS clamp value for consistent responsive width
 const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
@@ -28,11 +29,12 @@ export function TodayScreen() {
     isTransitioning,
     transitionSource,
     completeTransition,
+    isPatientCardsCollapsed,
+    setPatientCardsCollapsed,
   } = useTransition()
   const { isOpen: isSearchOpen } = useSearch()
   const { setHeader, resetHeader } = useHeader()
   const [, setHoveredAppointmentId, effectiveHoveredId] = useHoverWithKeyboardNav<string>()
-  const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Parse selected date from URL (default to today)
   const selectedDate = useMemo(() => {
@@ -72,19 +74,14 @@ export function TodayScreen() {
     router.replace(newUrl, { scroll: false })
   }, [searchParams, router])
 
-  // Update header with date navigation info
+  // Hide the global topbar - Today screen manages its own header
   useEffect(() => {
     setHeader({
-      title: getDateTitle(selectedDate),
-      subtitle: getDateSubtitle(selectedDate),
-      selectedDate,
-      onNavigateDate: navigateDate,
-      onSelectDate: selectDate,
-      showDateNavigation: true,
+      hideGlobalTopbar: true,
     })
     return () => resetHeader()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]) // Only re-run when date changes
+  }, []) // Only run once on mount
 
   // Read patient selection from URL query param
   // This runs when URL changes (e.g., navigating back from appointment detail)
@@ -146,7 +143,7 @@ export function TodayScreen() {
     // Store selection in context so it persists when navigating back
     setSelectedAppointmentId(appointment.id)
     if (rect) {
-      startTransition(rect, 'today', undefined, isCollapsed)
+      startTransition(rect, 'today', undefined, isPatientCardsCollapsed)
     }
     router.push(`/appointments/${appointment.id}`)
   }
@@ -156,7 +153,7 @@ export function TodayScreen() {
   }, [setHoveredAppointmentId])
 
   const toggleCollapsed = () => {
-    setIsCollapsed((prev) => !prev)
+    setPatientCardsCollapsed(!isPatientCardsCollapsed)
   }
 
   // Handle keyboard shortcuts
@@ -243,45 +240,53 @@ export function TodayScreen() {
   const shouldAnimateBack = isTransitioning && transitionSource === 'back'
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Patient Cards - CSS handles expanded width, Framer handles collapse animation */}
-      <div
-        className={`flex flex-col relative flex-shrink-0 transition-[width] duration-300 ease-out ${
-          isCollapsed ? '' : PANEL_WIDTH_CLASS
-        }`}
-        style={isCollapsed ? { width: SIDEBAR_ANIMATION.collapsedWidth } : undefined}
-      >
-        <div className="h-full overflow-hidden">
-          <PatientCards
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header with date display - spans full width */}
+      <TimelineHeader
+        selectedDate={selectedDate}
+      />
+
+      {/* Content area: PatientCards | Timeline */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Patient Cards - CSS handles expanded width, Framer handles collapse animation */}
+        <div
+          className={`flex flex-col relative flex-shrink-0 transition-[width] duration-300 ease-out ${
+            isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
+          }`}
+          style={isPatientCardsCollapsed ? { width: SIDEBAR_ANIMATION.collapsedWidth } : undefined}
+        >
+          <div className="h-full overflow-hidden">
+            <PatientCards
+              date={selectedDate}
+              onAppointmentClick={handleAppointmentClick}
+              onAppointmentHover={handleAppointmentHover}
+              hoveredAppointmentId={effectiveHoveredId}
+              selectedAppointmentId={selectedAppointmentId ?? undefined}
+              compact={isPatientCardsCollapsed}
+              onToggleCompact={toggleCollapsed}
+            />
+          </div>
+        </div>
+
+        {/* Vertical divider */}
+        <div className="w-px bg-border" />
+
+        {/* Timeline panel - animate on back navigation */}
+        <motion.div
+          className="flex-1 flex flex-col overflow-hidden"
+          initial={shouldAnimateBack ? { x: -100, opacity: 0 } : false}
+          animate={{ x: 0, opacity: 1 }}
+          transition={CONTENT_SLIDE_ANIMATION.transition}
+        >
+          <Timeline
             date={selectedDate}
             onAppointmentClick={handleAppointmentClick}
             onAppointmentHover={handleAppointmentHover}
             hoveredAppointmentId={effectiveHoveredId}
             selectedAppointmentId={selectedAppointmentId ?? undefined}
-            compact={isCollapsed}
-            onToggleCompact={toggleCollapsed}
           />
-        </div>
+        </motion.div>
       </div>
-
-      {/* Vertical divider */}
-      <div className="w-px bg-border" />
-
-      {/* Timeline - animate on back navigation */}
-      <motion.div
-        className="flex-1"
-        initial={shouldAnimateBack ? { x: -100, opacity: 0 } : false}
-        animate={{ x: 0, opacity: 1 }}
-        transition={CONTENT_SLIDE_ANIMATION.transition}
-      >
-        <Timeline
-          date={selectedDate}
-          onAppointmentClick={handleAppointmentClick}
-          onAppointmentHover={handleAppointmentHover}
-          hoveredAppointmentId={effectiveHoveredId}
-          selectedAppointmentId={selectedAppointmentId ?? undefined}
-        />
-      </motion.div>
     </div>
   )
 }

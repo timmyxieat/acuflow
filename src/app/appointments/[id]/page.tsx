@@ -3,8 +3,7 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContextAdaptive, BillingTab, CommsTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
-import { getBillingDataForAppointment, getPatientBillingHistory, type PatientBillingHistory } from '@/data/mock-billing'
+import { ScrollableArea, PatientCards, PatientContextAdaptive, TimelineHeader } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
@@ -14,24 +13,22 @@ import { SIDEBAR_ANIMATION } from '@/lib/animations'
 import {
   getAppointmentById,
   getAppointmentsByStatusForDate,
-  getPatientDisplayName,
   getPatientVisitHistory,
   getPatientContextData,
   updateAppointmentStatus,
   AppointmentStatus,
   type AppointmentWithRelations,
 } from '@/data/mock-data'
-import { parseDateFromUrl, formatDateForUrl } from '@/lib/date-utils'
+import { parseDateFromUrl } from '@/lib/date-utils'
 
 // Local components and hooks
 import {
   VisitTimeline,
   SOAPSections,
   FABPanel,
-  TopTabBar,
+  StatusControls,
   type SOAPData,
   type SOAPKey,
-  type TabType,
   type FocusedSection,
 } from './components'
 import { useTimer, usePageAnimations } from './hooks'
@@ -62,36 +59,14 @@ export default function AppointmentDetailPage() {
   // Timer state from custom hook
   const timer = useTimer()
 
-  // Read collapse state from URL on mount
-  useEffect(() => {
-    const collapsedFromUrl = searchParams.get('cards')
-    if (collapsedFromUrl === 'expanded') {
-      setPatientCardsCollapsed(false)
-    } else if (collapsedFromUrl === 'collapsed') {
-      setPatientCardsCollapsed(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointmentId])
-
-  // Update URL when collapse state changes
+  // Toggle collapse state - persisted via TransitionContext across navigation
   const handleToggleCollapse = useCallback(() => {
-    const newCollapsed = !isPatientCardsCollapsed
-    setPatientCardsCollapsed(newCollapsed)
-
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('cards', newCollapsed ? 'collapsed' : 'expanded')
-    const newUrl = `/appointments/${appointmentId}${params.toString() ? `?${params.toString()}` : ''}`
-    router.replace(newUrl, { scroll: false })
-  }, [isPatientCardsCollapsed, setPatientCardsCollapsed, searchParams, router, appointmentId])
+    setPatientCardsCollapsed(!isPatientCardsCollapsed)
+  }, [isPatientCardsCollapsed, setPatientCardsCollapsed])
 
   // FAB state
   const [isFabExpanded, setIsFabExpanded] = useState(false)
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<TabType>('medical')
-
-  // View scope state for tabs (This Visit / All toggle)
-  const [viewScope, setViewScope] = useState<ViewScope>('thisVisit')
 
   // State for SOAP note content
   const [soapData, setSoapData] = useState<SOAPData>({
@@ -171,27 +146,7 @@ export default function AppointmentDetailPage() {
   // Highlight the current appointment in PatientCards
   const selectedAppointmentIdForCards = appointmentId
 
-  // Billing data
-  const billingData: BillingData = useMemo(() => {
-    const patientId = appointment?.patient?.id || ''
-    const isCompleted = appointment?.status === 'COMPLETED'
-    const usedEstim = appointment?.usedEstim ?? false
-    return getBillingDataForAppointment(appointmentId, patientId, isCompleted, usedEstim)
-  }, [appointmentId, appointment?.patient?.id, appointment?.status, appointment?.usedEstim])
-
-  // Billing history for "All" view
-  const billingHistory: PatientBillingHistory = useMemo(() => {
-    const patientId = appointment?.patient?.id || ''
-    return getPatientBillingHistory(patientId)
-  }, [appointment?.patient?.id])
-
-  // Handle tab change - reset viewScope to "This Visit"
-  const handleTabChange = useCallback((tab: TabType) => {
-    setActiveTab(tab)
-    setViewScope('thisVisit')
-  }, [])
-
-  // Handle status change from TopTabBar
+  // Handle status change
   const handleStatusChange = useCallback((newStatus: AppointmentStatus, newIsSigned: boolean) => {
     const success = updateAppointmentStatus(appointmentId, newStatus, newIsSigned)
     if (success) {
@@ -199,73 +154,6 @@ export default function AppointmentDetailPage() {
       setStatusUpdateKey(prev => prev + 1)
     }
   }, [appointmentId])
-
-  // Reset viewScope when appointment changes
-  useEffect(() => {
-    setViewScope('thisVisit')
-  }, [appointmentId])
-
-  // Mock comms data
-  const commsData: CommsData = useMemo(() => {
-    const now = new Date()
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    const isInProgress = appointment?.status === 'IN_PROGRESS'
-    const isCheckedIn = appointment?.status === 'CHECKED_IN'
-    const confirmedAt = (isInProgress || isCheckedIn) ? new Date(yesterday.getTime() + 2 * 60 * 60 * 1000) : undefined
-    const appointmentStart = appointment?.scheduledStart ? new Date(appointment.scheduledStart) : now
-
-    return {
-      messages: [
-        {
-          id: 'msg_001',
-          type: 'reminder' as const,
-          content: `Reminder: Your appointment is tomorrow at ${appointmentStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.`,
-          timestamp: yesterday,
-          status: 'delivered' as const,
-        },
-        ...(isInProgress || isCheckedIn ? [{
-          id: 'msg_002',
-          type: 'patient_response' as const,
-          content: 'Confirmed! See you then.',
-          timestamp: new Date(yesterday.getTime() + 2 * 60 * 60 * 1000),
-          status: 'read' as const,
-          isFromPatient: true,
-        }] : []),
-      ],
-      notes: [
-        { id: 'note_001', content: 'Patient prefers afternoon appointments when possible.', createdAt: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), createdBy: 'Dr. Smith', isPinned: true },
-        { id: 'note_002', content: 'Mentioned work deadline stress affecting sleep.', createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), createdBy: 'Dr. Smith' },
-      ],
-      confirmationStatus: (isInProgress || isCheckedIn) ? 'confirmed' as const : 'pending' as const,
-      reminderSentAt: yesterday,
-      confirmedAt,
-      unreadCount: 0,
-    }
-  }, [appointment?.status, appointment?.scheduledStart])
-
-  // Mock schedule data
-  const scheduleData: ScheduleData = useMemo(() => {
-    const now = new Date()
-    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    const isInProgress = appointment?.status === 'IN_PROGRESS'
-    const isCheckedIn = appointment?.status === 'CHECKED_IN'
-    const confirmedAt = (isInProgress || isCheckedIn) ? new Date(yesterday.getTime() + 2 * 60 * 60 * 1000) : undefined
-    const appointmentStart = appointment?.scheduledStart ? new Date(appointment.scheduledStart) : now
-    const appointmentEnd = appointment?.scheduledEnd ? new Date(appointment.scheduledEnd) : new Date(now.getTime() + 60 * 60 * 1000)
-    const duration = Math.round((appointmentEnd.getTime() - appointmentStart.getTime()) / (1000 * 60))
-
-    return {
-      currentAppointment: { date: appointmentStart, startTime: appointmentStart, endTime: appointmentEnd, type: appointment?.appointmentType?.name ?? 'Follow-up Treatment', duration, confirmedAt },
-      followUp: { recommendedInterval: '1 week', nextAvailable: new Date(oneWeekFromNow.setHours(10, 30, 0, 0)) },
-      recentVisits: [
-        { id: 'visit_001', date: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
-        { id: 'visit_002', date: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000), type: 'Follow-up', status: 'Completed' },
-        { id: 'visit_003', date: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), type: 'Initial Consultation', status: 'Completed' },
-      ],
-      upcomingAppointments: [],
-    }
-  }, [appointment?.status, appointment?.scheduledStart, appointment?.scheduledEnd, appointment?.appointmentType?.name])
 
   // Get the viewing context date from URL (preserved when navigating between appointments)
   // If not present, use the appointment's date (initial navigation from Today screen)
@@ -277,19 +165,14 @@ export default function AppointmentDetailPage() {
   // The "context date" for navigation - either from URL or the appointment's date
   const contextDate = viewDateFromUrl ?? (appointment ? new Date(appointment.scheduledStart) : new Date())
 
-  // Set the global header when this page mounts
-  // Include currentDate so back button returns to the correct day's view
+  // Hide the global topbar - appointment detail page manages its own header
   useEffect(() => {
-    if (appointment) {
-      setHeader({
-        showBackButton: true,
-        currentPatientId: appointment.patient?.id,
-        currentDate: contextDate,
-      })
-    }
+    setHeader({
+      hideGlobalTopbar: true,
+    })
     return () => { resetHeader() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointmentId, viewDateFromUrl])
+  }, [])
 
   // Complete transition after animation
   useEffect(() => {
@@ -356,13 +239,10 @@ export default function AppointmentDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  // Build URL for navigating to another appointment while preserving viewDate context
+  // Build URL for navigating to another appointment
   const buildAppointmentUrl = useCallback((targetApptId: string) => {
-    const params = new URLSearchParams()
-    // Preserve the viewing context date (use current contextDate)
-    params.set('viewDate', formatDateForUrl(contextDate))
-    return `/appointments/${targetApptId}?${params.toString()}`
-  }, [contextDate])
+    return `/appointments/${targetApptId}`
+  }, [])
 
   // Handle appointment selection from Visit Timeline (navigates to the appointment)
   const handleTimelineAppointmentSelect = useCallback(async (targetApptId: string) => {
@@ -441,126 +321,140 @@ export default function AppointmentDetailPage() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Patient Cards */}
-      <div
-        className={`flex flex-col relative flex-shrink-0 transition-[width] ease-out ${
-          isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
-        }`}
-        style={{
-          width: isPatientCardsCollapsed ? SIDEBAR_ANIMATION.collapsedWidth : undefined,
-          transitionDuration: hasInitialized ? '300ms' : '0ms',
-        }}
-      >
-        <div className="h-full">
-          <PatientCards
-            date={contextDate}
-            onAppointmentClick={handleAppointmentClick}
-            onAppointmentHover={setHoveredAppointmentId}
-            hoveredAppointmentId={effectiveHoveredAppointmentId}
-            selectedAppointmentId={selectedAppointmentIdForCards}
-            selectedPatientId={appointment?.patient?.id}
-            compact={isPatientCardsCollapsed}
-            onToggleCompact={handleToggleCollapse}
-            activeTimerAppointmentId={appointmentId}
-            activeTimerSeconds={timer.timerSeconds}
-            isTimerRunning={timer.isTimerRunning}
-          />
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header with date display - spans full width (same as Today screen) */}
+      <TimelineHeader
+        selectedDate={contextDate}
+      />
+
+      {/* Content area: PatientCards | Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Patient Cards */}
+        <div
+          className={`flex flex-col relative flex-shrink-0 transition-[width] ease-out ${
+            isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
+          }`}
+          style={{
+            width: isPatientCardsCollapsed ? SIDEBAR_ANIMATION.collapsedWidth : undefined,
+            transitionDuration: hasInitialized ? '300ms' : '0ms',
+          }}
+        >
+          <div className="h-full">
+            <PatientCards
+              date={contextDate}
+              onAppointmentClick={handleAppointmentClick}
+              onAppointmentHover={setHoveredAppointmentId}
+              hoveredAppointmentId={effectiveHoveredAppointmentId}
+              selectedAppointmentId={selectedAppointmentIdForCards}
+              selectedPatientId={appointment?.patient?.id}
+              compact={isPatientCardsCollapsed}
+              onToggleCompact={handleToggleCollapse}
+              activeTimerAppointmentId={appointmentId}
+              activeTimerSeconds={timer.timerSeconds}
+              isTimerRunning={timer.isTimerRunning}
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Vertical divider */}
-      <div className="w-px bg-border" />
+        {/* Vertical divider */}
+        <div className="w-px bg-border" />
 
-      {/* Main content area */}
-      <div className="relative flex flex-1 overflow-hidden">
-        {/* Visit History Column (with patient header) */}
-        <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
-          <motion.div
-            key={animations.visitHistory.key}
-            className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
-            initial={animations.visitHistory.shouldAnimate ? animations.visitHistory.initial : false}
-            animate={{ x: 0, y: 0, opacity: 1 }}
-            exit={animations.visitHistory.shouldAnimate ? animations.visitHistory.exit : undefined}
-            transition={animations.transition}
-          >
-            {/* Patient Info Header */}
-            {appointment.patient && (() => {
-              const patient = appointment.patient
-              const { display, full, isTruncated } = getCompactPatientName(
-                patient.firstName,
-                patient.lastName,
-                patient.preferredName
-              )
-              const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
-              const age = patient.dateOfBirth
-                ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-                : null
-              const sex = patient.sex === 'FEMALE' ? 'Female' : patient.sex === 'MALE' ? 'Male' : null
-              const demographics = [age ? `${age} yo` : null, sex].filter(Boolean).join(', ')
+        {/* Main content area */}
+        <div className="relative flex flex-1 flex-col overflow-hidden">
+        {/* Patient Info Header - full width */}
+        {appointment.patient && (() => {
+          const patient = appointment.patient
+          const { display, full, isTruncated } = getCompactPatientName(
+            patient.firstName,
+            patient.lastName,
+            patient.preferredName,
+            20 // Allow longer names in full-width header
+          )
+          const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
+          const age = patient.dateOfBirth
+            ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            : null
+          const sex = patient.sex === 'FEMALE' ? 'Female' : patient.sex === 'MALE' ? 'Male' : null
+          const demographics = [age ? `${age} yo` : null, sex].filter(Boolean).join(', ')
 
-              return (
-                <div className="flex items-center gap-2 px-3 h-14 border-b border-border flex-shrink-0">
-                  {/* Avatar */}
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                    {initials}
-                  </div>
-                  {/* Patient name + demographics */}
-                  <div className="flex flex-col min-w-0">
-                    {isTruncated ? (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
-                            {display}
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent side="bottom" align="start" className="w-auto p-3">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-sm font-semibold">{full}</span>
-                            {demographics && (
-                              <span className="text-xs text-muted-foreground">{demographics}</span>
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    ) : (
-                      <span className="text-sm font-semibold">{display}</span>
-                    )}
-                    {demographics && (
-                      <span className="text-xs text-muted-foreground">{demographics}</span>
-                    )}
-                  </div>
+          return (
+            <div className="flex items-center justify-between px-3 h-14 border-b border-border flex-shrink-0 bg-background">
+              {/* Left: Avatar + Patient name + demographics */}
+              <div className="flex items-center gap-2">
+                {/* Avatar */}
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                  {initials}
                 </div>
-              )
-            })()}
+                {/* Patient name + demographics */}
+                <div className="flex flex-col min-w-0">
+                  {isTruncated ? (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
+                          {display}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent side="bottom" align="start" className="w-auto p-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-semibold">{full}</span>
+                          {demographics && (
+                            <span className="text-xs text-muted-foreground">{demographics}</span>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <span className="text-sm font-semibold">{display}</span>
+                  )}
+                  {demographics && (
+                    <span className="text-xs text-muted-foreground">{demographics}</span>
+                  )}
+                </div>
+              </div>
 
-            {/* Visit Timeline */}
-            <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
-              {appointment.patient && (
-                <VisitTimeline
-                  patientId={appointment.patient.id}
-                  currentAppointmentId={appointmentId}
-                  onSelectAppointment={handleTimelineAppointmentSelect}
+              {/* Right: Status + Billing button */}
+              <div className="flex items-center gap-3">
+                <StatusControls
+                  status={appointment.status}
+                  isSigned={appointment.isSigned}
+                  onStatusChange={handleStatusChange}
                 />
-              )}
-            </ScrollableArea>
-          </motion.div>
-        </AnimatePresence>
+                <button
+                  className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  Billing
+                </button>
+              </div>
+            </div>
+          )
+        })()}
 
-        {/* Right Content Column (TopTabBar + Tab Content) */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Top Tab Bar */}
-          <TopTabBar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            appointment={appointment}
-            billingData={billingData}
-            scheduleData={scheduleData}
-            commsData={commsData}
-            onStatusChange={handleStatusChange}
-          />
+        {/* Content area: Visit Timeline | SOAP + Patient Context */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Visit History Column */}
+          <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
+            <motion.div
+              key={animations.visitHistory.key}
+              className={`flex flex-col border-r border-border bg-card flex-shrink-0 ${VISIT_HISTORY_WIDTH_CLASS}`}
+              initial={animations.visitHistory.shouldAnimate ? animations.visitHistory.initial : false}
+              animate={{ x: 0, y: 0, opacity: 1 }}
+              exit={animations.visitHistory.shouldAnimate ? animations.visitHistory.exit : undefined}
+              transition={animations.transition}
+            >
+              {/* Visit Timeline */}
+              <ScrollableArea className="flex-1 py-3" deps={[appointmentId]} hideScrollbar>
+                {appointment.patient && (
+                  <VisitTimeline
+                    patientId={appointment.patient.id}
+                    currentAppointmentId={appointmentId}
+                    onSelectAppointment={handleTimelineAppointmentSelect}
+                  />
+                )}
+              </ScrollableArea>
+            </motion.div>
+          </AnimatePresence>
 
-          {/* Tab Content Area */}
+          {/* Right Content Column (SOAP + Patient Context) */}
           <div className="flex flex-1 overflow-hidden relative">
             {/* SOAP Notes Panel (always visible) */}
             <div className="flex flex-1 flex-col overflow-hidden bg-background">
@@ -593,12 +487,12 @@ export default function AppointmentDetailPage() {
               </AnimatePresence>
             </div>
 
-            {/* Right Panel - content changes based on tab */}
+            {/* Right Panel - Patient Context */}
             <div
               className="flex-shrink-0 border-l border-border overflow-hidden"
               style={{ width: APPOINTMENT_INFO_WIDTH }}
             >
-              {activeTab === 'medical' && appointment.patient && (
+              {appointment.patient && (
                 <PatientContextAdaptive
                   patient={appointment.patient}
                   conditions={appointment.conditions ?? []}
@@ -608,40 +502,19 @@ export default function AppointmentDetailPage() {
                   visitHistory={getPatientVisitHistory(appointment.patient.id)}
                 />
               )}
-
-              {activeTab === 'billing' && (
-                <BillingTab
-                  appointmentId={appointmentId}
-                  billingData={billingData}
-                  billingHistory={billingHistory}
-                  viewScope={viewScope}
-                  onViewScopeChange={setViewScope}
-                />
-              )}
-
-              {activeTab === 'comms' && (
-                <CommsTab
-                  appointmentId={appointmentId}
-                  commsData={commsData}
-                  patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
-                  viewScope={viewScope}
-                  onViewScopeChange={setViewScope}
-                />
-              )}
             </div>
 
-            {/* FAB - only visible on medical tab */}
-            {activeTab === 'medical' && (
-              <FABPanel
-                appointment={appointment}
-                isExpanded={isFabExpanded}
-                onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-                timer={timer}
-              />
-            )}
+            {/* FAB */}
+            <FABPanel
+              appointment={appointment}
+              isExpanded={isFabExpanded}
+              onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
+              timer={timer}
+            />
           </div>
         </div>
       </div>
     </div>
+  </div>
   )
 }

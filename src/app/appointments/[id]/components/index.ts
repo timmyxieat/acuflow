@@ -9,5 +9,5 @@ export {
   type FocusedSection,
 } from "./SOAPSections";
 export { FABPanel, type FABPanelProps } from "./FABPanel";
-export { TopTabBar, type TopTabBarProps, type TabType } from "./TopTabBar";
+export { TopTabBar, StatusControls, type TopTabBarProps, type StatusControlsProps, type TabType } from "./TopTabBar";
 export { AppointmentHeader, type AppointmentHeaderProps } from "./AppointmentHeader";

@@ -6,12 +6,7 @@ import { formatTime } from '@/lib/dev-time'
 import { type AppointmentWithRelations } from '@/data/mock-data'
 import { AppointmentStatus } from '@/generated/prisma/browser'
 import { getStatusColor } from '@/lib/constants'
-import {
-  type BillingData,
-  type ScheduleData,
-  type CommsData,
-} from '@/components/custom'
-import { getRelativeDate, APPOINTMENT_INFO_WIDTH } from '../lib/helpers'
+import { getRelativeDate } from '../lib/helpers'
 
 // =============================================================================
 // Types
@@ -23,9 +18,6 @@ export interface TopTabBarProps {
   activeTab: TabType
   onTabChange: (tab: TabType) => void
   appointment: AppointmentWithRelations
-  billingData: BillingData
-  scheduleData: ScheduleData
-  commsData: CommsData
   onStatusChange?: (newStatus: AppointmentStatus, newIsSigned: boolean) => void
 }
 
@@ -59,13 +51,13 @@ function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
   return 0 // Default for CANCELLED, NO_SHOW
 }
 
-interface StatusControlsProps {
+export interface StatusControlsProps {
   status: AppointmentStatus
   isSigned: boolean
   onStatusChange?: (newStatus: AppointmentStatus, newIsSigned: boolean) => void
 }
 
-function StatusControls({ status, isSigned, onStatusChange }: StatusControlsProps) {
+export function StatusControls({ status, isSigned, onStatusChange }: StatusControlsProps) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -174,9 +166,6 @@ export function TopTabBar({
   activeTab,
   onTabChange,
   appointment,
-  billingData,
-  scheduleData,
-  commsData,
   onStatusChange,
 }: TopTabBarProps) {
   // Date and time info
@@ -197,31 +186,9 @@ export function TopTabBar({
   ]
 
   return (
-    <div className="flex h-14 border-b border-border bg-background flex-shrink-0">
-      {/* Left: Date/Time + Status (fills space above SOAP editor) */}
-      <div className="flex flex-1 items-center justify-between px-3">
-        {/* Date + Time on left */}
-        <div className="flex flex-col justify-center">
-          <div className="flex items-center gap-1.5 text-sm">
-            <span className="font-semibold">{dateStr}</span>
-            <span className="text-muted-foreground">· {relativeDate}</span>
-          </div>
-          <span className="text-xs text-muted-foreground">{timeRange}</span>
-        </div>
-
-        {/* Status controls on right */}
-        <StatusControls
-          status={appointment.status}
-          isSigned={appointment.isSigned}
-          onStatusChange={onStatusChange}
-        />
-      </div>
-
-      {/* Right: Tabs (same width as Patient Context panel) */}
-      <div
-        className="flex flex-shrink-0 border-l border-border"
-        style={{ width: APPOINTMENT_INFO_WIDTH }}
-      >
+    <div className="flex h-14 border-b border-border bg-sidebar flex-shrink-0">
+      {/* Left: Tabs */}
+      <div className="flex">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.key
@@ -229,7 +196,7 @@ export function TopTabBar({
             <button
               key={tab.key}
               onClick={() => onTabChange(tab.key)}
-              className={`flex-1 flex flex-col items-center justify-center transition-colors ${
+              className={`px-4 flex flex-col items-center justify-center transition-colors ${
                 isActive
                   ? 'text-primary bg-primary/5'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -240,6 +207,25 @@ export function TopTabBar({
             </button>
           )
         })}
+      </div>
+
+      {/* Right: Date/Time + Status */}
+      <div className="flex flex-1 items-center justify-end gap-4 px-3">
+        {/* Date + Time */}
+        <div className="flex flex-col items-end justify-center">
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="font-semibold">{dateStr}</span>
+            <span className="text-muted-foreground">· {relativeDate}</span>
+          </div>
+          <span className="text-xs text-muted-foreground">{timeRange}</span>
+        </div>
+
+        {/* Status controls */}
+        <StatusControls
+          status={appointment.status}
+          isSigned={appointment.isSigned}
+          onStatusChange={onStatusChange}
+        />
       </div>
     </div>
   )

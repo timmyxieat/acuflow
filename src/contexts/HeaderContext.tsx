@@ -41,6 +41,8 @@ interface HeaderContent {
   appointment?: AppointmentInfo
   // Patient cards collapse state (for aligning patient info with TopTabBar)
   isPatientCardsCollapsed?: boolean
+  // Hide the global topbar (page manages its own header)
+  hideGlobalTopbar?: boolean
 }
 
 interface HeaderContextType {
