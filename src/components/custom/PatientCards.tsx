@@ -53,6 +53,8 @@ interface PatientCardsProps {
   onAppointmentHover?: (appointmentId: string | null) => void;
   hoveredAppointmentId?: string | null;
   selectedAppointmentId?: string;
+  /** Patient ID to highlight (used when viewing appointment from different day) */
+  selectedPatientId?: string;
   /** Compact mode shows only avatar and time */
   compact?: boolean;
   /** Callback to toggle compact/expanded mode */
@@ -71,6 +73,7 @@ interface StatusSectionProps {
   onAppointmentHover?: (appointmentId: string | null) => void;
   hoveredAppointmentId?: string | null;
   selectedAppointmentId?: string;
+  selectedPatientId?: string;
   variant: "inProgress" | "checkedIn" | "scheduled" | "unsigned" | "completed";
   compact?: boolean;
   activeTimerAppointmentId?: string;
@@ -86,6 +89,7 @@ function StatusSection({
   onAppointmentHover,
   hoveredAppointmentId,
   selectedAppointmentId,
+  selectedPatientId,
   variant,
   compact,
   activeTimerAppointmentId,
@@ -124,22 +128,27 @@ function StatusSection({
 
       {/* Cards - no gap so left borders connect into one line */}
       <div className="flex flex-col">
-        {appointments.map((appointment) => (
-          <PatientCard
-            key={appointment.id}
-            appointment={appointment}
-            onClick={(rect) => onAppointmentClick?.(appointment, rect)}
-            onDoubleClick={() => onAppointmentDoubleClick?.(appointment)}
-            onHover={(isHovered) =>
-              onAppointmentHover?.(isHovered ? appointment.id : null)
-            }
-            isHovered={appointment.id === hoveredAppointmentId}
-            isSelected={appointment.id === selectedAppointmentId}
-            compact={compact}
-            activeTimerSeconds={appointment.id === activeTimerAppointmentId ? activeTimerSeconds : undefined}
-            isTimerRunning={appointment.id === activeTimerAppointmentId ? isTimerRunning : undefined}
-          />
-        ))}
+        {appointments.map((appointment) => {
+          // Select by appointment ID first, fall back to patient ID
+          const isSelected = appointment.id === selectedAppointmentId ||
+            (!!selectedPatientId && appointment.patient?.id === selectedPatientId);
+          return (
+            <PatientCard
+              key={appointment.id}
+              appointment={appointment}
+              onClick={(rect) => onAppointmentClick?.(appointment, rect)}
+              onDoubleClick={() => onAppointmentDoubleClick?.(appointment)}
+              onHover={(isHovered) =>
+                onAppointmentHover?.(isHovered ? appointment.id : null)
+              }
+              isHovered={appointment.id === hoveredAppointmentId}
+              isSelected={isSelected}
+              compact={compact}
+              activeTimerSeconds={appointment.id === activeTimerAppointmentId ? activeTimerSeconds : undefined}
+              isTimerRunning={appointment.id === activeTimerAppointmentId ? isTimerRunning : undefined}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -374,6 +383,7 @@ export function PatientCards({
   onAppointmentHover,
   hoveredAppointmentId,
   selectedAppointmentId,
+  selectedPatientId,
   compact,
   onToggleCompact,
   activeTimerAppointmentId,
@@ -482,6 +492,7 @@ export function PatientCards({
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
+          selectedPatientId={selectedPatientId}
           variant="inProgress"
           compact={compact}
           activeTimerAppointmentId={activeTimerAppointmentId}
@@ -498,6 +509,7 @@ export function PatientCards({
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
+          selectedPatientId={selectedPatientId}
           variant="checkedIn"
           compact={compact}
           activeTimerAppointmentId={activeTimerAppointmentId}
@@ -514,6 +526,7 @@ export function PatientCards({
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
+          selectedPatientId={selectedPatientId}
           variant="scheduled"
           compact={compact}
           activeTimerAppointmentId={activeTimerAppointmentId}
@@ -539,6 +552,7 @@ export function PatientCards({
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
+          selectedPatientId={selectedPatientId}
           variant="unsigned"
           compact={compact}
           activeTimerAppointmentId={activeTimerAppointmentId}
@@ -555,6 +569,7 @@ export function PatientCards({
           onAppointmentHover={onAppointmentHover}
           hoveredAppointmentId={hoveredAppointmentId}
           selectedAppointmentId={selectedAppointmentId}
+          selectedPatientId={selectedPatientId}
           variant="completed"
           compact={compact}
           activeTimerAppointmentId={activeTimerAppointmentId}

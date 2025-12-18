@@ -1,10 +1,8 @@
 'use client'
 
-import { ClipboardCheck, CreditCard, Calendar, MessageSquare, ChevronDown } from 'lucide-react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
+import { ClipboardCheck, CreditCard, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatTime } from '@/lib/dev-time'
-import { getStatusDisplay, type AppointmentWithRelations } from '@/data/mock-data'
+import { type AppointmentWithRelations } from '@/data/mock-data'
 import { AppointmentStatus } from '@/generated/prisma/browser'
 import { getStatusColor } from '@/lib/constants'
 import {
@@ -12,13 +10,13 @@ import {
   type ScheduleData,
   type CommsData,
 } from '@/components/custom'
-import { getRelativeDay } from '../lib/helpers'
+import { getRelativeDate, APPOINTMENT_INFO_WIDTH } from '../lib/helpers'
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type TabType = 'medical' | 'billing' | 'schedule' | 'comms'
+export type TabType = 'medical' | 'billing' | 'comms'
 
 export interface TopTabBarProps {
   activeTab: TabType
@@ -27,34 +25,22 @@ export interface TopTabBarProps {
   billingData: BillingData
   scheduleData: ScheduleData
   commsData: CommsData
+  onStatusChange?: (direction: 'prev' | 'next') => void
 }
 
 // =============================================================================
-// Helpers
+// Status Slider Component
 // =============================================================================
 
-function getCompactMedicalStatus(status: string, isSigned: boolean): { text: string; color: string } {
-  if (status === 'COMPLETED' && isSigned) {
-    return { text: '✓', color: 'text-slate-500' }
-  }
-  if (status === 'COMPLETED' && !isSigned) {
-    return { text: 'Sign', color: 'text-amber-600' }
-  }
-  if (status === 'IN_PROGRESS') {
-    return { text: 'Active', color: 'text-blue-600' }
-  }
-  if (status === 'CHECKED_IN') {
-    return { text: 'Ready', color: 'text-green-600' }
-  }
-  // SCHEDULED, CANCELLED, NO_SHOW
-  return { text: '–', color: 'text-muted-foreground' }
-}
+// Status order for the slider
+const STATUS_ORDER = [
+  { label: 'Scheduled', status: AppointmentStatus.SCHEDULED, isSigned: false },
+  { label: 'Checked In', status: AppointmentStatus.CHECKED_IN, isSigned: false },
+  { label: 'In Progress', status: AppointmentStatus.IN_PROGRESS, isSigned: false },
+  { label: 'Unsigned', status: AppointmentStatus.COMPLETED, isSigned: false },
+  { label: 'Completed', status: AppointmentStatus.COMPLETED, isSigned: true },
+]
 
-// =============================================================================
-// Status Track Component (Backwards N pattern)
-// =============================================================================
-
-// Status order: 0=Scheduled, 1=Checked-in, 2=In-progress, 3=Unsigned, 4=Completed
 function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
   if (status === AppointmentStatus.SCHEDULED) return 0
   if (status === AppointmentStatus.CHECKED_IN) return 1
@@ -64,70 +50,63 @@ function getStatusIndex(status: AppointmentStatus, isSigned: boolean): number {
   return 0 // Default for CANCELLED, NO_SHOW
 }
 
-function StatusTrack({ status, isSigned }: { status: AppointmentStatus; isSigned: boolean }) {
+interface StatusSliderProps {
+  status: AppointmentStatus
+  isSigned: boolean
+  onPrev?: () => void
+  onNext?: () => void
+}
+
+function StatusSlider({ status, isSigned, onPrev, onNext }: StatusSliderProps) {
   const currentIndex = getStatusIndex(status, isSigned)
   const statusColor = getStatusColor(status, isSigned)
+  const currentLabel = STATUS_ORDER[currentIndex]?.label ?? 'Unknown'
 
-  // Positions for the 5 dots in the backwards-N pattern
-  // Left column: Scheduled (top), Checked-in (bottom)
-  // Center: In-progress
-  // Right column: Unsigned (top), Completed (bottom)
-  const dots = [
-    { x: 4, y: 4, label: 'Scheduled' },      // 0: top-left
-    { x: 4, y: 20, label: 'Checked In' },    // 1: bottom-left
-    { x: 24, y: 12, label: 'In Progress' },  // 2: center
-    { x: 44, y: 4, label: 'Unsigned' },      // 3: top-right
-    { x: 44, y: 20, label: 'Completed' },    // 4: bottom-right
-  ]
+  const canGoPrev = currentIndex > 0
+  const canGoNext = currentIndex < STATUS_ORDER.length - 1
 
-  // Lines connecting the dots (following the flow)
-  const lines = [
-    { from: 0, to: 1 }, // Scheduled → Checked-in (vertical)
-    { from: 1, to: 2 }, // Checked-in → In-progress (diagonal up)
-    { from: 2, to: 3 }, // In-progress → Unsigned (diagonal up)
-    { from: 3, to: 4 }, // Unsigned → Completed (vertical)
-  ]
-
-  const dotRadius = 3
-  const activeDotRadius = 4
+  const prevLabel = canGoPrev ? STATUS_ORDER[currentIndex - 1].label : null
+  const nextLabel = canGoNext ? STATUS_ORDER[currentIndex + 1].label : null
 
   return (
-    <svg width="48" height="24" viewBox="0 0 48 24" className="flex-shrink-0">
-      {/* Draw lines */}
-      {lines.map((line, i) => {
-        const from = dots[line.from]
-        const to = dots[line.to]
-        const isCompleted = currentIndex >= line.to
-        const isActive = currentIndex >= line.from && currentIndex < line.to
-        return (
-          <line
-            key={i}
-            x1={from.x}
-            y1={from.y}
-            x2={to.x}
-            y2={to.y}
-            stroke={isCompleted ? '#d1d5db' : isActive ? statusColor : '#e5e7eb'}
-            strokeWidth={1.5}
-          />
-        )
-      })}
+    <div className="flex items-center gap-1">
+      {/* Previous button */}
+      <button
+        onClick={onPrev}
+        disabled={!canGoPrev}
+        className={`flex items-center justify-center h-11 w-8 rounded-l-md transition-colors ${
+          canGoPrev
+            ? 'hover:bg-muted/70 text-muted-foreground hover:text-foreground'
+            : 'text-muted-foreground/30 cursor-not-allowed'
+        }`}
+        title={prevLabel ? `Back to ${prevLabel}` : undefined}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
 
-      {/* Draw dots */}
-      {dots.map((dot, i) => {
-        const isCurrent = i === currentIndex
-        const isCompleted = i < currentIndex
-        return (
-          <circle
-            key={i}
-            cx={dot.x}
-            cy={dot.y}
-            r={isCurrent ? activeDotRadius : dotRadius}
-            fill={isCurrent ? statusColor : isCompleted ? '#d1d5db' : '#e5e7eb'}
-            className="transition-all duration-200"
-          />
-        )
-      })}
-    </svg>
+      {/* Current status */}
+      <div className="flex items-center gap-1.5 px-2 min-w-[100px] justify-center">
+        <div
+          className="h-2 w-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: statusColor }}
+        />
+        <span className="text-xs font-medium whitespace-nowrap">{currentLabel}</span>
+      </div>
+
+      {/* Next button */}
+      <button
+        onClick={onNext}
+        disabled={!canGoNext}
+        className={`flex items-center justify-center h-11 w-8 rounded-r-md transition-colors ${
+          canGoNext
+            ? 'hover:bg-muted/70 text-muted-foreground hover:text-foreground'
+            : 'text-muted-foreground/30 cursor-not-allowed'
+        }`}
+        title={nextLabel ? `Advance to ${nextLabel}` : undefined}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
   )
 }
 
@@ -142,143 +121,71 @@ export function TopTabBar({
   billingData,
   scheduleData,
   commsData,
+  onStatusChange,
 }: TopTabBarProps) {
-  const medical = getCompactMedicalStatus(appointment.status, appointment.isSigned)
-
   // Date and time info
   const appointmentDate = new Date(appointment.scheduledStart)
   const dateStr = appointmentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const relativeDay = getRelativeDay(appointmentDate)
+  const relativeDate = getRelativeDate(appointmentDate)
   const timeRange = `${formatTime(appointment.scheduledStart)} - ${formatTime(appointment.scheduledEnd)}`
 
-  // Status info
-  const statusDisplay = getStatusDisplay(appointment.status, appointment.isSigned)
-  const statusColor = getStatusColor(appointment.status, appointment.isSigned)
-
-  // Appt tab context - confirmation or follow-up status
-  const apptContext = scheduleData.currentAppointment.confirmedAt
-    ? 'Confirmed'
-    : scheduleData.followUp
-      ? `Follow-up: ${scheduleData.followUp.recommendedInterval}`
-      : 'Not confirmed'
-
-  // Tab definitions with contextual info
+  // Tab definitions
   const tabs: {
     key: TabType
     label: string
     icon: typeof ClipboardCheck
-    context: string
   }[] = [
-    {
-      key: 'medical',
-      label: 'Chart',
-      icon: ClipboardCheck,
-      context: medical.text === '✓' ? 'Signed' : medical.text === 'Sign' ? 'Needs signature' : medical.text === 'Active' ? 'In progress' : medical.text === 'Ready' ? 'Patient ready' : 'Not started',
-    },
-    {
-      key: 'billing',
-      label: 'Bill',
-      icon: CreditCard,
-      context: billingData.status === 'paid' ? `$${billingData.totalCharges.toFixed(0)} paid` : billingData.status === 'no_charges' ? 'No charges' : `$${billingData.balanceDue.toFixed(0)} due`,
-    },
-    {
-      key: 'schedule',
-      label: 'Appt',
-      icon: Calendar,
-      context: apptContext,
-    },
-    {
-      key: 'comms',
-      label: 'Msgs',
-      icon: MessageSquare,
-      context: commsData.confirmationStatus === 'confirmed' ? 'Confirmed' : commsData.confirmationStatus === 'pending' ? 'Awaiting response' : commsData.unreadCount > 0 ? `${commsData.unreadCount} unread` : 'No messages',
-    },
+    { key: 'medical', label: 'Charting', icon: ClipboardCheck },
+    { key: 'billing', label: 'Billing', icon: CreditCard },
+    { key: 'comms', label: 'Communication', icon: MessageSquare },
   ]
 
-  // Determine available actions based on current status
-  const canComplete = appointment.status === AppointmentStatus.IN_PROGRESS
-  const canSign = appointment.status === AppointmentStatus.COMPLETED && !appointment.isSigned
-
   return (
-    <div className="flex border-b border-border bg-background flex-shrink-0">
-      {/* Left: Date/Time + Status in one container */}
-      <div className="flex items-center justify-between px-3 border-r border-border min-w-[200px]">
+    <div className="flex h-14 border-b border-border bg-background flex-shrink-0">
+      {/* Left: Date/Time + Status (fills space above SOAP editor) */}
+      <div className="flex flex-1 items-center justify-between px-3">
         {/* Date + Time on left */}
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-1.5 text-sm">
             <span className="font-semibold">{dateStr}</span>
-            <span className="text-muted-foreground">· {relativeDay}</span>
+            <span className="text-muted-foreground">· {relativeDate}</span>
           </div>
           <span className="text-xs text-muted-foreground">{timeRange}</span>
         </div>
 
-        {/* Status dropdown on right */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 hover:bg-muted/70 transition-colors ml-3">
-              <div
-                className="h-2 w-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: statusColor }}
-              />
-              <span className="text-xs font-medium">{statusDisplay.label}</span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-3" align="start">
-            {/* Status track visualization */}
-            <div className="flex justify-center mb-3">
-              <StatusTrack status={appointment.status} isSigned={appointment.isSigned} />
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 text-xs"
-                disabled={!canComplete}
-              >
-                Complete
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                className="flex-1 text-xs"
-                disabled={!canSign}
-              >
-                Sign
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        {/* Status slider on right */}
+        <StatusSlider
+          status={appointment.status}
+          isSigned={appointment.isSigned}
+          onPrev={() => onStatusChange?.('prev')}
+          onNext={() => onStatusChange?.('next')}
+        />
       </div>
 
-      {/* Right: Tabs (equal width) */}
-      {tabs.map((tab, index) => {
-        const Icon = tab.icon
-        const isActive = activeTab === tab.key
-        return (
-          <button
-            key={tab.key}
-            onClick={() => onTabChange(tab.key)}
-            className={`flex-1 flex flex-col items-center justify-center py-2 transition-colors border-l border-border ${
-              isActive
-                ? 'text-primary bg-primary/5'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            {/* Row 1: Icon + Label */}
-            <div className="flex items-center gap-1.5">
+      {/* Right: Tabs (same width as Patient Context panel) */}
+      <div
+        className="flex flex-shrink-0 border-l border-border"
+        style={{ width: APPOINTMENT_INFO_WIDTH }}
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => onTabChange(tab.key)}
+              className={`flex-1 flex flex-col items-center justify-center transition-colors ${
+                isActive
+                  ? 'text-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
               <Icon className="h-4 w-4" />
-              <span className="text-sm font-medium">{tab.label}</span>
-            </div>
-            {/* Row 2: Contextual info */}
-            <span className={`text-xs mt-0.5 ${isActive ? 'text-primary/70' : 'text-muted-foreground'}`}>
-              {tab.context}
-            </span>
-          </button>
-        )
-      })}
+              <span className="text-xs font-medium mt-0.5">{tab.label}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

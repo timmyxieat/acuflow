@@ -206,25 +206,13 @@ function TimelineCard({
 export interface VisitTimelineProps {
   patientId: string
   currentAppointmentId: string
-  selectedVisitId: string | null
-  onSelectVisit: (visitId: string | null, index: number) => void
-  onSelectScheduledAppointment?: (appointmentId: string) => void
-  hoveredVisitId?: string | null
-  onHoverVisit?: (visitId: string | null) => void
-  isZoneFocused?: boolean
-  focusedIndex?: number
+  onSelectAppointment: (appointmentId: string) => void
 }
 
 export function VisitTimeline({
   patientId,
   currentAppointmentId,
-  selectedVisitId,
-  onSelectVisit,
-  onSelectScheduledAppointment,
-  hoveredVisitId,
-  onHoverVisit,
-  isZoneFocused,
-  focusedIndex,
+  onSelectAppointment,
 }: VisitTimelineProps) {
   const { showFutureAppointments, setShowFutureAppointments } = useTransition()
   const visitHistory = getPatientVisitHistory(patientId)
@@ -301,10 +289,8 @@ export function VisitTimeline({
   // Handlers
   // ===========================================
 
-  const handleScheduledAppointmentClick = (appointmentId: string) => {
-    if (onSelectScheduledAppointment) {
-      onSelectScheduledAppointment(appointmentId)
-    }
+  const handleAppointmentClick = (appointmentId: string) => {
+    onSelectAppointment(appointmentId)
   }
 
   // ===========================================
@@ -392,7 +378,7 @@ export function VisitTimeline({
                   isEditing={isEditing}
                   isLocked={isLocked}
                   onClick={!isEditing && !isLocked
-                    ? () => handleScheduledAppointmentClick(appointment.id)
+                    ? () => handleAppointmentClick(appointment.id)
                     : undefined}
                   color={getCardColor(appointment)}
                   statusDot={!isEditing ? getStatusDot(appointment) : undefined}
@@ -418,9 +404,10 @@ export function VisitTimeline({
 
           {/* Cards */}
           <div className="flex flex-col">
-            {pastVisits.map((visit, index) => {
+            {pastVisits.map((visit) => {
               const isEditing = visit.appointment?.id === currentAppointmentId
               const isUnsigned = !visit.appointment?.isSigned
+              const appointmentId = visit.appointment?.id
 
               return (
                 <TimelineCard
@@ -438,13 +425,9 @@ export function VisitTimeline({
                   appointmentTypeId={visit.appointment?.appointmentType?.id}
                   isEditing={isEditing}
                   isUnsigned={isUnsigned}
-                  isSelected={selectedVisitId === visit.id}
-                  isHovered={hoveredVisitId === visit.id}
-                  isFocused={isZoneFocused && focusedIndex === index}
-                  onClick={!isEditing
-                    ? () => onSelectVisit(selectedVisitId === visit.id ? null : visit.id, index)
+                  onClick={!isEditing && appointmentId
+                    ? () => handleAppointmentClick(appointmentId)
                     : undefined}
-                  onHover={(isHovered) => onHoverVisit?.(isHovered ? visit.id : null)}
                   color={isEditing
                     ? TIMELINE_COLORS.editing
                     : isUnsigned

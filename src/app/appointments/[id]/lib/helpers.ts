@@ -5,11 +5,16 @@ import { ClipboardCheck, RefreshCw, Sparkles, Calendar } from 'lucide-react'
 // =============================================================================
 
 // CSS clamp value for consistent responsive width (20vw, min 180px, max 280px)
-// Used for PatientCards and Patient Context panel
+// Used for PatientCards panel
 export const PANEL_WIDTH_CLASS = 'w-[clamp(180px,20vw,280px)]'
 
 // Narrower width for Visit History panel (compact two-row cards)
 export const VISIT_HISTORY_WIDTH_CLASS = 'w-[clamp(160px,16vw,220px)]'
+
+// Width for appointment info section (TopTabBar) and Patient Context panel
+// These should match so they align vertically
+export const APPOINTMENT_INFO_WIDTH = 280
+export const APPOINTMENT_INFO_WIDTH_CLASS = `w-[${APPOINTMENT_INFO_WIDTH}px]`
 
 // Default needle retention time in minutes (would come from clinic settings)
 export const DEFAULT_NEEDLE_RETENTION_MINUTES = 25
@@ -113,7 +118,7 @@ export function getRelativeDate(date: Date): string {
     const weeks = Math.floor(futureDays / 7)
     if (futureDays < 30) return `in ${weeks}w`
     const months = Math.floor(futureDays / 30)
-    if (futureDays < 365) return `in ${months}m`
+    if (futureDays < 365) return `in ${months}mo`
     const years = Math.floor(futureDays / 365)
     return `in ${years}y`
   }
@@ -125,7 +130,7 @@ export function getRelativeDate(date: Date): string {
   const weeks = Math.floor(diffDays / 7)
   if (diffDays < 30) return `${weeks}w ago`
   const months = Math.floor(diffDays / 30)
-  if (diffDays < 365) return `${months}m ago`
+  if (diffDays < 365) return `${months}mo ago`
   const years = Math.floor(diffDays / 365)
   return `${years}y ago`
 }

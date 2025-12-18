@@ -3,7 +3,7 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContextAdaptive, BillingTab, CommsTab, ScheduleTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
+import { ScrollableArea, PatientCards, PatientContextAdaptive, BillingTab, CommsTab, type BillingData, type CommsData, type ScheduleData, type ViewScope } from '@/components/custom'
 import { getBillingDataForAppointment, getPatientBillingHistory, type PatientBillingHistory } from '@/data/mock-billing'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
@@ -16,7 +16,6 @@ import {
   getAppointmentsByStatusForDate,
   getPatientDisplayName,
   getPatientVisitHistory,
-  getVisitById,
   getPatientContextData,
   type AppointmentWithRelations,
 } from '@/data/mock-data'
@@ -34,7 +33,7 @@ import {
   type FocusedSection,
 } from './components'
 import { useTimer, usePageAnimations } from './hooks'
-import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS } from './lib/helpers'
+import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, APPOINTMENT_INFO_WIDTH } from './lib/helpers'
 
 // =============================================================================
 // Main Page Component
@@ -60,21 +59,6 @@ export default function AppointmentDetailPage() {
   // Timer state from custom hook
   const timer = useTimer()
 
-  // State for selected visit in timeline (for preview)
-  const [selectedVisitId, setSelectedVisitIdState] = useState<string | null>(null)
-
-  // Update URL when preview selection changes
-  const updateUrlPreview = useCallback((visitId: string | null) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (visitId) {
-      params.set('preview', visitId)
-    } else {
-      params.delete('preview')
-    }
-    const newUrl = `/appointments/${appointmentId}${params.toString() ? `?${params.toString()}` : ''}`
-    router.replace(newUrl, { scroll: false })
-  }, [searchParams, router, appointmentId])
-
   // Read collapse state from URL on mount
   useEffect(() => {
     const collapsedFromUrl = searchParams.get('cards')
@@ -97,15 +81,6 @@ export default function AppointmentDetailPage() {
     router.replace(newUrl, { scroll: false })
   }, [isPatientCardsCollapsed, setPatientCardsCollapsed, searchParams, router, appointmentId])
 
-  // Wrapper to set both state and URL
-  const setSelectedVisitId = useCallback((visitId: string | null) => {
-    setSelectedVisitIdState(visitId)
-    updateUrlPreview(visitId)
-  }, [updateUrlPreview])
-
-  // Preview slide direction for animation
-  const [previewSlideDirection, setPreviewSlideDirection] = useState<'up' | 'down' | null>(null)
-
   // FAB state
   const [isFabExpanded, setIsFabExpanded] = useState(false)
 
@@ -123,11 +98,8 @@ export default function AppointmentDetailPage() {
     plan: '',
   })
 
-  // Two-zone keyboard navigation state
-  type FocusZone = 'soap' | 'visits'
-  const [focusZone, setFocusZone] = useState<FocusZone>('soap')
+  // Keyboard navigation state for SOAP sections
   const [focusedSoapIndex, setFocusedSoapIndex] = useState(0)
-  const [focusedVisitIndex, setFocusedVisitIndex] = useState(0)
   const [isEditingField, setIsEditingField] = useState(false)
 
   // Focused SOAP section for adaptive Patient Context panel
@@ -166,7 +138,6 @@ export default function AppointmentDetailPage() {
 
   // Hover state with keyboard nav awareness
   const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
-  const [, setHoveredVisitId, effectiveHoveredVisitId] = useHoverWithKeyboardNav<string>()
 
   // Find the appointment from mock data
   const appointment = getAppointmentById(appointmentId)
@@ -189,12 +160,6 @@ export default function AppointmentDetailPage() {
       ...grouped.completed,
     ].map(a => a.id)
   }, [appointment])
-
-  // Get ordered visit IDs for current patient
-  const orderedVisitIds = useMemo(() => {
-    if (!appointment?.patient?.id) return []
-    return getPatientVisitHistory(appointment.patient.id).map(v => v.id)
-  }, [appointment?.patient?.id])
 
   // Highlight the current appointment in PatientCards
   const selectedAppointmentIdForCards = appointmentId
@@ -318,27 +283,6 @@ export default function AppointmentDetailPage() {
     }
   }, [isTransitioning, completeTransition])
 
-  // Initialize preview selection from URL or default
-  const isSignedCompleted = appointment?.status === 'COMPLETED' && appointment?.isSigned === true
-  useEffect(() => {
-    if (orderedVisitIds.length === 0) return
-
-    const previewFromUrl = searchParams.get('preview')
-
-    if (previewFromUrl && orderedVisitIds.includes(previewFromUrl)) {
-      setSelectedVisitIdState(previewFromUrl)
-      setFocusedVisitIndex(orderedVisitIds.indexOf(previewFromUrl))
-    } else if (selectedVisitId === null && !isSignedCompleted) {
-      const defaultVisitId = orderedVisitIds[0]
-      setSelectedVisitIdState(defaultVisitId)
-      setFocusedVisitIndex(0)
-      updateUrlPreview(defaultVisitId)
-    } else {
-      setFocusedVisitIndex(0)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderedVisitIds, appointmentId, isSignedCompleted])
-
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     const activeElement = document.activeElement
@@ -352,10 +296,6 @@ export default function AppointmentDetailPage() {
         setIsEditingField(false)
         return
       }
-      if (focusZone === 'visits' && selectedVisitId) {
-        setSelectedVisitId(null)
-        return
-      }
       const patientId = appointment?.patient?.id
       router.push(patientId ? `/?patient=${patientId}` : '/')
       return
@@ -364,20 +304,10 @@ export default function AppointmentDetailPage() {
     if (event.key === 'Enter' && !isTyping) {
       event.preventDefault()
       setKeyboardNavMode(true)
-
-      if (focusZone === 'soap') {
-        const textarea = soapTextareaRefs.current[focusedSoapIndex]
-        if (textarea) {
-          textarea.focus()
-          setIsEditingField(true)
-        }
-      } else if (focusZone === 'visits' && orderedVisitIds.length > 0) {
-        const visitId = orderedVisitIds[focusedVisitIndex]
-        if (selectedVisitId === visitId) {
-          setSelectedVisitId(null)
-        } else {
-          setSelectedVisitId(visitId)
-        }
+      const textarea = soapTextareaRefs.current[focusedSoapIndex]
+      if (textarea) {
+        textarea.focus()
+        setIsEditingField(true)
       }
       return
     }
@@ -387,33 +317,14 @@ export default function AppointmentDetailPage() {
 
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
-        if (focusZone === 'soap') {
-          const newIndex = event.key === 'ArrowDown'
-            ? Math.min(focusedSoapIndex + 1, 3)
-            : Math.max(focusedSoapIndex - 1, 0)
-          setFocusedSoapIndex(newIndex)
-        } else if (focusZone === 'visits' && orderedVisitIds.length > 0) {
-          const newIndex = event.key === 'ArrowDown'
-            ? Math.min(focusedVisitIndex + 1, orderedVisitIds.length - 1)
-            : Math.max(focusedVisitIndex - 1, 0)
-          setFocusedVisitIndex(newIndex)
-        }
+        const newIndex = event.key === 'ArrowDown'
+          ? Math.min(focusedSoapIndex + 1, 3)
+          : Math.max(focusedSoapIndex - 1, 0)
+        setFocusedSoapIndex(newIndex)
         return
       }
 
-      if (event.key === 'ArrowLeft' && focusZone === 'soap' && orderedVisitIds.length > 0) {
-        event.preventDefault()
-        setFocusZone('visits')
-        return
-      }
-
-      if (event.key === 'ArrowRight' && focusZone === 'visits') {
-        event.preventDefault()
-        setFocusZone('soap')
-        return
-      }
-
-      if (focusZone === 'soap' && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         const textarea = soapTextareaRefs.current[focusedSoapIndex]
         if (textarea) {
           textarea.focus()
@@ -422,7 +333,7 @@ export default function AppointmentDetailPage() {
         }
       }
     }
-  }, [router, focusZone, focusedSoapIndex, focusedVisitIndex, orderedVisitIds, selectedVisitId, setKeyboardNavMode, setSelectedVisitId, appointment?.patient?.id])
+  }, [router, focusedSoapIndex, setKeyboardNavMode, appointment?.patient?.id])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -437,36 +348,23 @@ export default function AppointmentDetailPage() {
     return `/appointments/${targetApptId}?${params.toString()}`
   }, [contextDate])
 
-  // Handle visit selection from timeline
-  const handleSelectVisit = async (visitId: string | null, index: number) => {
-    if (!appointment) return
+  // Handle appointment selection from Visit Timeline (navigates to the appointment)
+  const handleTimelineAppointmentSelect = useCallback(async (targetApptId: string) => {
+    if (!appointment || targetApptId === appointmentId) return
 
-    if (appointment.status === 'COMPLETED' && appointment.isSigned) {
-      if (!visitId) return
-      const visit = getVisitById(visitId)
-      if (!visit?.appointment?.id) return
-      const targetApptId = visit.appointment.id
-      if (targetApptId === appointmentId) return
+    await flushSave()
 
-      await flushSave()
-
-      const currentApptDate = new Date(appointment.scheduledStart)
-      const targetApptDate = new Date(visit.appointment.scheduledStart)
+    const currentApptDate = new Date(appointment.scheduledStart)
+    const targetAppt = getAppointmentById(targetApptId)
+    if (targetAppt) {
+      const targetApptDate = new Date(targetAppt.scheduledStart)
       const direction = targetApptDate > currentApptDate ? 'down' : 'up'
       setSlideDirection(direction)
-
-      startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
-      router.push(buildAppointmentUrl(targetApptId))
-    } else {
-      const oldIndex = selectedVisitId ? orderedVisitIds.indexOf(selectedVisitId) : -1
-      if (oldIndex !== -1 && visitId !== null) {
-        setPreviewSlideDirection(index > oldIndex ? 'up' : 'down')
-      }
-      setSelectedVisitId(visitId)
-      setFocusZone('visits')
-      setFocusedVisitIndex(index)
     }
-  }
+
+    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
+    router.push(buildAppointmentUrl(targetApptId))
+  }, [appointment, appointmentId, flushSave, setSlideDirection, startTransition, isPatientCardsCollapsed, router, buildAppointmentUrl])
 
   // Handle SOAP field changes
   const handleSoapChange = useCallback((key: SOAPKey, value: string) => {
@@ -476,7 +374,6 @@ export default function AppointmentDetailPage() {
   // Handle textarea focus
   const handleTextareaFocus = useCallback((index: number) => {
     setFocusedSoapIndex(index)
-    setFocusZone('soap')
     setIsEditingField(true)
   }, [])
 
@@ -489,23 +386,6 @@ export default function AppointmentDetailPage() {
   const handleSectionBlur = useCallback(() => {
     setFocusedSection(null)
   }, [])
-
-  // Handle "Use past treatment" button
-  const handleUsePastTreatment = useCallback(() => {
-    if (!selectedVisitId) return
-    const visit = getVisitById(selectedVisitId)
-    if (!visit) return
-
-    const planField = visit.plan as { raw?: string } | null
-    const planContent = planField?.raw || ''
-
-    if (planContent) {
-      setSoapData(prev => ({
-        ...prev,
-        plan: prev.plan ? `${prev.plan}\n\n--- From past visit ---\n${planContent}` : planContent,
-      }))
-    }
-  }, [selectedVisitId])
 
   if (!appointment) {
     return (
@@ -563,6 +443,7 @@ export default function AppointmentDetailPage() {
             onAppointmentHover={setHoveredAppointmentId}
             hoveredAppointmentId={effectiveHoveredAppointmentId}
             selectedAppointmentId={selectedAppointmentIdForCards}
+            selectedPatientId={appointment?.patient?.id}
             compact={isPatientCardsCollapsed}
             onToggleCompact={handleToggleCollapse}
             activeTimerAppointmentId={appointmentId}
@@ -612,24 +493,7 @@ export default function AppointmentDetailPage() {
                 <VisitTimeline
                   patientId={appointment.patient.id}
                   currentAppointmentId={appointmentId}
-                  selectedVisitId={selectedVisitId}
-                  onSelectVisit={handleSelectVisit}
-                  onSelectScheduledAppointment={async (apptId) => {
-                    await flushSave()
-                    const currentApptDate = new Date(appointment.scheduledStart)
-                    const targetAppt = getAppointmentById(apptId)
-                    if (targetAppt) {
-                      const targetApptDate = new Date(targetAppt.scheduledStart)
-                      const direction = targetApptDate > currentApptDate ? 'down' : 'up'
-                      setSlideDirection(direction)
-                    }
-                    startTransition({ x: 0, y: 0, width: 0, height: 0 } as DOMRect, 'scheduled', appointment.patient?.id, isPatientCardsCollapsed)
-                    router.push(buildAppointmentUrl(apptId))
-                  }}
-                  hoveredVisitId={effectiveHoveredVisitId}
-                  onHoverVisit={setHoveredVisitId}
-                  isZoneFocused={focusZone === 'visits'}
-                  focusedIndex={focusedVisitIndex}
+                  onSelectAppointment={handleTimelineAppointmentSelect}
                 />
               )}
             </ScrollableArea>
@@ -650,77 +514,54 @@ export default function AppointmentDetailPage() {
 
           {/* Tab Content Area */}
           <div className="flex flex-1 overflow-hidden relative">
-            {activeTab === 'medical' && (
-              <>
-                {/* SOAP Notes Panel */}
-                <div className="flex flex-1 flex-col overflow-hidden bg-background">
-                  <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
-                    <motion.div
-                      key={animations.soapPanel.key}
-                      className="flex flex-1 flex-col overflow-hidden"
-                      initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
-                      animate={{ x: 0, y: 0, opacity: 1 }}
-                      exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
-                      transition={animations.transition}
-                    >
-                      <ScrollableArea className="flex-1 p-3" deps={[appointmentId]}>
-                        <div className="flex flex-col gap-4">
-                          <SOAPSections
-                            selectedVisitId={selectedVisitId}
-                            soapData={soapData}
-                            onSoapChange={handleSoapChange}
-                            onUsePastTreatment={handleUsePastTreatment}
-                            isZoneFocused={focusZone === 'soap'}
-                            focusedIndex={focusedSoapIndex}
-                            isEditing={isEditingField}
-                            textareaRefs={soapTextareaRefs}
-                            onTextareaFocus={handleTextareaFocus}
-                            onSectionFocus={handleSectionFocus}
-                            onSectionBlur={handleSectionBlur}
-                            saveStatus={saveStatus}
-                            previewSlideDirection={previewSlideDirection}
-                          />
-                        </div>
-                      </ScrollableArea>
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-
-                {/* Patient Context Panel */}
-                <AnimatePresence mode="wait" initial={animations.patientContext.shouldAnimate}>
-                  <motion.div
-                    key={animations.patientContext.key}
-                    className={`flex-shrink-0 border-l border-border ${PANEL_WIDTH_CLASS}`}
-                    initial={animations.patientContext.shouldAnimate ? animations.patientContext.initial : false}
-                    animate={{ x: 0, y: 0, opacity: 1 }}
-                    exit={animations.patientContext.shouldAnimate ? animations.patientContext.exit : undefined}
-                    transition={animations.transition}
-                  >
-                    {appointment.patient && (
-                      <PatientContextAdaptive
-                        patient={appointment.patient}
-                        conditions={appointment.conditions ?? []}
-                        contextData={getPatientContextData(appointment.patient.id)}
-                        focusedSection={focusedSection}
-                        appointmentId={appointmentId}
-                        visitHistory={getPatientVisitHistory(appointment.patient.id)}
+            {/* SOAP Notes Panel (always visible) */}
+            <div className="flex flex-1 flex-col overflow-hidden bg-background">
+              <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
+                <motion.div
+                  key={animations.soapPanel.key}
+                  className="flex flex-1 flex-col overflow-hidden"
+                  initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
+                  animate={{ x: 0, y: 0, opacity: 1 }}
+                  exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
+                  transition={animations.transition}
+                >
+                  <ScrollableArea className="flex-1 p-3" deps={[appointmentId]}>
+                    <div className="flex flex-col gap-4">
+                      <SOAPSections
+                        soapData={soapData}
+                        onSoapChange={handleSoapChange}
+                        isZoneFocused={true}
+                        focusedIndex={focusedSoapIndex}
+                        isEditing={isEditingField}
+                        textareaRefs={soapTextareaRefs}
+                        onTextareaFocus={handleTextareaFocus}
+                        onSectionFocus={handleSectionFocus}
+                        onSectionBlur={handleSectionBlur}
+                        saveStatus={saveStatus}
                       />
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                    </div>
+                  </ScrollableArea>
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
-                {/* FAB */}
-                <FABPanel
-                  appointment={appointment}
-                  isExpanded={isFabExpanded}
-                  onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-                  timer={timer}
+            {/* Right Panel - content changes based on tab */}
+            <div
+              className="flex-shrink-0 border-l border-border overflow-hidden"
+              style={{ width: APPOINTMENT_INFO_WIDTH }}
+            >
+              {activeTab === 'medical' && appointment.patient && (
+                <PatientContextAdaptive
+                  patient={appointment.patient}
+                  conditions={appointment.conditions ?? []}
+                  contextData={getPatientContextData(appointment.patient.id)}
+                  focusedSection={focusedSection}
+                  appointmentId={appointmentId}
+                  visitHistory={getPatientVisitHistory(appointment.patient.id)}
                 />
-              </>
-            )}
+              )}
 
-            {activeTab === 'billing' && (
-              <div className="flex-1 overflow-hidden bg-background">
+              {activeTab === 'billing' && (
                 <BillingTab
                   appointmentId={appointmentId}
                   billingData={billingData}
@@ -728,23 +569,9 @@ export default function AppointmentDetailPage() {
                   viewScope={viewScope}
                   onViewScopeChange={setViewScope}
                 />
-              </div>
-            )}
+              )}
 
-            {activeTab === 'schedule' && (
-              <div className="flex-1 overflow-hidden bg-background">
-                <ScheduleTab
-                  appointmentId={appointmentId}
-                  scheduleData={scheduleData}
-                  patientName={appointment.patient ? getPatientDisplayName(appointment.patient) : 'Patient'}
-                  viewScope={viewScope}
-                  onViewScopeChange={setViewScope}
-                />
-              </div>
-            )}
-
-            {activeTab === 'comms' && (
-              <div className="flex-1 overflow-hidden bg-background">
+              {activeTab === 'comms' && (
                 <CommsTab
                   appointmentId={appointmentId}
                   commsData={commsData}
@@ -752,7 +579,17 @@ export default function AppointmentDetailPage() {
                   viewScope={viewScope}
                   onViewScopeChange={setViewScope}
                 />
-              </div>
+              )}
+            </div>
+
+            {/* FAB - only visible on medical tab */}
+            {activeTab === 'medical' && (
+              <FABPanel
+                appointment={appointment}
+                isExpanded={isFabExpanded}
+                onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
+                timer={timer}
+              />
             )}
           </div>
         </div>

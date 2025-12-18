@@ -1,9 +1,6 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
-import { BUTTON_POP_ANIMATION } from '@/lib/animations'
-import { getVisitById } from '@/data/mock-data'
 
 // =============================================================================
 // Types
@@ -20,10 +17,8 @@ export interface SOAPData {
 }
 
 export interface SOAPSectionsProps {
-  selectedVisitId: string | null
   soapData: SOAPData
   onSoapChange: (key: SOAPKey, value: string) => void
-  onUsePastTreatment?: () => void
   isZoneFocused: boolean
   focusedIndex: number
   isEditing: boolean
@@ -32,10 +27,6 @@ export interface SOAPSectionsProps {
   onSectionFocus?: (section: FocusedSection) => void
   onSectionBlur?: () => void
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
-  previewSlideDirection: 'up' | 'down' | null
-  isReadOnly?: boolean
-  signedBy?: string
-  signedAt?: Date
 }
 
 // =============================================================================
@@ -43,10 +34,8 @@ export interface SOAPSectionsProps {
 // =============================================================================
 
 export function SOAPSections({
-  selectedVisitId,
   soapData,
   onSoapChange,
-  onUsePastTreatment,
   isZoneFocused,
   focusedIndex,
   isEditing,
@@ -55,18 +44,7 @@ export function SOAPSections({
   onSectionFocus,
   onSectionBlur,
   saveStatus,
-  previewSlideDirection,
 }: SOAPSectionsProps) {
-  // Get the selected past visit for preview
-  const selectedVisit = selectedVisitId ? getVisitById(selectedVisitId) : null
-
-  // Extract raw text from visit SOAP fields
-  const getVisitSoapContent = (key: SOAPKey): string | null => {
-    if (!selectedVisit) return null
-    const field = selectedVisit[key] as { raw?: string } | null
-    return field?.raw || null
-  }
-
   const sections: { key: SOAPKey; label: string }[] = [
     { key: 'subjective', label: 'Subjective' },
     { key: 'objective', label: 'Objective' },
@@ -111,29 +89,12 @@ export function SOAPSections({
       )}
 
       {sections.map((section, index) => {
-        const previewContent = getVisitSoapContent(section.key)
-        const isPlan = section.key === 'plan'
         const isFocused = isZoneFocused && focusedIndex === index && !isEditing
 
         return (
           <div key={section.key} className="flex flex-col gap-2">
-            {/* Section header with optional action button */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">{section.label}</h3>
-              <AnimatePresence>
-                {isPlan && selectedVisit && onUsePastTreatment && (
-                  <motion.button
-                    onClick={onUsePastTreatment}
-                    className="text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                    initial={BUTTON_POP_ANIMATION.initial}
-                    animate={BUTTON_POP_ANIMATION.animate}
-                    exit={BUTTON_POP_ANIMATION.exit}
-                  >
-                    Use past treatment
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </div>
+            {/* Section header */}
+            <h3 className="text-sm font-semibold">{section.label}</h3>
 
             {/* Textarea for current note */}
             <textarea
@@ -153,35 +114,6 @@ export function SOAPSections({
               }`}
               rows={2}
             />
-
-            {/* Preview from selected past visit */}
-            <div className="relative">
-              <AnimatePresence mode="popLayout">
-                {previewContent && (
-                  <motion.div
-                    key={`${selectedVisitId}-${section.key}`}
-                    initial={{
-                      y: previewSlideDirection === 'up' ? -20 : 20,
-                      opacity: 0,
-                    }}
-                    animate={{
-                      y: 0,
-                      opacity: 1,
-                      transition: { duration: 0.2, delay: index * 0.03 },
-                    }}
-                    exit={{
-                      y: previewSlideDirection === 'up' ? 20 : -20,
-                      opacity: 0,
-                      transition: { duration: 0.15 },
-                    }}
-                  >
-                    <p className="rounded bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground italic">
-                      {previewContent}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
           </div>
         )
       })}
