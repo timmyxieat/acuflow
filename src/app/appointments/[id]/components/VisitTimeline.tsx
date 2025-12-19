@@ -69,40 +69,8 @@ function TimelineCard({
   const relativeDate = getRelativeDate(date)
   const timeRange = `${formatTime(startTime)} - ${formatTime(endTime)}`
 
-  // Selection indicator style
-  const getSelectionStyle = () => {
-    if (isSelected) {
-      return {
-        backgroundColor: `${color}20`,
-        boxShadow: `inset 3px 0 0 0 ${color}`,
-      }
-    }
-    return {}
-  }
-
-  // Hover background
-  const hoverBgColor = `${color}15`
-
   const cardContent = (
-    <>
-      {/* Hover background */}
-      {!isSelected && !isEditing && !isLocked && (
-        <div
-          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-          style={{ backgroundColor: hoverBgColor }}
-        />
-      )}
-
-      {/* Selection indicator */}
-      <div
-        className={`absolute inset-0 pointer-events-none transition-all duration-200 ${
-          isSelected ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={isSelected ? getSelectionStyle() : {}}
-      />
-
-      {/* Card content */}
-      <div className={`relative z-10 flex flex-col justify-center gap-0.5 px-3 ${TIMELINE_CARD_HEIGHT}`}>
+    <div className={`relative z-10 flex flex-col justify-center gap-0.5 px-3 ${TIMELINE_CARD_HEIGHT}`}>
         {/* Row 1: Date · Relative date + icon/status indicators */}
         <div className="flex items-center gap-1">
           <span className={`text-sm font-medium truncate ${
@@ -154,20 +122,18 @@ function TimelineCard({
           {timeRange}
         </p>
       </div>
-    </>
   )
 
   // Editing card is not clickable
   if (isEditing) {
     return (
       <div
-        className="relative"
-        style={{ boxShadow: `inset 3px 0 0 0 ${color}` }}
+        className="mx-3 my-1 rounded-lg border-2"
+        style={{
+          borderColor: color,
+          backgroundColor: `${color}15`,
+        }}
       >
-        <div
-          className="absolute inset-0"
-          style={{ backgroundColor: `${color}20` }}
-        />
         {cardContent}
       </div>
     )
@@ -177,8 +143,8 @@ function TimelineCard({
   if (isLocked) {
     return (
       <div
-        className="relative cursor-not-allowed"
-        style={{ boxShadow: `inset 3px 0 0 0 ${color}20` }}
+        className="mx-3 my-1 rounded-lg border cursor-not-allowed"
+        style={{ borderColor: `${color}30` }}
       >
         {cardContent}
       </div>
@@ -191,8 +157,13 @@ function TimelineCard({
       onClick={onClick}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className="group relative w-full text-left"
-      style={{ boxShadow: isSelected ? undefined : `inset 3px 0 0 0 ${color}40` }}
+      className={`group mx-3 my-1 rounded-lg border text-left transition-colors ${
+        isSelected ? 'border-2' : 'hover:bg-muted/50'
+      }`}
+      style={{
+        borderColor: isSelected ? color : `${color}40`,
+        backgroundColor: isSelected ? `${color}10` : undefined,
+      }}
     >
       {cardContent}
     </button>

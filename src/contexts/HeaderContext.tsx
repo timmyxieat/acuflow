@@ -43,6 +43,8 @@ interface HeaderContent {
   isPatientCardsCollapsed?: boolean
   // Hide the global topbar (page manages its own header)
   hideGlobalTopbar?: boolean
+  // Whether we're viewing an appointment that's for today (for sidebar highlighting)
+  isViewingTodayAppointment?: boolean
 }
 
 interface HeaderContextType {

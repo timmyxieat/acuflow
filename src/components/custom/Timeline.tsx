@@ -12,7 +12,7 @@ import {
   type AppointmentWithRelations,
   AppointmentStatus,
 } from '@/data/mock-data'
-import { isToday } from '@/lib/date-utils'
+import { isToday, getDateTitle, getDateSubtitle } from '@/lib/date-utils'
 
 // Map appointment type IDs to icons
 const APPOINTMENT_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -35,6 +35,8 @@ interface TimelineProps {
   onAppointmentHover?: (appointmentId: string | null) => void
   selectedAppointmentId?: string
   hoveredAppointmentId?: string | null
+  /** Hide the date header (when shown externally) */
+  hideDateHeader?: boolean
 }
 
 // Check if two appointments overlap
@@ -119,7 +121,7 @@ function assignColumns(appointments: AppointmentWithRelations[]): Map<string, { 
   return result
 }
 
-export function Timeline({ date, onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId }: TimelineProps) {
+export function Timeline({ date, onAppointmentClick, onAppointmentDoubleClick, onAppointmentHover, selectedAppointmentId, hoveredAppointmentId, hideDateHeader }: TimelineProps) {
   const scrollableRef = useRef<ScrollableAreaRef>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [hourHeight, setHourHeight] = useState(MIN_HOUR_HEIGHT)
@@ -333,6 +335,16 @@ export function Timeline({ date, onAppointmentClick, onAppointmentDoubleClick, o
 
   return (
     <div ref={wrapperRef} className="flex h-full flex-col overflow-hidden bg-card relative">
+      {/* Date header - persistent at top of timeline, same height as patient header */}
+      {!hideDateHeader && (
+        <div className="flex items-center flex-shrink-0 h-14 border-b border-border px-3">
+          <span className="text-sm">
+            <span className="font-semibold">{getDateTitle(selectedDate)}</span>
+            <span className="text-muted-foreground">, {getDateSubtitle(selectedDate)}</span>
+          </span>
+        </div>
+      )}
+
       {/* Mini card indicator when item is above viewport */}
       {indicatorOffScreen === 'above' && indicatorAppointment && indicatorStatusColor && (() => {
         const columnInfo = columnAssignments.get(indicatorAppointment.id)

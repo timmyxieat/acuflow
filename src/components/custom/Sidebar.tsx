@@ -4,12 +4,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Calendar, Home, Settings } from 'lucide-react'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useHeader } from '@/contexts/HeaderContext'
 
@@ -51,70 +45,54 @@ export function Sidebar() {
   }
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <aside className="flex h-full w-12 flex-col border-r border-border bg-sidebar">
-        {/* Logo */}
-        <div className="flex h-14 items-center justify-center border-b border-sidebar-border">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/" onClick={handleHomeClick} className="flex items-center justify-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <span className="text-sm font-bold text-primary-foreground">A</span>
-                </div>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>Acuflow</p>
-            </TooltipContent>
-          </Tooltip>
+    <aside className="flex h-full w-48 flex-col border-r border-border bg-sidebar">
+      {/* Logo */}
+      <div className="flex h-14 items-center gap-2 px-3 border-b border-sidebar-border">
+        <Link href="/" onClick={handleHomeClick} className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary flex-shrink-0">
+            <span className="text-sm font-bold text-primary-foreground">A</span>
+          </div>
+          <span className="text-lg font-semibold text-sidebar-foreground">Acuflow</span>
+        </Link>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex flex-1 flex-col gap-1 p-2">
+        {navItems.map((item) => {
+          const isHomeItem = item.href === '/'
+          // Home is active if we're on "/" OR viewing a today appointment
+          const isActive = pathname === item.href || (isHomeItem && header.isViewingTodayAppointment)
+          const Icon = item.icon
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={isHomeItem ? handleHomeClick : undefined}
+              className={cn(
+                'flex h-10 items-center gap-3 rounded-lg px-3 transition-colors',
+                isActive
+                  ? 'bg-orange-500 text-white'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+              )}
+            >
+              <Icon className="h-5 w-5 flex-shrink-0" />
+              <span className="text-sm font-medium">{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Footer - Practitioner info */}
+      <div className="flex items-center gap-2 border-t border-sidebar-border p-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-accent flex-shrink-0">
+          <span className="text-sm font-medium text-sidebar-accent-foreground">SC</span>
         </div>
-
-        {/* Navigation */}
-        <nav className="flex flex-1 flex-col items-center gap-1 py-3">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            const Icon = item.icon
-            const isHomeItem = item.href === '/'
-
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={item.href}
-                    onClick={isHomeItem ? handleHomeClick : undefined}
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                      isActive
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>{item.label}</p>
-                </TooltipContent>
-              </Tooltip>
-            )
-          })}
-        </nav>
-
-        {/* Footer - Practitioner avatar */}
-        <div className="flex justify-center border-t border-sidebar-border py-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-accent transition-colors hover:bg-sidebar-accent/80">
-                <span className="text-sm font-medium text-sidebar-accent-foreground">SC</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p className="font-medium">Dr. Sarah Chen</p>
-              <p className="text-xs text-muted-foreground">L.Ac., DAOM</p>
-            </TooltipContent>
-          </Tooltip>
+        <div className="flex flex-col min-w-0">
+          <p className="text-sm font-medium text-sidebar-foreground truncate">Dr. Sarah Chen</p>
+          <p className="text-xs text-sidebar-foreground/60 truncate">L.Ac., DAOM</p>
         </div>
-      </aside>
-    </TooltipProvider>
+      </div>
+    </aside>
   )
 }

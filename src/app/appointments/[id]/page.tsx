@@ -1,25 +1,21 @@
 'use client'
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollableArea, PatientCards, PatientContextAdaptive, TimelineHeader } from '@/components/custom'
+import { ScrollableArea, PatientContextAdaptive, TimelineHeader } from '@/components/custom'
 import { useHeader } from '@/contexts/HeaderContext'
 import { useTransition } from '@/contexts/TransitionContext'
-import { useHoverWithKeyboardNav } from '@/hooks/useHoverWithKeyboardNav'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { saveVisitSOAP, loadVisitSOAP } from '@/lib/api/visits'
-import { SIDEBAR_ANIMATION } from '@/lib/animations'
 import {
   getAppointmentById,
-  getAppointmentsByStatusForDate,
   getPatientVisitHistory,
   getPatientContextData,
   updateAppointmentStatus,
   AppointmentStatus,
-  type AppointmentWithRelations,
 } from '@/data/mock-data'
-import { parseDateFromUrl } from '@/lib/date-utils'
+import { isToday } from '@/lib/date-utils'
 
 // Local components and hooks
 import {
@@ -32,7 +28,7 @@ import {
   type FocusedSection,
 } from './components'
 import { useTimer, usePageAnimations } from './hooks'
-import { PANEL_WIDTH_CLASS, VISIT_HISTORY_WIDTH_CLASS, APPOINTMENT_INFO_WIDTH, getCompactPatientName } from './lib/helpers'
+import { VISIT_HISTORY_WIDTH_CLASS, APPOINTMENT_INFO_WIDTH, getCompactPatientName } from './lib/helpers'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 // =============================================================================
@@ -42,16 +38,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 export default function AppointmentDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { setHeader, resetHeader } = useHeader()
   const {
     isTransitioning,
     startTransition,
     setSlideDirection,
-    setSelectedAppointmentId,
     setKeyboardNavMode,
     isPatientCardsCollapsed,
-    setPatientCardsCollapsed,
     completeTransition,
   } = useTransition()
   const appointmentId = params.id as string
@@ -59,13 +52,17 @@ export default function AppointmentDetailPage() {
   // Timer state from custom hook
   const timer = useTimer()
 
-  // Toggle collapse state - persisted via TransitionContext across navigation
-  const handleToggleCollapse = useCallback(() => {
-    setPatientCardsCollapsed(!isPatientCardsCollapsed)
-  }, [isPatientCardsCollapsed, setPatientCardsCollapsed])
-
   // FAB state
   const [isFabExpanded, setIsFabExpanded] = useState(false)
+
+  // Step navigation state
+  type AppointmentStep = 'medical' | 'billing' | 'scheduling'
+  const [currentStep, setCurrentStep] = useState<AppointmentStep>('medical')
+  const steps: { key: AppointmentStep; label: string }[] = [
+    { key: 'medical', label: 'Medical' },
+    { key: 'billing', label: 'Billing' },
+    { key: 'scheduling', label: 'Scheduling' },
+  ]
 
 
   // State for SOAP note content
@@ -85,13 +82,6 @@ export default function AppointmentDetailPage() {
 
   // Refs for SOAP textareas
   const soapTextareaRefs = useRef<(HTMLTextAreaElement | null)[]>([null, null, null, null])
-
-  // Track if component has initialized (for skipping animation on mount)
-  const [hasInitialized, setHasInitialized] = useState(false)
-  useEffect(() => {
-    const timer = setTimeout(() => setHasInitialized(true), 50)
-    return () => clearTimeout(timer)
-  }, [])
 
   // Auto-save SOAP notes
   const { status: saveStatus, markAsSaved, flush: flushSave } = useAutoSave({
@@ -114,9 +104,6 @@ export default function AppointmentDetailPage() {
     }
   }, [appointmentId, markAsSaved])
 
-  // Hover state with keyboard nav awareness
-  const [, setHoveredAppointmentId, effectiveHoveredAppointmentId] = useHoverWithKeyboardNav<string>()
-
   // Force re-render when status changes (for mock data mutations)
   const [statusUpdateKey, setStatusUpdateKey] = useState(0)
 
@@ -130,22 +117,6 @@ export default function AppointmentDetailPage() {
     currentPatientId: appointment?.patient?.id ?? null,
   })
 
-  // Get flat ordered list of all appointments for the appointment's date
-  const orderedAppointmentIds = useMemo(() => {
-    if (!appointment) return []
-    const grouped = getAppointmentsByStatusForDate(new Date(appointment.scheduledStart))
-    return [
-      ...grouped.inProgress,
-      ...grouped.checkedIn,
-      ...grouped.scheduled,
-      ...grouped.unsigned,
-      ...grouped.completed,
-    ].map(a => a.id)
-  }, [appointment])
-
-  // Highlight the current appointment in PatientCards
-  const selectedAppointmentIdForCards = appointmentId
-
   // Handle status change
   const handleStatusChange = useCallback((newStatus: AppointmentStatus, newIsSigned: boolean) => {
     const success = updateAppointmentStatus(appointmentId, newStatus, newIsSigned)
@@ -155,24 +126,18 @@ export default function AppointmentDetailPage() {
     }
   }, [appointmentId])
 
-  // Get the viewing context date from URL (preserved when navigating between appointments)
-  // If not present, use the appointment's date (initial navigation from Today screen)
-  const viewDateFromUrl = useMemo(() => {
-    const viewDateStr = searchParams.get('viewDate')
-    return viewDateStr ? parseDateFromUrl(viewDateStr) : null
-  }, [searchParams])
-
-  // The "context date" for navigation - either from URL or the appointment's date
-  const contextDate = viewDateFromUrl ?? (appointment ? new Date(appointment.scheduledStart) : new Date())
+  // Check if appointment is for today
+  const isAppointmentToday = appointment ? isToday(new Date(appointment.scheduledStart)) : false
 
   // Hide the global topbar - appointment detail page manages its own header
   useEffect(() => {
     setHeader({
       hideGlobalTopbar: true,
+      isViewingTodayAppointment: isAppointmentToday,
     })
     return () => { resetHeader() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isAppointmentToday])
 
   // Complete transition after animation
   useEffect(() => {
@@ -299,139 +264,123 @@ export default function AppointmentDetailPage() {
     )
   }
 
-  // Handle appointment click from PatientCards
-  const handleAppointmentClick = (clickedAppointment: AppointmentWithRelations, rect?: DOMRect) => {
-    if (clickedAppointment.id === appointmentId) {
-      setSelectedAppointmentId(null)
-      const patientId = clickedAppointment.patient?.id
-      router.push(patientId ? `/?patient=${patientId}` : '/')
-    } else {
-      const currIndex = orderedAppointmentIds.indexOf(appointmentId)
-      const newIndex = orderedAppointmentIds.indexOf(clickedAppointment.id)
-
-      if (currIndex !== -1 && newIndex !== -1) {
-        setSlideDirection(newIndex > currIndex ? 'down' : 'up')
-      }
-
-      if (rect) {
-        startTransition(rect, 'appointment', appointment?.patient?.id, isPatientCardsCollapsed)
-      }
-      router.push(`/appointments/${clickedAppointment.id}`)
-    }
-  }
+  // Build patient info for header
+  const patientHeaderInfo = appointment.patient ? (() => {
+    const patient = appointment.patient
+    const { display, full, isTruncated } = getCompactPatientName(
+      patient.firstName,
+      patient.lastName,
+      patient.preferredName,
+      20
+    )
+    const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
+    const age = patient.dateOfBirth
+      ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : null
+    const sex = patient.sex === 'FEMALE' ? 'Female' : patient.sex === 'MALE' ? 'Male' : null
+    const demographics = [age ? `${age} yo` : null, sex].filter(Boolean).join(', ')
+    return { display, full, isTruncated, initials, demographics }
+  })() : null
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header with date display - spans full width (same as Today screen) */}
-      <TimelineHeader
-        selectedDate={contextDate}
-      />
+      {/* Header with search - spans full width */}
+      <TimelineHeader />
 
-      {/* Content area: PatientCards | Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Patient Cards */}
-        <div
-          className={`flex flex-col relative flex-shrink-0 transition-[width] ease-out ${
-            isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
-          }`}
-          style={{
-            width: isPatientCardsCollapsed ? SIDEBAR_ANIMATION.collapsedWidth : undefined,
-            transitionDuration: hasInitialized ? '300ms' : '0ms',
-          }}
-        >
-          <div className="h-full">
-            <PatientCards
-              date={contextDate}
-              onAppointmentClick={handleAppointmentClick}
-              onAppointmentHover={setHoveredAppointmentId}
-              hoveredAppointmentId={effectiveHoveredAppointmentId}
-              selectedAppointmentId={selectedAppointmentIdForCards}
-              selectedPatientId={appointment?.patient?.id}
-              compact={isPatientCardsCollapsed}
-              onToggleCompact={handleToggleCollapse}
-              activeTimerAppointmentId={appointmentId}
-              activeTimerSeconds={timer.timerSeconds}
-              isTimerRunning={timer.isTimerRunning}
+      {/* Patient Info Header - spans full width */}
+      {patientHeaderInfo && (
+        <div className="relative flex items-center justify-between px-3 h-14 border-b border-border flex-shrink-0 bg-background">
+          {/* Left: Avatar + Patient name + demographics */}
+          <div className="flex items-center gap-2">
+            {/* Avatar */}
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+              {patientHeaderInfo.initials}
+            </div>
+            {/* Patient name + demographics */}
+            <div className="flex flex-col min-w-0">
+              {patientHeaderInfo.isTruncated ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
+                      {patientHeaderInfo.display}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="bottom" align="start" className="w-auto p-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-semibold">{patientHeaderInfo.full}</span>
+                      {patientHeaderInfo.demographics && (
+                        <span className="text-xs text-muted-foreground">{patientHeaderInfo.demographics}</span>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <span className="text-sm font-semibold">{patientHeaderInfo.display}</span>
+              )}
+              {patientHeaderInfo.demographics && (
+                <span className="text-xs text-muted-foreground">{patientHeaderInfo.demographics}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Center: Step indicator */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center">
+            {steps.map((step, index) => {
+              const isActive = currentStep === step.key
+              const isPast = steps.findIndex(s => s.key === currentStep) > index
+              return (
+                <div key={step.key} className="flex items-center">
+                  {/* Connector line (before node, except first) */}
+                  {index > 0 && (
+                    <div
+                      className={`w-8 h-0.5 ${
+                        isPast || isActive ? 'bg-primary' : 'bg-border'
+                      }`}
+                    />
+                  )}
+                  {/* Node + Label */}
+                  <button
+                    onClick={() => setCurrentStep(step.key)}
+                    className="flex flex-col items-center gap-0.5"
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                        isActive
+                          ? 'bg-primary ring-2 ring-primary/20'
+                          : isPast
+                          ? 'bg-primary'
+                          : 'bg-border'
+                      }`}
+                    />
+                    <span
+                      className={`text-[10px] font-medium transition-colors ${
+                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Right: Status controls */}
+          <div className="flex items-center gap-3">
+            <StatusControls
+              status={appointment.status}
+              isSigned={appointment.isSigned}
+              onStatusChange={handleStatusChange}
             />
           </div>
         </div>
+      )}
 
-        {/* Vertical divider */}
-        <div className="w-px bg-border" />
-
-        {/* Main content area */}
-        <div className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Patient Info Header - full width */}
-        {appointment.patient && (() => {
-          const patient = appointment.patient
-          const { display, full, isTruncated } = getCompactPatientName(
-            patient.firstName,
-            patient.lastName,
-            patient.preferredName,
-            20 // Allow longer names in full-width header
-          )
-          const initials = `${patient.firstName?.[0] || ''}${patient.lastName?.[0] || ''}`.toUpperCase()
-          const age = patient.dateOfBirth
-            ? Math.floor((Date.now() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-            : null
-          const sex = patient.sex === 'FEMALE' ? 'Female' : patient.sex === 'MALE' ? 'Male' : null
-          const demographics = [age ? `${age} yo` : null, sex].filter(Boolean).join(', ')
-
-          return (
-            <div className="flex items-center justify-between px-3 h-14 border-b border-border flex-shrink-0 bg-background">
-              {/* Left: Avatar + Patient name + demographics */}
-              <div className="flex items-center gap-2">
-                {/* Avatar */}
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                  {initials}
-                </div>
-                {/* Patient name + demographics */}
-                <div className="flex flex-col min-w-0">
-                  {isTruncated ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button className="text-sm font-semibold text-left hover:text-primary transition-colors">
-                          {display}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent side="bottom" align="start" className="w-auto p-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-sm font-semibold">{full}</span>
-                          {demographics && (
-                            <span className="text-xs text-muted-foreground">{demographics}</span>
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    <span className="text-sm font-semibold">{display}</span>
-                  )}
-                  {demographics && (
-                    <span className="text-xs text-muted-foreground">{demographics}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Right: Status + Billing button */}
-              <div className="flex items-center gap-3">
-                <StatusControls
-                  status={appointment.status}
-                  isSigned={appointment.isSigned}
-                  onStatusChange={handleStatusChange}
-                />
-                <button
-                  className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                >
-                  Billing
-                </button>
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Content area: Visit Timeline | SOAP + Patient Context */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Visit History Column */}
+      {/* Content area: Visit History + SOAP | Patient Context */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Left Column: Visit History + SOAP */}
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* Visit History - left side */}
           <AnimatePresence mode="wait" initial={animations.visitHistory.shouldAnimate}>
             <motion.div
               key={animations.visitHistory.key}
@@ -454,67 +403,63 @@ export default function AppointmentDetailPage() {
             </motion.div>
           </AnimatePresence>
 
-          {/* Right Content Column (SOAP + Patient Context) */}
-          <div className="flex flex-1 overflow-hidden relative">
-            {/* SOAP Notes Panel (always visible) */}
-            <div className="flex flex-1 flex-col overflow-hidden bg-background">
-              <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
-                <motion.div
-                  key={animations.soapPanel.key}
-                  className="flex flex-1 flex-col overflow-hidden"
-                  initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
-                  animate={{ x: 0, y: 0, opacity: 1 }}
-                  exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
-                  transition={animations.transition}
-                >
-                  <ScrollableArea className="flex-1 p-3" deps={[appointmentId]}>
-                    <div className="flex flex-col gap-4">
-                      <SOAPSections
-                        soapData={soapData}
-                        onSoapChange={handleSoapChange}
-                        isZoneFocused={true}
-                        focusedIndex={focusedSoapIndex}
-                        isEditing={isEditingField}
-                        textareaRefs={soapTextareaRefs}
-                        onTextareaFocus={handleTextareaFocus}
-                        onSectionFocus={handleSectionFocus}
-                        onSectionBlur={handleSectionBlur}
-                        saveStatus={saveStatus}
-                      />
-                    </div>
-                  </ScrollableArea>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* Right Panel - Patient Context */}
-            <div
-              className="flex-shrink-0 border-l border-border overflow-hidden"
-              style={{ width: APPOINTMENT_INFO_WIDTH }}
-            >
-              {appointment.patient && (
-                <PatientContextAdaptive
-                  patient={appointment.patient}
-                  conditions={appointment.conditions ?? []}
-                  contextData={getPatientContextData(appointment.patient.id)}
-                  focusedSection={focusedSection}
-                  appointmentId={appointmentId}
-                  visitHistory={getPatientVisitHistory(appointment.patient.id)}
-                />
-              )}
-            </div>
-
-            {/* FAB */}
-            <FABPanel
-              appointment={appointment}
-              isExpanded={isFabExpanded}
-              onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
-              timer={timer}
-            />
+          {/* SOAP Notes Panel */}
+          <div className="flex flex-1 flex-col overflow-hidden bg-background">
+            <AnimatePresence mode="wait" initial={animations.soapPanel.shouldAnimate}>
+              <motion.div
+                key={animations.soapPanel.key}
+                className="flex flex-1 flex-col overflow-hidden"
+                initial={animations.soapPanel.shouldAnimate ? animations.soapPanel.initial : false}
+                animate={{ x: 0, y: 0, opacity: 1 }}
+                exit={animations.soapPanel.shouldAnimate ? animations.soapPanel.exit : undefined}
+                transition={animations.transition}
+              >
+                <ScrollableArea className="flex-1 p-3" deps={[appointmentId]}>
+                  <div className="flex flex-col gap-4">
+                    <SOAPSections
+                      soapData={soapData}
+                      onSoapChange={handleSoapChange}
+                      isZoneFocused={true}
+                      focusedIndex={focusedSoapIndex}
+                      isEditing={isEditingField}
+                      textareaRefs={soapTextareaRefs}
+                      onTextareaFocus={handleTextareaFocus}
+                      onSectionFocus={handleSectionFocus}
+                      onSectionBlur={handleSectionBlur}
+                      saveStatus={saveStatus}
+                    />
+                  </div>
+                </ScrollableArea>
+              </motion.div>
+            </AnimatePresence>
           </div>
+
+          {/* FAB */}
+          <FABPanel
+            appointment={appointment}
+            isExpanded={isFabExpanded}
+            onToggleExpanded={() => setIsFabExpanded(!isFabExpanded)}
+            timer={timer}
+          />
+        </div>
+
+        {/* Patient Context - right side */}
+        <div
+          className="flex-shrink-0 border-l border-border overflow-hidden"
+          style={{ width: APPOINTMENT_INFO_WIDTH }}
+        >
+          {appointment.patient && (
+            <PatientContextAdaptive
+              patient={appointment.patient}
+              conditions={appointment.conditions ?? []}
+              contextData={getPatientContextData(appointment.patient.id)}
+              focusedSection={focusedSection}
+              appointmentId={appointmentId}
+              visitHistory={getPatientVisitHistory(appointment.patient.id)}
+            />
+          )}
         </div>
       </div>
     </div>
-  </div>
   )
 }

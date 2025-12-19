@@ -451,7 +451,7 @@ export function PatientCards({
 
   return (
     <LayoutGroup>
-      <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-sidebar">
+      <div ref={containerRef} className="flex h-full flex-col overflow-hidden bg-background">
         {/* Header row with date info and collapse/expand button */}
         {onToggleCompact && !hideHeader && (
           <div className="flex items-center justify-between flex-shrink-0 h-11 px-3">

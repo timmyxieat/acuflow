@@ -2,27 +2,13 @@
 
 import { Search } from 'lucide-react'
 import { useSearch } from '@/contexts/SearchContext'
-import { getDateTitle, getDateSubtitle } from '@/lib/date-utils'
 
-interface TimelineHeaderProps {
-  /** Currently selected date */
-  selectedDate: Date
-}
-
-export function TimelineHeader({
-  selectedDate,
-}: TimelineHeaderProps) {
+export function TimelineHeader() {
   const { openSearch } = useSearch()
 
   return (
-    <header className="flex h-14 items-center border-b border-border px-3 bg-sidebar flex-shrink-0">
-      {/* Left area - Date display */}
-      <span className="text-sm">
-        <span className="font-semibold">{getDateTitle(selectedDate)}</span>
-        <span className="text-muted-foreground">, {getDateSubtitle(selectedDate)}</span>
-      </span>
-
-      {/* Right area - Search button */}
+    <header className="flex h-14 items-center border-b border-border px-3 bg-background flex-shrink-0">
+      {/* Search button only */}
       <div className="ml-auto flex-shrink-0">
         <button
           onClick={openSearch}

@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { Timeline } from './Timeline'
 import { PatientCards } from './PatientCards'
 import { TimelineHeader } from './TimelineHeader'
+import { getDateTitle, getDateSubtitle } from '@/lib/date-utils'
 import { useTransition } from '@/contexts/TransitionContext'
 import { useSearch } from '@/contexts/SearchContext'
 import { useHeader } from '@/contexts/HeaderContext'
@@ -241,14 +242,40 @@ export function TodayScreen() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header with date display - spans full width */}
-      <TimelineHeader
-        selectedDate={selectedDate}
-      />
+      {/* Header with search - spans full width */}
+      <TimelineHeader />
 
-      {/* Content area: PatientCards | Timeline */}
+      {/* Date header - spans full width */}
+      <div className="flex items-center flex-shrink-0 h-14 border-b border-border px-3 bg-background">
+        <span className="text-sm">
+          <span className="font-semibold">{getDateTitle(selectedDate)}</span>
+          <span className="text-muted-foreground">, {getDateSubtitle(selectedDate)}</span>
+        </span>
+      </div>
+
+      {/* Content area: Timeline | PatientCards */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Patient Cards - CSS handles expanded width, Framer handles collapse animation */}
+        {/* Timeline - left side */}
+        <motion.div
+          className="flex-1 flex flex-col overflow-hidden"
+          initial={shouldAnimateBack ? { x: -100, opacity: 0 } : false}
+          animate={{ x: 0, opacity: 1 }}
+          transition={CONTENT_SLIDE_ANIMATION.transition}
+        >
+          <Timeline
+            date={selectedDate}
+            onAppointmentClick={handleAppointmentClick}
+            onAppointmentHover={handleAppointmentHover}
+            hoveredAppointmentId={effectiveHoveredId}
+            selectedAppointmentId={selectedAppointmentId ?? undefined}
+            hideDateHeader
+          />
+        </motion.div>
+
+        {/* Vertical divider */}
+        <div className="w-px bg-border" />
+
+        {/* Patient Cards - right side */}
         <div
           className={`flex flex-col relative flex-shrink-0 transition-[width] duration-300 ease-out ${
             isPatientCardsCollapsed ? '' : PANEL_WIDTH_CLASS
@@ -264,28 +291,10 @@ export function TodayScreen() {
               selectedAppointmentId={selectedAppointmentId ?? undefined}
               compact={isPatientCardsCollapsed}
               onToggleCompact={toggleCollapsed}
+              hideHeader
             />
           </div>
         </div>
-
-        {/* Vertical divider */}
-        <div className="w-px bg-border" />
-
-        {/* Timeline panel - animate on back navigation */}
-        <motion.div
-          className="flex-1 flex flex-col overflow-hidden"
-          initial={shouldAnimateBack ? { x: -100, opacity: 0 } : false}
-          animate={{ x: 0, opacity: 1 }}
-          transition={CONTENT_SLIDE_ANIMATION.transition}
-        >
-          <Timeline
-            date={selectedDate}
-            onAppointmentClick={handleAppointmentClick}
-            onAppointmentHover={handleAppointmentHover}
-            hoveredAppointmentId={effectiveHoveredId}
-            selectedAppointmentId={selectedAppointmentId ?? undefined}
-          />
-        </motion.div>
       </div>
     </div>
   )
